@@ -832,6 +832,7 @@ def audit_tree_collection(
         "skill_coverage": {"source": SKILL_RULE_SOURCE, "template_loaded": True, "variant_mode": "system-device-tree", "template_rules": {"executed_rules": ["KKS-01", "KKS-02", "KKS-03", "KKS-04", "KKS-04b", "KKS-05", "KKS-06", "KKS-07", "KKS-08", "KKS-17/22", "KKS-TREE-REL"]}, "additional_rules": {"executed_rules": ["KKS-19/20/21"] if comparison else []}, "config_file": "config/kks_rules.json"},
         "import_governance": {"target": "DM8 LOCATIONS", "direct_import_ready": False, "long_code_requires_extension_model": bool(sum(1 for rec in child_records if len(rec["kks_code"]) > 12)), "historical_kks_rewrite_forbidden": True, "required_strategy": "保留历史 KKS；通过映射层/双码共存/冻结历史兼容两票与缺陷记录。", "runtime_dm8_validation": False},
         "scope_comparison": comparison,
+        "_ai_context": {"records": child_records},
     }
     _emit_progress(progress_callback, {"phase": "audit", "stage": "rules_completed", "percent": 62, "message": "本地规则审核完成", "hint": f"已发现 {len(issues)} 个规则问题，准备进行 AI 候选复核"})
     result["ai_review"] = review_issue_candidates(result, progress_callback=progress_callback)
@@ -1133,6 +1134,7 @@ def audit_file(
             "runtime_dm8_validation": False,
         },
         "scope_comparison": scope_comparison,
+        "_ai_context": {"records": list(template_records.values())},
     }
     # AI is an optional second stage.  With no AI_API_KEY the local audit is
     # unchanged; with a key, all semantic candidates are submitted together.
@@ -1214,7 +1216,8 @@ def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
     summary["A18"] = "结构与使用说明"
     summary["A18"].fill = PatternFill("solid", fgColor=teal)
     summary["A18"].font = Font(bold=True, color="FFFFFF")
-    notes = result["structural_notes"] + ["源 Excel 未修改；13 位扩展码和历史映射需人工确认。", "本报告未做 DM8/LOCATIONS 真实导入验证。", "正式 Skill 模板已加载并执行；AI 对全部语义候选项进行二次复核。"]
+    ai_summary = result.get("ai_review", {})
+    notes = result["structural_notes"] + ["源 Excel 未修改；13 位扩展码和历史映射需人工确认。", "本报告未做 DM8/LOCATIONS 真实导入验证。", f"正式 Skill 模板已加载并执行；AI 已按相关规则分组复核 {ai_summary.get('reviewed_count', 0)} 条候选，疑似误报二次核验 {ai_summary.get('verified_count', 0)} 条。"]
     for row_no, note in enumerate(notes, start=19):
         summary.merge_cells(start_row=row_no, start_column=1, end_row=row_no, end_column=6)
         summary.cell(row_no, 1).value = f"• {note}"
@@ -1223,17 +1226,17 @@ def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
     summary.freeze_panes = "A5"
     autosize(summary)
 
-    issue_headers = ["状态", "规则", "类别", "Excel行号", "KKS码", "父级码", "原KKS码", "设备名称", "审核意见", "建议", "证据", "AI决策", "AI置信度", "AI理由", "AI建议"]
+    issue_headers = ["状态", "规则", "类别", "Excel行号", "KKS码", "父级码", "原KKS码", "设备名称", "审核意见", "建议", "证据", "AI决策", "AI置信度", "AI证据", "AI理由", "AI建议", "AI初审决策", "AI二次复核"]
     issues_ws.append(issue_headers)
     for item in result["issues"]:
-        issues_ws.append([item.get(key, "") for key in ("status", "rule_id", "category", "excel_row", "kks_code", "parent_code", "old_code", "name", "message", "suggestion", "evidence", "ai_decision", "ai_confidence", "ai_reason", "ai_suggestion")])
+        issues_ws.append([item.get(key, "") for key in ("status", "rule_id", "category", "excel_row", "kks_code", "parent_code", "old_code", "name", "message", "suggestion", "evidence", "ai_decision", "ai_confidence", "ai_evidence", "ai_reason", "ai_suggestion", "ai_initial_decision", "ai_verification_decision")])
     end_row = max(1, issues_ws.max_row)
-    header_style(issues_ws, "A1:O1")
-    body_style(issues_ws, f"A1:O{end_row}")
+    header_style(issues_ws, "A1:R1")
+    body_style(issues_ws, f"A1:R{end_row}")
     issues_ws.freeze_panes = "A2"
-    issues_ws.auto_filter.ref = f"A1:O{end_row}"
+    issues_ws.auto_filter.ref = f"A1:R{end_row}"
     autosize(issues_ws)
-    issue_table = Table(displayName="KKSIssues", ref=f"A1:O{end_row}")
+    issue_table = Table(displayName="KKSIssues", ref=f"A1:R{end_row}")
     issue_table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False)
     issues_ws.add_table(issue_table)
 
@@ -1306,11 +1309,23 @@ def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
 def write_html(path: Path, result: dict[str, Any]) -> None:
     rows = [i for i in result["issues"] if i["status"] != "resolved"]
     ai = result.get("ai_review", {})
+    def ai_html(item: dict[str, Any]) -> str:
+        decision = str(item.get("ai_decision", ""))
+        if not decision:
+            return "未复核"
+        try:
+            confidence = f"{float(item.get('ai_confidence', 0)):.0%}"
+        except (TypeError, ValueError):
+            confidence = "—"
+        return (
+            f"<b>{html.escape(decision)}</b>（{confidence}）"
+            f"<br><b>证据：</b>{html.escape(str(item.get('ai_evidence', '未提供')))}"
+            f"<br><b>原因：</b>{html.escape(str(item.get('ai_reason', '未提供')))}"
+            f"<br><b>建议：</b>{html.escape(str(item.get('ai_suggestion', '未提供')))}"
+        )
     rows_html = "".join(
         "<tr>" + "".join(f"<td>{html.escape(str(item.get(k, '')))}</td>" for k in ("status", "rule_id", "category", "excel_row", "kks_code", "name", "message", "suggestion")) +
-        f"<td>{html.escape(str(item.get('ai_decision', '')))}" +
-        (f"（{float(item['ai_confidence']):.0%}）：{html.escape(str(item.get('ai_reason', '')))}" if item.get("ai_decision") else "") +
-        "</td></tr>"
+        f"<td>{ai_html(item)}</td></tr>"
         for item in rows
     ) or '<tr><td colspan="9">未发现问题</td></tr>'
     resolved_html = "".join(
@@ -1337,7 +1352,7 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
 <h1>KKS 编码审核报告</h1><p><b>源文件：</b>{html.escape(result['source_file'])}<br><b>主表：</b>{html.escape(result['sheet'])}；<b>表头行：</b>{result['header_row']}；<b>有效编码行：</b>{result['data_rows']}</p>
 <p><b>总体结论：</b>{html.escape(result['conclusion'])}</p>
 <div class='kpi'><b>问题总数</b><br><span>{result.get('issue_count', len(rows))}</span></div><div class='kpi'><b>已澄清项</b><br><span>{result.get('resolved_count', len(result['resolved_reviews']))}</span></div><div class='kpi'><b>AI 复核候选</b><br><span>{ai.get('candidate_count', 0)}</span></div><div class='kpi'><b>AI 已复核</b><br><span>{ai.get('reviewed_count', 0)}</span></div>
-<h2>AI 二次复核</h2><p>{html.escape(str(ai.get('status', 'disabled')))}；候选项 {ai.get('candidate_count', 0)}，已复核 {ai.get('reviewed_count', 0)}，模型：{html.escape(str(ai.get('model') or '未配置'))}。AI 结果只作为复核建议，不自动关闭问题。</p>
+<h2>AI 二次复核</h2><p>{html.escape(str(ai.get('status', 'disabled')))}；候选项 {ai.get('candidate_count', 0)}，已复核 {ai.get('reviewed_count', 0)}，分组 {ai.get('group_count', 0)}，疑似误报二次核验 {ai.get('verified_count', 0)} 条，模型：{html.escape(str(ai.get('model') or '未配置'))}。AI 结果只作为复核建议，不自动关闭问题。</p>
 <h2>关键指标</h2><ul><li>唯一 KKS 码：{result['metrics']['unique_codes']}；重复码组：{result['metrics']['duplicate_code_groups']}</li><li>父级孤儿：{result['metrics']['orphan_rows']}；父子前缀不一致：{result['metrics']['prefix_mismatch_rows']}</li><li>12 位以上扩展码：{result['metrics']['long_code_rows']}；长度分布：{html.escape(json.dumps(result['code_length_distribution'], ensure_ascii=False))}</li></ul>
 <h2>Skill 执行覆盖</h2><p>规则来源：{html.escape(str(coverage.get('source', 'kks-audit/SKILL.md')))}；正式模板已加载：{html.escape(str(coverage.get('template_loaded', False)))}。</p><p>模板规则：{html.escape(', '.join(template_rules))}<br>增强规则：{html.escape(', '.join(additional_rules))}<br>DM8 导入策略：保留历史 KKS，使用映射层/双码共存；本次未连接真实 DM8。</p>
 <h2>结构说明</h2><ul>{notes}</ul>

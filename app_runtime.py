@@ -77,15 +77,79 @@ def save_app_config(patch: dict[str, Any]) -> dict[str, Any]:
     return config
 
 
-def load_skill_context() -> str:
-    """Load formal Skill and human references as model context, not executable rules."""
-    sections: list[str] = []
+def _skill_context_documents() -> list[tuple[str, str]]:
+    documents: list[tuple[str, str]] = []
     if FORMAL_SKILL_PATH.is_file():
-        sections.append(f"【正式 Skill：{FORMAL_SKILL_PATH.relative_to(APP_ROOT)}】\n{FORMAL_SKILL_PATH.read_text(encoding='utf-8')}")
+        documents.append((f"正式 Skill：{FORMAL_SKILL_PATH.relative_to(APP_ROOT)}", FORMAL_SKILL_PATH.read_text(encoding="utf-8")))
     if SKILL_REFERENCES_DIR.is_dir():
         for path in sorted(SKILL_REFERENCES_DIR.glob("*.md")):
-            sections.append(f"【审核参考资料：{path.relative_to(APP_ROOT)}】\n{path.read_text(encoding='utf-8')}")
-    return "\n\n".join(sections)
+            documents.append((f"审核参考资料：{path.relative_to(APP_ROOT)}", path.read_text(encoding="utf-8")))
+    return documents
+
+
+def load_skill_context(
+    *,
+    rule_ids: set[str] | None = None,
+    categories: set[str] | None = None,
+    keywords: set[str] | None = None,
+    max_chars: int | None = None,
+) -> str:
+    """Load Skill text, optionally selecting only relevant sections.
+
+    The executable rule module is intentionally not copied into the prompt. It
+    is run by ``run_audit.py``; the model receives the rule finding and the
+    matching human-readable guidance instead.
+    """
+    documents = _skill_context_documents()
+    terms = {
+        str(value).strip().casefold()
+        for value in (*sorted(rule_ids or set()), *sorted(categories or set()), *sorted(keywords or set()))
+        if str(value).strip()
+    }
+    if not terms:
+        sections = [f"【{title}】\n{content}" for title, content in documents]
+        return "\n\n".join(sections)
+
+    sections: list[str] = []
+    for title, content in documents:
+        lines = content.splitlines()
+        def match_score(line: str) -> int:
+            folded = line.casefold()
+            score = 0
+            for term in rule_ids or set():
+                if str(term).casefold() in folded:
+                    score = max(score, 100)
+            for term in categories or set():
+                if str(term).casefold() in folded:
+                    score = max(score, 80)
+            for term in keywords or set():
+                if str(term).casefold() in folded:
+                    score = max(score, min(60, len(str(term))))
+            return score
+
+        matches = [(match_score(line), index) for index, line in enumerate(lines) if any(term in line.casefold() for term in terms)]
+        matches = [index for _, index in sorted(matches, key=lambda item: (-item[0], item[1]))[:12]]
+        matches.sort()
+        if not matches:
+            continue
+        ranges: list[tuple[int, int]] = []
+        for index in matches:
+            start = max(0, index - 2)
+            end = min(len(lines), index + 7)
+            if start and lines[start - 1].lstrip().startswith("#"):
+                start -= 1
+            if ranges and start <= ranges[-1][1] + 1:
+                ranges[-1] = (ranges[-1][0], max(ranges[-1][1], end))
+            else:
+                ranges.append((start, end))
+        excerpt = "\n".join("\n".join(lines[start:end]) for start, end in ranges)
+        sections.append(f"【{title}｜相关片段】\n{excerpt}")
+
+    if not sections and documents:
+        title, content = documents[0]
+        sections.append(f"【{title}｜摘要】\n{content[:2000]}")
+    context = "\n\n".join(sections)
+    return context if max_chars is None else context[:max_chars]
 
 
 def skill_documents() -> list[dict[str, Any]]:

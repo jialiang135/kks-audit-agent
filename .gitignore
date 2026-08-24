@@ -1,0 +1,13 @@
+.env.local
+__pycache__/
+runs/
+logs/
+config/app_config.json
+.uv-cache/
+.venv/
+build/
+dist/
+outputs/
+skill_backups/
+source-skill/
+*.pyc

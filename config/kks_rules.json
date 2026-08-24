@@ -1,0 +1,25 @@
+{
+  "standard_device_length": 12,
+  "accepted_base_lengths": [2, 3, 4, 5, 7, 12],
+  "accepted_code_lengths": [2, 3, 4, 5, 7, 12, 13],
+  "root_parent_values": ["", "-1"],
+  "allowed_code_characters": "A-Z0-9-/~",
+  "old_prefix_migrations": {
+    "50": "05",
+    "60": "06",
+    "L0": "61",
+    "J0": "61"
+  },
+  "common_unit_prefixes": ["00", "61", "L0"],
+  "valid_letter_pairs": {},
+  "letter_reallocations": {
+    "system": {},
+    "device": {}
+  },
+  "extension_patterns": {
+    "AB_location_suffix": "末位 A/B，通常表示进出口或位置扩展，需确认主数据建模",
+    "ABC_phase_suffix": "末位 A/B/C，通常表示分相或变体，需确认主数据建模",
+    "DCS_point": "-KF 后缀，通常是信号点号，不应直接塞入 12 位主码",
+    "component": "-XXnn 后缀，通常是部件级扩展"
+  }
+}

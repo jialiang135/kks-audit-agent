@@ -1,0 +1,16 @@
+[project]
+name = "kks-audit-agent"
+version = "0.2.0"
+description = "KKS Excel rule and AI-assisted audit service"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "openpyxl>=3.1,<4",
+]
+
+[dependency-groups]
+build = [
+    "pyinstaller>=6.10,<7",
+]
+
+[tool.uv]
+package = false

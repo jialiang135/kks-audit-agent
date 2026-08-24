@@ -1,0 +1,13 @@
+{
+  "ai": {
+    "enabled": false,
+    "base_url": "",
+    "api_key": "",
+    "model": "",
+    "timeout_seconds": 90
+  },
+  "audit": {
+    "max_upload_mb": 50,
+    "runs_dir": "runs"
+  }
+}

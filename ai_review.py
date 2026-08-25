@@ -16,7 +16,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections import defaultdict
+from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -33,6 +34,8 @@ REQUEST_ATTEMPTS = 2
 RETRY_BACKOFF_SECONDS = 2
 MAX_CONTEXT_ROWS = 12
 MAX_ADJACENT_ROWS = 5
+MAX_GLOBAL_TEXT = 1800
+MAX_CONCURRENT_REQUESTS = 3
 RULE_CONTEXT_HINTS = {
     "KKS-24": {"名称", "命名", "歧义"},
     "KKS-25": {"同一系统", "归一名称", "多个 KKS"},
@@ -250,6 +253,24 @@ SYSTEM_PROMPT = """你是电厂 KKS 编码审核智能体的二次复核员。
 {"reviews":[{"issue_index":0,"decision":"confirmed_issue|likely_false_positive|needs_human","priority":"P0|P1|P2","confidence":0.0,"evidence":"引用证据包中的具体行号/编码/关系","reason":"中文理由","suggestion":"中文建议"}]}
 confidence 必须是 0 到 1 的数字。每个 issue_index 最多返回一次。"""
 
+GLOBAL_REVIEW_PROMPT = """你是电厂 KKS 编码审核智能体的全局分析员。
+你将收到一份 Excel 的结构画像、规则命中统计和候选问题摘要。先从整个文件的角度识别专业范围、层级组织、命名习惯、重复模式和可能的误报来源，帮助后续逐项复核。
+不要凭空补充 Excel 外的事实，不要直接修改问题，也不要把某一条候选问题当成最终结论。
+请只返回 JSON 对象，格式为：
+{"global_review":{"summary":"整体审核观察","patterns":["全局模式或异常"],"focus":[{"rule_id":"规则编号","reason":"为什么需要重点核对"}],"consistency_checks":["建议后续重点验证的跨行关系"]}}
+所有内容必须来自输入的结构画像、规则统计或候选摘要。"""
+
+FINAL_ADJUDICATION_PROMPT = """你是电厂 KKS 编码审核智能体的最终归并员。
+你将收到规则命中、AI 初审、疑似误报二次核验和全局分析。请为每个候选给出最终分类：
+- confirmed_issue：证据足够，应该列为需要处理的问题；
+- needs_human：存在冲突或证据不足，必须人工确认；
+- likely_false_positive：只有在二次核验明确支持时才能使用。
+程序规则问题不能被静默删除；如果 AI 没有完成复核，也必须归入 needs_human。
+不要改变原 Excel，不要补充输入中不存在的事实。
+请只返回 JSON 对象，格式为：
+{"final_reviews":[{"issue_index":0,"final_decision":"confirmed_issue|needs_human|likely_false_positive","summary":"面向审核人员的简短结论","evidence":"引用输入中的真实行号、编码或关系","reason":"归并原因","suggestion":"下一步建议"}]}
+每个 issue_index 最多返回一次。"""
+
 VERIFICATION_PROMPT = """
 现在进行第二次核验。以下结果曾被初审判断为 likely_false_positive，不能直接采信。
 请重新检查原始证据包、规则片段和初审理由，确认它是 confirmed_issue、likely_false_positive 还是 needs_human。
@@ -273,6 +294,25 @@ def effective_system_prompt(rule_ids: set[str] | None = None, categories: set[st
     if formal_context:
         prompt += "\n\n以下是本组规则对应的 Skill 片段。只把它们作为规则解释，不得把参考资料中的厂站案例、固定码表或经验直接当成当前 Excel 的事实：\n" + formal_context
     return prompt
+
+
+def _skill_context_suffix(rule_ids: set[str], categories: set[str], *, max_chars: int = 16000) -> str:
+    terms = set(rule_ids) | set(categories)
+    for rule_id in rule_ids:
+        terms.update(RULE_CONTEXT_HINTS.get(rule_id, set()))
+    formal_context = load_skill_context(
+        rule_ids=rule_ids,
+        categories=categories,
+        keywords=terms,
+        max_chars=max_chars,
+    ).strip()
+    if not formal_context:
+        return ""
+    return "\n\n以下是本次输入中相关规则对应的 Skill 片段。只把它们作为规则解释，不得把参考资料中的厂站案例、固定码表或经验直接当成当前 Excel 的事实：\n" + formal_context
+
+
+def effective_global_system_prompt(rule_ids: set[str], categories: set[str]) -> str:
+    return GLOBAL_REVIEW_PROMPT + _skill_context_suffix(rule_ids, categories)
 
 
 def parse_json_content(content: str) -> dict[str, Any]:
@@ -402,6 +442,63 @@ def _candidate(issue_index: int, issue: dict[str, Any], result: dict[str, Any]) 
     }
 
 
+def _compact_candidate(candidate: dict[str, Any], issue: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return a compact candidate view for global analysis and final merge."""
+    value = issue or candidate
+    return {
+        "issue_index": candidate.get("issue_index", ""),
+        "rule_id": candidate.get("rule_id", ""),
+        "category": candidate.get("category", ""),
+        "priority": candidate.get("priority", ""),
+        "excel_row": candidate.get("excel_row", ""),
+        "kks_code": candidate.get("kks_code", ""),
+        "parent_code": candidate.get("parent_code", ""),
+        "name": candidate.get("name", ""),
+        "rule_message": candidate.get("rule_message", value.get("message", "")),
+        "evidence": candidate.get("evidence", value.get("evidence", "")),
+    }
+
+
+def _build_global_audit_context(result: dict[str, Any], candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    issues = [item for item in result.get("issues", []) if isinstance(item, dict)]
+    rule_counts = defaultdict(int)
+    category_counts = defaultdict(int)
+    priority_counts = defaultdict(int)
+    for issue in issues:
+        rule_counts[str(issue.get("rule_id", "未标识"))] += 1
+        category_counts[str(issue.get("category", "未分类"))] += 1
+        priority_counts[str(issue.get("priority", "未标级"))] += 1
+    return {
+        "source_file": result.get("source_file", ""),
+        "sheet": result.get("sheet", ""),
+        "header_row": result.get("header_row", ""),
+        "data_rows": result.get("data_rows", 0),
+        "columns": result.get("columns", {}),
+        "metrics": result.get("metrics", {}),
+        "code_length_distribution": result.get("code_length_distribution", {}),
+        "priority_counts": dict(sorted(priority_counts.items())),
+        "rule_counts": dict(sorted(rule_counts.items(), key=lambda item: (-item[1], item[0]))),
+        "category_counts": dict(sorted(category_counts.items(), key=lambda item: (-item[1], item[0]))),
+        "structural_notes": [str(item) for item in result.get("structural_notes", [])],
+        "candidate_count": len(candidates),
+        "candidate_summary": [_compact_candidate(candidate) for candidate in candidates],
+    }
+
+
+def _compact_audit_profile(audit_profile: dict[str, Any]) -> dict[str, Any]:
+    """Keep shared context small for repeated group and final calls.
+
+    The full candidate summary is useful for the one global call, but sending
+    it again with every evidence group multiplies prompt size and latency.
+    Group payloads already contain their own complete candidates.
+    """
+    return {
+        key: value
+        for key, value in audit_profile.items()
+        if key != "candidate_summary"
+    }
+
+
 def _safe_review(item: Any, allowed: set[int]) -> dict[str, Any] | None:
     if not isinstance(item, dict):
         return None
@@ -425,6 +522,59 @@ def _safe_review(item: Any, allowed: set[int]) -> dict[str, Any] | None:
         "confidence": max(0.0, min(confidence, 1.0)),
         "evidence": str(item.get("evidence", item.get("supporting_evidence", "模型未提供明确证据")))[:1500],
         "reason": str(item.get("reason", "模型未提供理由"))[:1000],
+        "suggestion": str(item.get("suggestion", "保留人工确认"))[:1000],
+    }
+
+
+def _safe_global_review(payload: Any) -> dict[str, Any]:
+    value = payload.get("global_review") if isinstance(payload, dict) else None
+    value = value if isinstance(value, dict) else {}
+
+    def text_value(key: str, default: str = "") -> str:
+        raw = value.get(key, default)
+        return str(raw).strip()[:MAX_GLOBAL_TEXT] if raw not in (None, "") else default
+
+    def list_value(key: str) -> list[str]:
+        raw = value.get(key, [])
+        if not isinstance(raw, list):
+            return []
+        return [str(item).strip()[:MAX_GLOBAL_TEXT] for item in raw if str(item).strip()][:20]
+
+    focus: list[dict[str, str]] = []
+    raw_focus = value.get("focus", [])
+    if isinstance(raw_focus, list):
+        for item in raw_focus[:20]:
+            if isinstance(item, dict):
+                rule_id = str(item.get("rule_id", "")).strip()
+                reason = str(item.get("reason", "")).strip()
+                if rule_id or reason:
+                    focus.append({"rule_id": rule_id[:80], "reason": reason[:MAX_GLOBAL_TEXT]})
+    return {
+        "summary": text_value("summary", "模型未提供全局分析"),
+        "patterns": list_value("patterns"),
+        "focus": focus,
+        "consistency_checks": list_value("consistency_checks"),
+    }
+
+
+def _safe_final_review(item: Any, allowed: set[int]) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    try:
+        issue_index = int(item.get("issue_index"))
+    except (TypeError, ValueError):
+        return None
+    if issue_index not in allowed:
+        return None
+    decision = str(item.get("final_decision", "needs_human"))
+    if decision not in {"confirmed_issue", "needs_human", "likely_false_positive"}:
+        decision = "needs_human"
+    return {
+        "issue_index": issue_index,
+        "final_decision": decision,
+        "summary": str(item.get("summary", "需要人工确认"))[:MAX_GLOBAL_TEXT],
+        "evidence": str(item.get("evidence", "模型未提供明确证据"))[:1500],
+        "reason": str(item.get("reason", "模型未提供归并理由"))[:1000],
         "suggestion": str(item.get("suggestion", "保留人工确认"))[:1000],
     }
 
@@ -457,6 +607,8 @@ def _review_group(
     group: list[dict[str, Any]],
     *,
     verification: bool = False,
+    audit_profile: dict[str, Any] | None = None,
+    global_review: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     rule_ids = {str(item.get("rule_id", "")) for item in group}
     categories = {str(item.get("category", "")) for item in group}
@@ -465,6 +617,8 @@ def _review_group(
         effective_system_prompt(rule_ids, categories, verification=verification),
         {
             "review_type": "false_positive_verification" if verification else "candidate_review",
+            "audit_profile": _compact_audit_profile(audit_profile or {}),
+            "global_review": global_review or {},
             "candidates": group,
         },
     )
@@ -476,6 +630,100 @@ def _review_group(
     seen: set[int] = set()
     for item in raw_reviews:
         review = _safe_review(item, allowed)
+        if review is None or review["issue_index"] in seen:
+            continue
+        seen.add(review["issue_index"])
+        reviews.append(review)
+    return reviews
+
+
+def _default_final_review(issue: dict[str, Any], *, candidate: bool) -> dict[str, Any]:
+    ai_decision = str(issue.get("ai_decision", ""))
+    verification = str(issue.get("ai_verification_decision", ""))
+    if not candidate:
+        decision = "confirmed_issue"
+        source = "rule"
+    elif ai_decision == "likely_false_positive" and verification == "likely_false_positive":
+        decision = "likely_false_positive"
+        source = "ai_verification"
+    elif ai_decision == "confirmed_issue":
+        decision = "confirmed_issue"
+        source = "ai"
+    else:
+        decision = "needs_human"
+        source = "ai" if ai_decision else "rule_unreviewed"
+    action = {
+        "confirmed_issue": "需要处理",
+        "needs_human": "需要人工确认",
+        "likely_false_positive": "暂不列入整改，保留复核记录",
+    }[decision]
+    return {
+        "final_decision": decision,
+        "final_source": source,
+        "final_action": action,
+        "final_summary": str(issue.get("message", "")),
+        "final_evidence": str(issue.get("evidence", "")),
+        "final_reason": "程序规则命中；尚未获得可替代规则结论的 AI 归并结果。" if not candidate else "AI 复核未形成可直接采信的最终结论。",
+        "final_suggestion": str(issue.get("suggestion", "人工确认")),
+    }
+
+
+def _apply_final_review(issue: dict[str, Any], review: dict[str, Any], *, source: str) -> None:
+    decision = review["final_decision"]
+    issue["final_decision"] = decision
+    issue["final_source"] = source
+    issue["final_action"] = {
+        "confirmed_issue": "需要处理",
+        "needs_human": "需要人工确认",
+        "likely_false_positive": "暂不列入整改，保留复核记录",
+    }[decision]
+    issue["final_summary"] = review["summary"]
+    issue["final_evidence"] = review["evidence"]
+    issue["final_reason"] = review["reason"]
+    issue["final_suggestion"] = review["suggestion"]
+
+
+def _finalize_reviews(
+    client: OpenAICompatibleClient,
+    model: str,
+    candidates: list[dict[str, Any]],
+    issues: list[dict[str, Any]],
+    audit_profile: dict[str, Any],
+    global_review: dict[str, Any],
+) -> list[dict[str, Any]]:
+    candidate_payload: list[dict[str, Any]] = []
+    for candidate in candidates:
+        issue = issues[int(candidate["issue_index"])]
+        candidate_payload.append({
+            **_compact_candidate(candidate, issue),
+            "ai_initial_decision": issue.get("ai_initial_decision", ""),
+            "ai_initial_evidence": issue.get("ai_initial_evidence", ""),
+            "ai_initial_reason": issue.get("ai_initial_reason", ""),
+            "ai_verification_decision": issue.get("ai_verification_decision", ""),
+            "ai_verification_evidence": issue.get("ai_verification_evidence", ""),
+            "ai_verification_reason": issue.get("ai_verification_reason", ""),
+        })
+    payload = client.review(
+        model,
+        FINAL_ADJUDICATION_PROMPT + _skill_context_suffix(
+            {str(item.get("rule_id", "")) for item in candidates},
+            {str(item.get("category", "")) for item in candidates},
+        ),
+        {
+            "review_type": "final_adjudication",
+            "audit_profile": _compact_audit_profile(audit_profile),
+            "global_review": global_review,
+            "candidates": candidate_payload,
+        },
+    )
+    raw_reviews = payload.get("final_reviews", [])
+    if not isinstance(raw_reviews, list):
+        raise AIReviewError("模型返回的 final_reviews 不是数组")
+    allowed = {int(item["issue_index"]) for item in candidates}
+    reviews: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    for item in raw_reviews:
+        review = _safe_final_review(item, allowed)
         if review is None or review["issue_index"] in seen:
             continue
         seen.add(review["issue_index"])
@@ -498,6 +746,81 @@ def _attach_review(issue: dict[str, Any], review: dict[str, Any], model: str, *,
     issue["ai_model"] = model
 
 
+def _review_groups_parallel(
+    client: OpenAICompatibleClient,
+    model: str,
+    groups: list[list[dict[str, Any]]],
+    *,
+    verification: bool,
+    audit_profile: dict[str, Any],
+    global_review: dict[str, Any],
+    progress_callback: ProgressCallback | None,
+    candidate_count: int,
+    reviewed_count: int,
+    percent_start: int,
+    percent_end: int,
+) -> tuple[dict[int, dict[str, Any]], list[str]]:
+    """Review independent groups concurrently with a small fixed worker pool."""
+    reviews_by_index: dict[int, dict[str, Any]] = {}
+    errors: list[str] = []
+    if not groups:
+        return reviews_by_index, errors
+
+    completed_groups = 0
+    max_workers = min(MAX_CONCURRENT_REQUESTS, len(groups))
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="kks-ai") as executor:
+        futures = {
+            executor.submit(
+                _review_group,
+                client,
+                model,
+                group,
+                verification=verification,
+                audit_profile=audit_profile,
+                global_review=global_review,
+            ): (group_index, group)
+            for group_index, group in enumerate(groups, start=1)
+        }
+        for future in as_completed(futures):
+            group_index, group = futures[future]
+            try:
+                for review in future.result():
+                    reviews_by_index[review["issue_index"]] = review
+            except AIReviewError as exc:
+                if verification:
+                    error = f"疑似误报验证组 {group_index} 失败：{exc}"
+                    LOGGER.error("ai_verification_group_failed group=%s candidates=%s error=%s", group_index, len(group), exc)
+                else:
+                    error = f"候选组 {group_index} 复核失败：{exc}"
+                    LOGGER.error("ai_review_group_failed group=%s candidates=%s error=%s", group_index, len(group), exc)
+                errors.append(error)
+            except Exception as exc:
+                error = f"AI {'误报验证' if verification else '候选'}组 {group_index} 发生未预期错误：{exc}"
+                LOGGER.exception("ai_parallel_group_failed group=%s verification=%s", group_index, verification)
+                errors.append(error)
+
+            completed_groups += 1
+            percent = percent_start + int((percent_end - percent_start) * completed_groups / len(groups))
+            stage = "verification_running" if verification else "review_running"
+            message = "AI 正在并行验证疑似误报" if verification else "AI 正在并行复核候选组"
+            hint = f"已完成 {completed_groups}/{len(groups)} 组；当前并行数 {max_workers}"
+            _emit_progress(progress_callback, {
+                "phase": "ai",
+                "stage": stage,
+                "status": "running",
+                "percent": percent,
+                "message": message,
+                "hint": hint,
+                "model": model,
+                "candidate_count": candidate_count,
+                "reviewed_count": reviewed_count + len(reviews_by_index),
+                "completed_groups": completed_groups,
+                "group_count": len(groups),
+                "parallelism": max_workers,
+            })
+    return reviews_by_index, errors
+
+
 def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressCallback | None = None) -> dict[str, Any]:
     """Review candidates with evidence packets, internal grouping and verification."""
     config = load_config()
@@ -508,14 +831,30 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
         "provider": "openai-compatible",
         "base_url": config.base_url,
         "model": config.model or None,
+        "review_mode": "parallel_groups",
+        "parallelism": MAX_CONCURRENT_REQUESTS,
         "candidate_count": 0,
         "reviewed_count": 0,
         "group_count": 0,
         "verification_count": 0,
         "verified_count": 0,
+        "global_status": "skipped",
+        "global_review": {},
+        "final_status": "programmatic",
+        "finalized_count": 0,
+        "final_decision_counts": {},
         "results": [],
         "errors": [],
     }
+    issues = result.get("issues", [])
+    if not isinstance(issues, list):
+        issues = []
+    for issue in issues:
+        if isinstance(issue, dict):
+            issue.update(_default_final_review(issue, candidate=_is_candidate(issue)))
+    fallback_counts = Counter(str(issue.get("final_decision", "needs_human")) for issue in issues if isinstance(issue, dict) and issue.get("status") != "resolved")
+    base["final_decision_counts"] = dict(sorted(fallback_counts.items()))
+    base["actionable_count"] = fallback_counts.get("confirmed_issue", 0) + fallback_counts.get("needs_human", 0)
     if not config.enabled:
         base["reason"] = "AI_ENABLED=false"
         _emit_progress(progress_callback, {"phase": "ai", "stage": "disabled", "status": "disabled", "percent": 90, "message": "AI 复核未启用", "hint": base["reason"], "candidate_count": 0, "reviewed_count": 0})
@@ -525,7 +864,6 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
         _emit_progress(progress_callback, {"phase": "ai", "stage": "disabled", "status": "disabled", "percent": 90, "message": "AI 复核未启用", "hint": base["reason"], "candidate_count": 0, "reviewed_count": 0})
         return base
 
-    issues = result.get("issues", [])
     indexed = [(idx, issue) for idx, issue in enumerate(issues) if isinstance(issue, dict) and _is_candidate(issue)]
     base["candidate_count"] = len(indexed)
     if not indexed:
@@ -547,22 +885,38 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
     base["model"] = model
     base["model_source"] = model_source
     candidates = [_candidate(idx, issue, result) for idx, issue in indexed]
+    # The program already has the workbook-wide metrics and structure.  Avoid
+    # spending an extra model request on a global summary; send only compact
+    # shared context with each evidence group.
+    audit_profile = _compact_audit_profile(_build_global_audit_context(result, candidates))
+    global_review: dict[str, Any] = {
+        "summary": "未单独调用全局模型分析；本次以程序统计、规则证据和分组复核为准。",
+        "patterns": [],
+        "focus": [],
+        "consistency_checks": [],
+    }
+    base["global_status"] = "skipped_programmatic"
+    base["global_review"] = global_review
     groups = _candidate_groups(candidates)
     base["group_count"] = len(groups)
-    _emit_progress(progress_callback, {"phase": "ai", "stage": "model_ready", "status": "running", "percent": 68, "message": "AI 模型已连接，开始复核候选", "hint": f"模型：{model}；已生成 {len(groups)} 组证据上下文", "model": model, "candidate_count": len(indexed), "reviewed_count": 0})
+    _emit_progress(progress_callback, {"phase": "ai", "stage": "model_ready", "status": "running", "percent": 66, "message": "AI 开始并行复核候选组", "hint": f"模型：{model}；共 {len(groups)} 组，最多并行 {MAX_CONCURRENT_REQUESTS} 组", "model": model, "candidate_count": len(indexed), "reviewed_count": 0, "parallelism": MAX_CONCURRENT_REQUESTS})
 
-    reviews_by_index: dict[int, dict[str, Any]] = {}
-    for group_index, group in enumerate(groups, start=1):
-        progress = 70 + int(15 * group_index / max(1, len(groups)))
-        _emit_progress(progress_callback, {"phase": "ai", "stage": "review_running", "status": "running", "percent": progress, "message": "AI 正在分组复核候选", "hint": f"已完成 {group_index - 1} 组，正在处理当前证据组", "model": model, "candidate_count": len(indexed), "reviewed_count": len(reviews_by_index)})
-        try:
-            for review in _review_group(client, model, group):
-                reviews_by_index[review["issue_index"]] = review
-                _attach_review(issues[review["issue_index"]], review, model)
-        except AIReviewError as exc:
-            error = f"候选组 {group_index} 复核失败：{exc}"
-            base["errors"].append(error)
-            LOGGER.error("ai_review_group_failed group=%s candidates=%s error=%s", group_index, len(group), exc)
+    reviews_by_index, group_errors = _review_groups_parallel(
+        client,
+        model,
+        groups,
+        verification=False,
+        audit_profile=audit_profile,
+        global_review=global_review,
+        progress_callback=progress_callback,
+        candidate_count=len(indexed),
+        reviewed_count=0,
+        percent_start=67,
+        percent_end=82,
+    )
+    base["errors"].extend(group_errors)
+    for review in reviews_by_index.values():
+        _attach_review(issues[review["issue_index"]], review, model)
 
     base["results"] = [reviews_by_index[index] for index in sorted(reviews_by_index)]
     base["reviewed_count"] = len(base["results"])
@@ -578,18 +932,22 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
                 "initial_review": reviews_by_index[index],
             })
         verification_groups = _candidate_groups(verification_candidates)
-        verification_by_index: dict[int, dict[str, Any]] = {}
-        for group_index, group in enumerate(verification_groups, start=1):
-            progress = 86 + int(5 * group_index / max(1, len(verification_groups)))
-            _emit_progress(progress_callback, {"phase": "ai", "stage": "verification_running", "status": "running", "percent": progress, "message": "AI 正在验证疑似误报", "hint": f"正在重新核对 {len(group)} 条证据", "model": model, "candidate_count": len(indexed), "reviewed_count": len(reviews_by_index)})
-            try:
-                for review in _review_group(client, model, group, verification=True):
-                    verification_by_index[review["issue_index"]] = review
-                    _attach_review(issues[review["issue_index"]], review, model, verification=True)
-            except AIReviewError as exc:
-                error = f"疑似误报验证组 {group_index} 失败：{exc}"
-                base["errors"].append(error)
-                LOGGER.error("ai_verification_group_failed group=%s candidates=%s error=%s", group_index, len(group), exc)
+        verification_by_index, verification_errors = _review_groups_parallel(
+            client,
+            model,
+            verification_groups,
+            verification=True,
+            audit_profile=audit_profile,
+            global_review=global_review,
+            progress_callback=progress_callback,
+            candidate_count=len(indexed),
+            reviewed_count=len(reviews_by_index),
+            percent_start=84,
+            percent_end=90,
+        )
+        base["errors"].extend(verification_errors)
+        for review in verification_by_index.values():
+            _attach_review(issues[review["issue_index"]], review, model, verification=True)
         base["verified_count"] = len(verification_by_index)
         for index in false_positive_indexes:
             if index in verification_by_index:
@@ -603,6 +961,21 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
             issue["ai_reason"] = "初审疑似误报，但二次核验未完成，保留人工确认。"
             issue["ai_suggestion"] = "请结合原 Excel 行、父子关系和同级编码人工确认。"
 
+    for issue_index, issue in enumerate(issues):
+        candidate = any(item["issue_index"] == issue_index for item in candidates)
+        default_review = _default_final_review(issue, candidate=candidate)
+        issue.update(default_review)
+
+    # Final decisions are already deterministic after the initial review and
+    # the dedicated false-positive verification.  Do not send all candidates
+    # back to the model for a redundant final-merge request.
+    base["final_status"] = "programmatic"
+    base["finalized_count"] = len(indexed)
+    _emit_progress(progress_callback, {"phase": "ai", "stage": "final_adjudication", "status": "completed", "percent": 91, "message": "程序已归并最终审核结论", "hint": "依据规则命中、AI 分组复核和误报验证结果完成归并", "model": model, "candidate_count": len(indexed), "reviewed_count": base["reviewed_count"], "finalized_count": base["finalized_count"]})
+
+    decision_counts = Counter(str(issue.get("final_decision", "needs_human")) for issue in issues if issue.get("status") != "resolved")
+    base["final_decision_counts"] = dict(sorted(decision_counts.items()))
+    base["actionable_count"] = decision_counts.get("confirmed_issue", 0) + decision_counts.get("needs_human", 0)
     base["status"] = "completed" if base["reviewed_count"] else "error"
     if base["errors"] and base["reviewed_count"]:
         base["status"] = "partial"

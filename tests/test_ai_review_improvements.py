@@ -16,6 +16,28 @@ class FakeClient:
 
     def review(self, model, prompt, payload):
         self.calls.append(payload)
+        if payload["review_type"] == "global_analysis":
+            return {
+                "global_review": {
+                    "summary": "测试文件存在两个需要核对的语义模式",
+                    "patterns": ["父级关系需要结合显式父级列"],
+                    "focus": [{"rule_id": "KKS-31", "reason": "父子名称需要结合上下文"}],
+                    "consistency_checks": ["核对同级编码"],
+                }
+            }
+        if payload["review_type"] == "final_adjudication":
+            results = []
+            for candidate in payload["candidates"]:
+                index = candidate["issue_index"]
+                results.append({
+                    "issue_index": index,
+                    "final_decision": "needs_human" if index == 0 else "confirmed_issue",
+                    "summary": "最终归并结论",
+                    "evidence": "最终归并引用当前行和同级行",
+                    "reason": "测试最终归并",
+                    "suggestion": "人工确认" if index == 0 else "修正编码",
+                })
+            return {"final_reviews": results}
         results = []
         for candidate in payload["candidates"]:
             if payload["review_type"] == "false_positive_verification":
@@ -99,11 +121,20 @@ class AiReviewImprovementTests(unittest.TestCase):
         self.assertEqual(reviewed["group_count"], 2)
         self.assertEqual(reviewed["verification_count"], 1)
         self.assertEqual(reviewed["verified_count"], 1)
+        self.assertEqual(reviewed["global_status"], "skipped_programmatic")
+        self.assertEqual(reviewed["final_status"], "programmatic")
+        self.assertEqual(reviewed["finalized_count"], 2)
         self.assertEqual(result["issues"][0]["ai_decision"], "needs_human")
         self.assertEqual(result["issues"][0]["ai_initial_decision"], "likely_false_positive")
         self.assertTrue(result["issues"][0]["ai_evidence"])
+        self.assertEqual(result["issues"][0]["final_decision"], "needs_human")
         self.assertEqual(result["issues"][1]["ai_decision"], "confirmed_issue")
+        self.assertEqual(result["issues"][1]["final_decision"], "confirmed_issue")
         self.assertEqual(len(FakeClient.calls), 3)
+        self.assertTrue(all(item["review_type"] in {"candidate_review", "false_positive_verification"} for item in FakeClient.calls))
+        non_global = [item for item in FakeClient.calls if item["review_type"] != "global_analysis"]
+        self.assertTrue(non_global)
+        self.assertTrue(all("candidate_summary" not in item.get("audit_profile", {}) for item in non_global))
 
 
 if __name__ == "__main__":

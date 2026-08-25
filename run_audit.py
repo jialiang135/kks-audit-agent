@@ -26,7 +26,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.utils import get_column_letter
 
 
-VERSION = "0.2.0"
+VERSION = "0.4.0"
 LOGGER = logging.getLogger("kks-audit")
 ProgressCallback = Callable[[dict[str, Any]], None]
 ROOT_PARENTS = {"", "-1"}
@@ -42,6 +42,126 @@ def output_artifact_names(input_path: Path) -> tuple[str, str]:
     stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", input_path.stem).strip(" .")
     stem = (stem or "审核文件")[:120]
     return f"{stem}_审核报告.html", f"{stem}_问题清单.xlsx"
+
+
+FINAL_DECISION_LABELS = {
+    "confirmed_issue": "确认问题",
+    "needs_human": "待人工确认",
+    "likely_false_positive": "疑似误报",
+}
+
+
+def final_decision_label(value: Any) -> str:
+    return FINAL_DECISION_LABELS.get(str(value), "待人工确认")
+
+
+def final_decision_counts(result: dict[str, Any]) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for item in result.get("issues", []):
+        if isinstance(item, dict) and item.get("status") != "resolved":
+            counts[str(item.get("final_decision", "confirmed_issue"))] += 1
+    return dict(sorted(counts.items()))
+
+
+REPORT_METHODS = (
+    "KKS 编码规则校验",
+    "层级结构校验",
+    "唯一性校验",
+    "父子关系校验",
+    "历史编码映射校验",
+    "名称规范校验",
+    "扩展编码分析",
+)
+
+
+def _report_issues(result: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        item for item in result.get("issues", [])
+        if isinstance(item, dict) and item.get("status") != "resolved"
+    ]
+
+
+def quality_metrics(result: dict[str, Any]) -> dict[str, int]:
+    """Return business-facing quality metrics used by the report and UI."""
+    records = result.get("_ai_context", {}).get("records", [])
+    codes = [text(item.get("kks_code")) for item in records if isinstance(item, dict)]
+    metrics = result.get("metrics", {})
+    priority_counts = Counter(item.get("priority", "P2") for item in _report_issues(result))
+    # The landing-page P1/P2 figures are the two business-critical governance
+    # groups requested for delivery: extension-code governance and historical
+    # migration. The complete rule-level distribution remains in the detail
+    # list and the technical coverage sheet.
+    focused_p1 = _rule_issue_count(result, {"KKS-17", "KKS-22"})
+    focused_p2 = _rule_issue_count(result, {"KKS-18"})
+    return {
+        "effective_kks": int(result.get("data_rows", len(codes)) or 0),
+        "device_level_codes": sum(1 for code in codes if len(code) == 12),
+        "duplicate_codes": int(metrics.get("duplicate_code_groups", 0) or 0),
+        "parent_errors": int(metrics.get("orphan_rows", 0) or 0) + int(metrics.get("prefix_mismatch_rows", 0) or 0),
+        "p0": int(priority_counts.get("P0", 0)),
+        "p1": int(focused_p1),
+        "p2": int(focused_p2),
+        "rule_p1": int(priority_counts.get("P1", 0)),
+        "rule_p2": int(priority_counts.get("P2", 0)),
+    }
+
+
+def _rule_issue_count(result: dict[str, Any], rule_ids: set[str]) -> int:
+    total = 0
+    for item in _report_issues(result):
+        rules = {part.strip() for part in re.split(r"[/~]", str(item.get("rule_id", "")))}
+        if rules & rule_ids:
+            total += 1
+    return total
+
+
+def report_quality_dimensions(result: dict[str, Any]) -> list[dict[str, str]]:
+    """Build the eight quality dimensions shown to non-technical reviewers."""
+    metrics = result.get("metrics", {})
+    dimensions: list[dict[str, str]] = []
+
+    def add(dimension: str, check: str, count: int, detail: str, *, zero: str = "通过") -> None:
+        dimensions.append({
+            "dimension": dimension,
+            "check": check,
+            "result": zero if count == 0 else f"发现 {count} 项",
+            "detail": detail,
+        })
+
+    structure_ok = bool(result.get("sheet_info")) and bool(result.get("columns"))
+    dimensions.append({
+        "dimension": "结构层",
+        "check": "表结构、字段识别",
+        "result": "通过" if structure_ok else "待处理",
+        "detail": f"主表 {result.get('sheet', '—')}；已识别表头和 KKS、父级、名称字段。" if structure_ok else "未能完整识别主表结构。",
+    })
+    add("语法层", "字符合法性", _rule_issue_count(result, {"KKS-04", "KKS-04b", "KKS-05", "KKS-06", "KKS-29", "KKS-30"}), "检查字符、分段类型、长度和文本卫生。")
+    duplicate_count = int(metrics.get("duplicate_code_groups", 0) or 0)
+    add("唯一性", "重复 KKS", duplicate_count, "按完整 KKS 码分组，未将不同层级的相似码误判为重复。")
+    parent_count = int(metrics.get("orphan_rows", 0) or 0) + int(metrics.get("prefix_mismatch_rows", 0) or 0)
+    add("层级", "父级关系", parent_count, "检查孤儿节点、父子归属和层级关系。")
+    migration_count = _rule_issue_count(result, {"KKS-13", "KKS-14", "KKS-15", "KKS-16", "KKS-18", "KKS-25c"})
+    add("迁移", "旧码映射", migration_count, "检查历史原码、新码前缀变化和一对多映射。")
+    semantic_count = max(int(metrics.get("long_code_rows", 0) or 0), _rule_issue_count(result, {"KKS-17", "KKS-22", "KKS-A", "KKS-C", "KKS-E", "KKS-F", "KKS-G"}))
+    add("语义", "扩展码分析", semantic_count, "检查扩展编码、设备类型、编号连续性和语义疑点。")
+    naming_count = _rule_issue_count(result, {"KKS-24", "KKS-25", "KKS-25b", "KKS-26", "KKS-27", "KKS-28", "KKS-31"})
+    add("命名", "名称规范", naming_count, "检查名称歧义、同物异名、机组三方一致和父子语义。")
+    import_governance = result.get("import_governance", {})
+    import_ready = bool(import_governance.get("direct_import_ready"))
+    dimensions.append({
+        "dimension": "导入",
+        "check": "数据库兼容性",
+        "result": "通过" if import_ready else "待处理",
+        "detail": "已通过导入前检查。" if import_ready else "本次未连接真实 DM8；扩展码、历史映射和 P0/P1 问题需处理后再导入。",
+    })
+    return dimensions
+
+
+def report_import_conclusion(result: dict[str, Any]) -> str:
+    metrics = quality_metrics(result)
+    if metrics["p0"] or metrics["p1"] or not result.get("import_governance", {}).get("direct_import_ready", False):
+        return "当前不建议直接导入。完成 P0/P1 整改，确认历史映射和扩展编码，并通过目标库导入验证后再进入系统。"
+    return "本批 KKS 编码整体结构完整，可在完成导入前抽查和目标库验证后进入系统导入。"
 
 
 def _emit_progress(callback: ProgressCallback | None, event: dict[str, Any]) -> None:
@@ -713,6 +833,53 @@ def _tree_record(excel_row: int, code: str, parent: str, name: str) -> dict[str,
     }
 
 
+def apply_ai_review_stage(
+    result: dict[str, Any],
+    *,
+    progress_callback: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    """Run the optional semantic stage and update the audit conclusion."""
+    result["ai_review"] = review_issue_candidates(result, progress_callback=progress_callback)
+    result["final_decision_counts"] = final_decision_counts(result)
+    final_counts = result["final_decision_counts"]
+    final_actionable = final_counts.get("confirmed_issue", 0) + final_counts.get("needs_human", 0)
+    if final_actionable:
+        result["conclusion"] = (
+            f"本次识别出 {final_actionable} 个需要处理或人工确认的问题；"
+            f"另有 {final_counts.get('likely_false_positive', 0)} 个疑似误报保留复核记录。源 Excel 未修改。"
+        )
+    elif final_counts.get("likely_false_positive", 0):
+        result["conclusion"] = (
+            f"本次规则命中项均经 AI 归并为疑似误报，共 {final_counts['likely_false_positive']} 个；"
+            "仍建议人工抽查。源 Excel 未修改。"
+        )
+    return result
+
+
+def write_audit_artifacts(
+    input_path: Path,
+    output_dir: Path,
+    result: dict[str, Any],
+    *,
+    progress_callback: ProgressCallback | None = None,
+) -> dict[str, Any]:
+    """Write only the two user-facing audit artifacts."""
+    _emit_progress(progress_callback, {"phase": "audit", "stage": "report", "percent": 95, "message": "正在生成审核报告", "hint": "整理 HTML 报告和问题 Excel"})
+    output_dir.mkdir(parents=True, exist_ok=True)
+    html_name, xlsx_name = output_artifact_names(input_path)
+    write_html(output_dir / html_name, result)
+    write_issue_workbook_xlsx(output_dir / xlsx_name, result)
+    LOGGER.info(
+        "audit_done file=%s rows=%s issues=%s ai_status=%s ai_reviewed=%s",
+        input_path.name,
+        result.get("data_rows", 0),
+        result.get("issue_count", 0),
+        result.get("ai_review", {}).get("status", "pending"),
+        result.get("ai_review", {}).get("reviewed_count", 0),
+    )
+    return result
+
+
 def audit_tree_collection(
     input_path: Path,
     output_dir: Path,
@@ -722,6 +889,9 @@ def audit_tree_collection(
     tree_cols: dict[str, int],
     comparison_path: Path | None = None,
     progress_callback: ProgressCallback | None = None,
+    *,
+    run_ai_review: bool = True,
+    write_outputs: bool = True,
 ) -> dict[str, Any]:
     """Audit the two-code-per-row system-device-tree format from the Skill."""
     _emit_progress(progress_callback, {"phase": "audit", "stage": "reading", "percent": 12, "message": "正在读取系统设备树", "hint": "识别父、子设备列和工作表结构"})
@@ -835,12 +1005,10 @@ def audit_tree_collection(
         "_ai_context": {"records": child_records},
     }
     _emit_progress(progress_callback, {"phase": "audit", "stage": "rules_completed", "percent": 62, "message": "本地规则审核完成", "hint": f"已发现 {len(issues)} 个规则问题，准备进行 AI 候选复核"})
-    result["ai_review"] = review_issue_candidates(result, progress_callback=progress_callback)
-    _emit_progress(progress_callback, {"phase": "audit", "stage": "report", "percent": 95, "message": "正在生成审核报告", "hint": "整理 HTML 报告和问题 Excel"})
-    output_dir.mkdir(parents=True, exist_ok=True)
-    html_name, xlsx_name = output_artifact_names(input_path)
-    write_html(output_dir / html_name, result)
-    write_issue_workbook_xlsx(output_dir / xlsx_name, result)
+    if run_ai_review:
+        apply_ai_review_stage(result, progress_callback=progress_callback)
+    if write_outputs:
+        write_audit_artifacts(input_path, output_dir, result, progress_callback=progress_callback)
     return result
 
 
@@ -850,6 +1018,9 @@ def audit_file(
     requested_sheet: str | None = None,
     comparison_path: Path | None = None,
     progress_callback: ProgressCallback | None = None,
+    *,
+    run_ai_review: bool = True,
+    write_outputs: bool = True,
 ) -> dict[str, Any]:
     configure_logging()
     _emit_progress(progress_callback, {"phase": "audit", "stage": "reading", "percent": 8, "message": "正在读取 Excel", "hint": f"打开工作簿：{input_path.name}"})
@@ -872,7 +1043,18 @@ def audit_file(
         tree_cols = detect_tree_collection_columns(header)
         if tree_cols:
             LOGGER.info("audit_tree_collection_detected file=%s sheet=%s", input_path.name, sheet)
-            return audit_tree_collection(input_path, output_dir, sheet, rows, header_idx, tree_cols, comparison_path, progress_callback)
+            return audit_tree_collection(
+                input_path,
+                output_dir,
+                sheet,
+                rows,
+                header_idx,
+                tree_cols,
+                comparison_path,
+                progress_callback,
+                run_ai_review=run_ai_review,
+                write_outputs=write_outputs,
+            )
         raise ValueError(f"主表缺少关键列：{', '.join(missing)}")
 
     records: list[dict[str, Any]] = []
@@ -1136,42 +1318,30 @@ def audit_file(
         "scope_comparison": scope_comparison,
         "_ai_context": {"records": list(template_records.values())},
     }
-    # AI is an optional second stage.  With no AI_API_KEY the local audit is
-    # unchanged; with a key, all semantic candidates are submitted together.
     _emit_progress(progress_callback, {"phase": "audit", "stage": "rules_completed", "percent": 62, "message": "本地规则审核完成", "hint": f"已发现 {len(issues)} 个规则问题，准备进行 AI 候选复核"})
-    result["ai_review"] = review_issue_candidates(result, progress_callback=progress_callback)
-    _emit_progress(progress_callback, {"phase": "audit", "stage": "report", "percent": 95, "message": "正在生成审核报告", "hint": "整理 HTML 报告和问题 Excel"})
-    output_dir.mkdir(parents=True, exist_ok=True)
-    html_name, xlsx_name = output_artifact_names(input_path)
-    write_html(output_dir / html_name, result)
-    write_issue_workbook_xlsx(output_dir / xlsx_name, result)
-    LOGGER.info(
-        "audit_done file=%s rows=%s issues=%s ai_status=%s ai_reviewed=%s",
-        input_path.name,
-        result["data_rows"],
-        result.get("issue_count", 0),
-        result.get("ai_review", {}).get("status", "disabled"),
-        result.get("ai_review", {}).get("reviewed_count", 0),
-    )
+    if run_ai_review:
+        apply_ai_review_stage(result, progress_callback=progress_callback)
+    if write_outputs:
+        write_audit_artifacts(input_path, output_dir, result, progress_callback=progress_callback)
     return result
 
 
 def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
-    """生成独立的问题清单工作簿，不修改上传的源 Excel。"""
+    """生成面向业务交付的问题清单，技术 AI 依据放入隐藏页。"""
     wb = Workbook()
     summary = wb.active
     summary.title = "概览"
     issues_ws = wb.create_sheet("问题清单")
+    ai_ws = wb.create_sheet("AI复核（技术）")
     resolved_ws = wb.create_sheet("已澄清项")
     structure_ws = wb.create_sheet("文件结构")
     coverage_ws = wb.create_sheet("规则覆盖")
-    teal, light_teal = "0F4C5C", "EAF4F5"
-    gray = "F4F6F7"
+    blue, pale_blue, gray, pale_red, pale_amber, pale_green = "1D4ED8", "EFF6FF", "F8FAFC", "FEF2F2", "FFFBEB", "F0FDF4"
 
-    def header_style(ws, cell_range: str) -> None:
+    def header_style(ws, cell_range: str, color: str = blue) -> None:
         for row in ws[cell_range]:
             for cell in row:
-                cell.fill = PatternFill("solid", fgColor=teal)
+                cell.fill = PatternFill("solid", fgColor=color)
                 cell.font = Font(bold=True, color="FFFFFF")
                 cell.alignment = Alignment(vertical="center", wrap_text=True)
 
@@ -1186,180 +1356,258 @@ def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
             max_len = max((len(str(ws.cell(row=row_idx, column=col_idx).value or "")) for row_idx in range(1, ws.max_row + 1)), default=0)
             ws.column_dimensions[letter].width = min(max(max_len + 2, 12), maximum)
 
+    def add_table(ws, name: str, end_column: int) -> None:
+        end_row = max(1, ws.max_row)
+        ref = f"A1:{get_column_letter(end_column)}{end_row}"
+        table = Table(displayName=name, ref=ref)
+        table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False)
+        ws.add_table(table)
+
     for ws in wb.worksheets:
         ws.sheet_view.showGridLines = False
 
-    summary.merge_cells("A1:F1")
-    summary["A1"] = "KKS 编码审核报告"
-    summary["A1"].fill = PatternFill("solid", fgColor=teal)
+    metrics = quality_metrics(result)
+    counts = result.get("final_decision_counts", final_decision_counts(result))
+    dimensions = report_quality_dimensions(result)
+    report_issues = sorted(_report_issues(result), key=lambda item: ({"P0": 0, "P1": 1, "P2": 2}.get(str(item.get("priority")), 9), int(item.get("excel_row", 0) or 0)))
+
+    summary.merge_cells("A1:H1")
+    summary["A1"] = "KKS 编码质量审核报告"
+    summary["A1"].fill = PatternFill("solid", fgColor=blue)
     summary["A1"].font = Font(bold=True, color="FFFFFF", size=16)
-    summary["A1"].alignment = Alignment(horizontal="center")
-    summary.merge_cells("A2:F2")
+    summary["A1"].alignment = Alignment(horizontal="center", vertical="center")
+    summary.row_dimensions[1].height = 28
+    summary.merge_cells("A2:H2")
     summary["A2"] = f"源文件：{result['source_file']}；主表：{result['sheet']}；表头行：{result['header_row']}"
-    summary["A2"].fill = PatternFill("solid", fgColor=light_teal)
+    summary["A2"].fill = PatternFill("solid", fgColor=pale_blue)
     summary["A2"].alignment = Alignment(wrap_text=True)
-    summary.append([])
-    summary.append(["指标", "值"])
-    header_style(summary, "A4:B4")
-    for label, value in (("有效编码行", result["data_rows"]), ("唯一 KKS 码", result["metrics"]["unique_codes"]), ("问题总数", result.get("issue_count", 0)), ("已澄清项", result.get("resolved_count", len(result.get("resolved_reviews", [])))), ("父级孤儿", result["metrics"]["orphan_rows"]), ("父子前缀不一致", result["metrics"]["prefix_mismatch_rows"]), ("12 位以上扩展码", result["metrics"]["long_code_rows"]), ("AI 复核候选", result.get("ai_review", {}).get("candidate_count", 0))):
-        summary.append([label, value])
-    body_style(summary, "A5:B12")
-    summary.merge_cells("A14:F14")
-    summary["A14"] = "总体结论"
-    summary["A14"].fill = PatternFill("solid", fgColor=teal)
-    summary["A14"].font = Font(bold=True, color="FFFFFF")
-    summary.merge_cells("A15:F16")
-    summary["A15"] = result["conclusion"]
-    summary["A15"].fill = PatternFill("solid", fgColor=light_teal)
-    summary["A15"].alignment = Alignment(vertical="center", wrap_text=True)
-    summary.merge_cells("A18:F18")
-    summary["A18"] = "结构与使用说明"
-    summary["A18"].fill = PatternFill("solid", fgColor=teal)
-    summary["A18"].font = Font(bold=True, color="FFFFFF")
-    ai_summary = result.get("ai_review", {})
-    notes = result["structural_notes"] + ["源 Excel 未修改；13 位扩展码和历史映射需人工确认。", "本报告未做 DM8/LOCATIONS 真实导入验证。", f"正式 Skill 模板已加载并执行；AI 已按相关规则分组复核 {ai_summary.get('reviewed_count', 0)} 条候选，疑似误报二次核验 {ai_summary.get('verified_count', 0)} 条。"]
-    for row_no, note in enumerate(notes, start=19):
-        summary.merge_cells(start_row=row_no, start_column=1, end_row=row_no, end_column=6)
-        summary.cell(row_no, 1).value = f"• {note}"
-        summary.cell(row_no, 1).fill = PatternFill("solid", fgColor=gray)
-        summary.cell(row_no, 1).alignment = Alignment(wrap_text=True, vertical="top")
-    summary.freeze_panes = "A5"
-    autosize(summary)
+    summary.merge_cells("A4:H4")
+    summary["A4"] = "一、总体结论"
+    header_style(summary, "A4:H4")
+    summary.merge_cells("A5:H6")
+    summary["A5"] = report_import_conclusion(result)
+    summary["A5"].fill = PatternFill("solid", fgColor=pale_green if not metrics["p0"] and not metrics["p1"] else pale_amber)
+    summary["A5"].alignment = Alignment(vertical="center", wrap_text=True)
 
-    issue_headers = ["状态", "规则", "类别", "Excel行号", "KKS码", "父级码", "原KKS码", "设备名称", "审核意见", "建议", "证据", "AI决策", "AI置信度", "AI证据", "AI理由", "AI建议", "AI初审决策", "AI二次复核"]
+    summary.merge_cells("A8:H8")
+    summary["A8"] = "二、关键质量指标"
+    header_style(summary, "A8:H8")
+    summary.append(["指标", "结果", "指标", "结果", "指标", "结果", "指标", "结果"])
+    header_style(summary, f"A{summary.max_row}:H{summary.max_row}")
+    metric_pairs = [("有效 KKS 数量", metrics["effective_kks"]), ("设备级编码", metrics["device_level_codes"]), ("重复编码", metrics["duplicate_codes"]), ("父级错误", metrics["parent_errors"]), ("高风险问题（P0）", metrics["p0"]), ("待治理问题（P1）", metrics["p1"]), ("历史迁移问题（P2）", metrics["p2"])]
+    for index in range(0, len(metric_pairs), 4):
+        row = []
+        for label, value in metric_pairs[index:index + 4]:
+            row.extend([label, value])
+        summary.append(row)
+    body_style(summary, f"A{summary.max_row - 1}:H{summary.max_row}")
+
+    summary.merge_cells("A12:H12")
+    summary["A12"] = "三、KKS 八维审核结果"
+    header_style(summary, "A12:H12")
+    summary.append(["维度", "检查项", "结果", "说明"])
+    header_style(summary, f"A{summary.max_row}:D{summary.max_row}")
+    dimension_header_row = summary.max_row
+    summary.merge_cells(start_row=dimension_header_row, start_column=4, end_row=dimension_header_row, end_column=8)
+    for item in dimensions:
+        summary.append([item["dimension"], item["check"], item["result"], item["detail"]])
+        dimension_row = summary.max_row
+        summary.merge_cells(start_row=dimension_row, start_column=4, end_row=dimension_row, end_column=8)
+    body_style(summary, f"A{summary.max_row - len(dimensions) + 1}:D{summary.max_row}")
+
+    summary.merge_cells("A22:H22")
+    summary["A22"] = "四、P0/P1/P2 问题分析"
+    header_style(summary, "A22:H22")
+    summary.append(["等级", "含义", "数量", "处置要求"])
+    header_style(summary, f"A{summary.max_row}:D{summary.max_row}")
+    priority_header_row = summary.max_row
+    summary.merge_cells(start_row=priority_header_row, start_column=4, end_row=priority_header_row, end_column=8)
+    for level, meaning, requirement in (("P0", "阻断问题", "必须修改并复核后才能导入"), ("P1", "结构治理问题", "完成治理或人工确认后再导入"), ("P2", "历史迁移问题", "保留原码证据，按迁移策略处理")):
+        summary.append([level, meaning, metrics[level.lower()], requirement])
+        priority_row = summary.max_row
+        summary.merge_cells(start_row=priority_row, start_column=4, end_row=priority_row, end_column=8)
+    body_style(summary, f"A{summary.max_row - 2}:D{summary.max_row}")
+
+    summary.merge_cells("A27:H27")
+    summary["A27"] = "五、问题整改建议"
+    header_style(summary, "A27:H27")
+    summary.merge_cells("A28:H29")
+    summary["A28"] = "优先处理 P0 阻断问题；再治理 P1 扩展编码；P2 历史迁移保留原始证据，不直接覆盖源 Excel。其余规则提示仍保留在详细问题清单，整改完成后应重新审核并做目标库导入前验证。"
+    summary["A28"].fill = PatternFill("solid", fgColor=gray)
+    summary["A28"].alignment = Alignment(wrap_text=True, vertical="center")
+
+    summary.merge_cells("A31:H31")
+    summary["A31"] = "六、导入评估结论"
+    header_style(summary, "A31:H31")
+    summary.merge_cells("A32:H33")
+    summary["A32"] = report_import_conclusion(result)
+    summary["A32"].fill = PatternFill("solid", fgColor=pale_amber)
+    summary["A32"].alignment = Alignment(wrap_text=True, vertical="center")
+    summary.merge_cells("A35:H35")
+    summary["A35"] = "审核方法"
+    header_style(summary, "A35:H35")
+    for method in REPORT_METHODS:
+        summary.append([f"• {method}"])
+        summary.merge_cells(start_row=summary.max_row, start_column=1, end_row=summary.max_row, end_column=8)
+        summary.cell(summary.max_row, 1).fill = PatternFill("solid", fgColor=gray)
+    summary.append(["源 Excel 始终只读；本次未连接真实 DM8/LOCATIONS 做导入验证。"])
+    summary.merge_cells(start_row=summary.max_row, start_column=1, end_row=summary.max_row, end_column=8)
+    summary.cell(summary.max_row, 1).fill = PatternFill("solid", fgColor=gray)
+    summary.freeze_panes = "A4"
+    autosize(summary, 58)
+    for column, width in {"A": 19, "B": 13, "C": 19, "D": 13, "E": 19, "F": 13, "G": 19, "H": 13}.items():
+        summary.column_dimensions[column].width = width
+
+    issue_headers = ["等级", "规则", "Excel 行号", "KKS", "问题", "整改建议"]
     issues_ws.append(issue_headers)
-    for item in result["issues"]:
-        issues_ws.append([item.get(key, "") for key in ("status", "rule_id", "category", "excel_row", "kks_code", "parent_code", "old_code", "name", "message", "suggestion", "evidence", "ai_decision", "ai_confidence", "ai_evidence", "ai_reason", "ai_suggestion", "ai_initial_decision", "ai_verification_decision")])
-    end_row = max(1, issues_ws.max_row)
-    header_style(issues_ws, "A1:R1")
-    body_style(issues_ws, f"A1:R{end_row}")
+    for item in report_issues:
+        decision = str(item.get("final_decision", ""))
+        action = {"confirmed_issue": "需整改", "needs_human": "需确认", "likely_false_positive": "建议抽查"}.get(decision, "待确认")
+        message = item.get("final_summary") or item.get("message") or item.get("category") or "待核问题"
+        suggestion = item.get("final_suggestion") or item.get("suggestion") or "请结合原始 Excel 和业务资料确认。"
+        issues_ws.append([item.get("priority", "P2"), item.get("rule_id", ""), item.get("excel_row", ""), item.get("kks_code", ""), f"{action}：{message}", suggestion])
+    header_style(issues_ws, "A1:F1")
+    body_style(issues_ws, f"A1:F{max(1, issues_ws.max_row)}")
     issues_ws.freeze_panes = "A2"
-    issues_ws.auto_filter.ref = f"A1:R{end_row}"
-    autosize(issues_ws)
-    issue_table = Table(displayName="KKSIssues", ref=f"A1:R{end_row}")
-    issue_table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False)
-    issues_ws.add_table(issue_table)
+    issues_ws.auto_filter.ref = f"A1:F{max(1, issues_ws.max_row)}"
+    autosize(issues_ws, 60)
+    add_table(issues_ws, "KKSIssues", 6)
 
-    resolved_headers = ["状态", "规则", "类别", "Excel行号", "KKS码", "父级码", "原KKS码", "设备名称", "复核结论", "建议", "证据"]
-    resolved_ws.append(resolved_headers)
-    for item in result["resolved_reviews"]:
-        resolved_ws.append([item.get(key, "") for key in ("status", "rule_id", "category", "excel_row", "kks_code", "parent_code", "old_code", "name", "message", "suggestion", "evidence")])
-    resolved_end = max(1, resolved_ws.max_row)
-    header_style(resolved_ws, "A1:K1")
-    body_style(resolved_ws, f"A1:K{resolved_end}")
+    ai_headers = ["内部状态", "等级", "规则", "Excel 行号", "KKS", "原始问题", "规则证据", "AI 初审", "AI 二次复核", "AI 置信度", "AI 证据", "AI 原因", "AI 建议", "最终判断", "最终证据", "最终原因", "最终建议"]
+    ai_ws.append(ai_headers)
+    for item in report_issues:
+        ai_ws.append([item.get("status", ""), item.get("priority", "P2"), item.get("rule_id", ""), item.get("excel_row", ""), item.get("kks_code", ""), item.get("message", ""), item.get("evidence", ""), item.get("ai_initial_decision", ""), item.get("ai_verification_decision", ""), item.get("ai_confidence", ""), item.get("ai_evidence", ""), item.get("ai_reason", ""), item.get("ai_suggestion", ""), final_decision_label(item.get("final_decision", "")), item.get("final_evidence", ""), item.get("final_reason", ""), item.get("final_suggestion", "")])
+    header_style(ai_ws, f"A1:{get_column_letter(len(ai_headers))}1")
+    body_style(ai_ws, f"A1:{get_column_letter(len(ai_headers))}{max(1, ai_ws.max_row)}")
+    ai_ws.freeze_panes = "A2"
+    ai_ws.auto_filter.ref = f"A1:{get_column_letter(len(ai_headers))}{max(1, ai_ws.max_row)}"
+    autosize(ai_ws, 55)
+    ai_ws.sheet_state = "hidden"
+
+    resolved_ws.append(["Excel 行号", "KKS", "复核结论", "证据"])
+    for item in result.get("resolved_reviews", []):
+        resolved_ws.append([item.get("excel_row", ""), item.get("kks_code", ""), item.get("message", ""), item.get("evidence", "")])
+    header_style(resolved_ws, "A1:D1")
+    body_style(resolved_ws, f"A1:D{max(1, resolved_ws.max_row)}")
     resolved_ws.freeze_panes = "A2"
-    resolved_ws.auto_filter.ref = f"A1:K{resolved_end}"
+    resolved_ws.auto_filter.ref = f"A1:D{max(1, resolved_ws.max_row)}"
     autosize(resolved_ws)
-    resolved_table = Table(displayName="KKSResolved", ref=f"A1:K{resolved_end}")
-    resolved_table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False)
-    resolved_ws.add_table(resolved_table)
+    add_table(resolved_ws, "KKSResolved", 4)
 
-    structure_headers = ["Sheet", "最大行", "最大列", "非空行", "首个非空行", "最后非空行", "表头预览"]
-    structure_ws.append(structure_headers)
-    for item in result["sheet_info"]:
+    structure_ws.append(["Sheet", "最大行", "最大列", "非空行", "首个非空行", "最后非空行", "表头预览"])
+    for item in result.get("sheet_info", []):
         preview = " | ".join(str(x) for x in item.get("header_preview", []))
         structure_ws.append([item.get(key, "") for key in ("sheet", "max_row", "max_col", "nonempty_rows", "first_nonempty_row", "last_nonempty_row")] + [preview])
-    structure_end = max(1, structure_ws.max_row)
     header_style(structure_ws, "A1:G1")
-    body_style(structure_ws, f"A1:G{structure_end}")
+    body_style(structure_ws, f"A1:G{max(1, structure_ws.max_row)}")
     structure_ws.freeze_panes = "A2"
-    structure_ws.auto_filter.ref = f"A1:G{structure_end}"
+    structure_ws.auto_filter.ref = f"A1:G{max(1, structure_ws.max_row)}"
     autosize(structure_ws)
-    structure_table = Table(displayName="KKSSheets", ref=f"A1:G{structure_end}")
-    structure_table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False)
-    structure_ws.add_table(structure_table)
+    add_table(structure_ws, "KKSSheets", 7)
 
-    coverage_headers = ["维度", "规则", "执行状态", "命中数", "执行/证据来源"]
-    coverage_ws.append(coverage_headers)
-    issue_counts = Counter(item.get("rule_id", "") for item in result.get("issues", []))
+    coverage_ws.append(["维度", "规则", "执行状态", "命中数", "执行/证据来源"])
+    issue_counts = Counter(item.get("rule_id", "") for item in _report_issues(result))
     coverage_items = [
         ("文件与结构", "01-03", "已执行", "动态 Sheet、表头和列定位", "kks-audit/SKILL.md"),
-        ("语法与格式", "KKS-04", "已执行", "非法字符", "kks-audit/SKILL.md"),
-        ("语法与格式", "KKS-04b", "已执行", "12 位骨架分段类型", "kks-audit/scripts/audit_template.py"),
-        ("语法与格式", "KKS-05", "已执行", "码长和变长层级", "kks-audit/SKILL.md"),
-        ("语法与格式", "KKS-06/KKS-29", "已执行", "I/O 与 OCR 易混字符", "kks-audit/scripts/audit_template.py"),
-        ("唯一性", "KKS-07", "已执行", "重复码、后缀丢失/跨设备诊断", "kks-audit/scripts/audit_template.py"),
-        ("层级树", "KKS-08~KKS-12", "已执行", "孤儿、前缀、自引用/环、父级长度、根哨兵", "kks-audit/SKILL.md"),
-        ("国标迁移", "KKS-13/14/15/16/18", "已执行", "前缀、字母、层级、旧码与历史提示", "kks-audit/SKILL.md + config/kks_rules.json"),
-        ("语义深度", "KKS-17/22", "已执行", "信号点、部件级、A/B/C、区间扩展分类", "kks-audit/SKILL.md"),
-        ("语义一致", "KKS-24~KKS-31", "已执行", "命名、同物异名、应编未编、卫生和父子语义", "kks-audit/scripts/audit_template.py"),
-        ("轻量增强", "KKS-A/C/E/F/G", "已执行", "名称字母、风格、设备类型、断号、字母组合", "kks-audit/SKILL.md"),
-        ("跨范围对比", "KKS-19/20/21", "已执行" if result.get("scope_comparison") else "未提供对比文件", "专业覆盖、编码深度、数量瀑布闭合", "--compare-file + kks-audit/SKILL.md"),
-        ("DM8 可导入性", "KKS-22/23", "已执行", "LOCATIONS 约束和历史双码治理提示", "kks-audit/SKILL.md"),
+        ("语法与格式", "KKS-04/04b/05/06/29/30", "已执行", "字符、长度、OCR 和文本卫生", "kks-audit/SKILL.md + audit_template.py"),
+        ("唯一性", "KKS-07", "已执行", "重复码和跨设备碰撞诊断", "audit_template.py"),
+        ("层级树", "KKS-08~KKS-12", "已执行", "孤儿、父子关系和父级链", "kks-audit/SKILL.md"),
+        ("历史迁移", "KKS-13/14/15/16/18/25c", "已执行", "旧码、新码和一对多映射", "kks-audit/SKILL.md + config/kks_rules.json"),
+        ("语义与命名", "KKS-17/22/24~31/A/C/E/F/G", "已执行", "扩展码、名称和语义一致性", "audit_template.py + SKILL.md"),
+        ("跨范围对比", "KKS-19/20/21", "已执行" if result.get("scope_comparison") else "未提供对比文件", "专业覆盖、编码深度和数量瀑布", "--compare-file"),
+        ("导入评估", "KKS-22/23", "已执行", "LOCATIONS 约束和历史双码策略", "kks-audit/SKILL.md"),
     ]
     for dimension, rule_id, status, hit_note, source in coverage_items:
         hit_value = sum(issue_counts.get(rule, 0) for rule in re.split(r"[/~]", rule_id) if issue_counts.get(rule))
-        if rule_id == "KKS-07":
-            hit_value = issue_counts.get("KKS-07", 0)
         coverage_ws.append([dimension, rule_id, status, hit_value, f"{hit_note}；{source}"])
-    coverage_end = max(1, coverage_ws.max_row)
     header_style(coverage_ws, "A1:E1")
-    body_style(coverage_ws, f"A1:E{coverage_end}")
+    body_style(coverage_ws, f"A1:E{max(1, coverage_ws.max_row)}")
     coverage_ws.freeze_panes = "A2"
-    coverage_ws.auto_filter.ref = f"A1:E{coverage_end}"
+    coverage_ws.auto_filter.ref = f"A1:E{max(1, coverage_ws.max_row)}"
     autosize(coverage_ws)
-    coverage_table = Table(displayName="KKSCoverage", ref=f"A1:E{coverage_end}")
-    coverage_table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False)
-    coverage_ws.add_table(coverage_table)
+    add_table(coverage_ws, "KKSCoverage", 5)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(path)
 
 
 def write_html(path: Path, result: dict[str, Any]) -> None:
-    rows = [i for i in result["issues"] if i["status"] != "resolved"]
+    metrics = quality_metrics(result)
+    final_counts = result.get("final_decision_counts", final_decision_counts(result))
+    rows = sorted(_report_issues(result), key=lambda item: ({"P0": 0, "P1": 1, "P2": 2}.get(str(item.get("priority")), 9), int(item.get("excel_row", 0) or 0)))
     ai = result.get("ai_review", {})
-    def ai_html(item: dict[str, Any]) -> str:
-        decision = str(item.get("ai_decision", ""))
-        if not decision:
-            return "未复核"
+
+    def action_label(item: dict[str, Any]) -> str:
+        return {"confirmed_issue": "需整改", "needs_human": "需确认", "likely_false_positive": "建议抽查"}.get(str(item.get("final_decision", "")), "待确认")
+
+    def detail_text(item: dict[str, Any]) -> str:
+        return str(item.get("final_summary") or item.get("message") or item.get("category") or "待核问题")
+
+    def suggestion_text(item: dict[str, Any]) -> str:
+        return str(item.get("final_suggestion") or item.get("suggestion") or "请结合原始 Excel 和业务资料确认。")
+
+    rows_html = "".join(
+        f"<tr><td><span class='priority p{html.escape(str(item.get('priority', 'P2'))[-1])}'>{html.escape(str(item.get('priority', 'P2')))}</span></td>"
+        f"<td>{html.escape(str(item.get('rule_id', '')))}</td><td>{html.escape(str(item.get('excel_row', '')))}</td>"
+        f"<td><code>{html.escape(str(item.get('kks_code', '')))}</code></td>"
+        f"<td><b>{html.escape(action_label(item))}</b>：{html.escape(detail_text(item))}</td>"
+        f"<td>{html.escape(suggestion_text(item))}</td></tr>"
+        for item in rows
+    ) or '<tr><td colspan="6" class="empty">未发现需要列入清单的问题</td></tr>'
+
+    dimension_rows = "".join(
+        f"<tr><td><b>{html.escape(item['dimension'])}</b></td><td>{html.escape(item['check'])}</td>"
+        f"<td><span class='result-pill {'ok' if item['result'] == '通过' else 'warn'}'>{html.escape(item['result'])}</span></td>"
+        f"<td>{html.escape(item['detail'])}</td></tr>"
+        for item in report_quality_dimensions(result)
+    )
+    priority_rows = "".join(
+        f"<div class='priority-card p{level[-1]}'><strong>{level} · {meaning}</strong><b>{metrics[level.lower()]}</b><span>{requirement}</span></div>"
+        for level, meaning, requirement in (("P0", "阻断问题", "必须修改并复核后才能导入"), ("P1", "结构治理问题", "完成治理或人工确认后再导入"), ("P2", "历史迁移问题", "保留原码证据，按迁移策略处理"))
+    )
+    methods_html = "".join(f"<li>{html.escape(method)}</li>" for method in REPORT_METHODS)
+    notes_html = "".join(f"<li>{html.escape(str(note))}</li>" for note in result.get("structural_notes", []))
+
+    def ai_detail(item: dict[str, Any]) -> str:
         try:
             confidence = f"{float(item.get('ai_confidence', 0)):.0%}"
         except (TypeError, ValueError):
             confidence = "—"
         return (
-            f"<b>{html.escape(decision)}</b>（{confidence}）"
-            f"<br><b>证据：</b>{html.escape(str(item.get('ai_evidence', '未提供')))}"
-            f"<br><b>原因：</b>{html.escape(str(item.get('ai_reason', '未提供')))}"
-            f"<br><b>建议：</b>{html.escape(str(item.get('ai_suggestion', '未提供')))}"
+            f"<details class='ai-detail'><summary>查看 AI 依据</summary>"
+            f"<div class='ai-grid'><span>初审</span><b>{html.escape(str(item.get('ai_initial_decision') or item.get('ai_decision') or '未返回'))}</b>"
+            f"<span>二次复核</span><b>{html.escape(str(item.get('ai_verification_decision') or '未触发'))}</b>"
+            f"<span>置信度</span><b>{confidence}</b><span>证据</span><p>{html.escape(str(item.get('ai_evidence') or item.get('final_evidence') or item.get('evidence') or '未提供'))}</p>"
+            f"<span>原因</span><p>{html.escape(str(item.get('ai_reason') or item.get('final_reason') or '未提供'))}</p>"
+            f"<span>建议</span><p>{html.escape(str(item.get('ai_suggestion') or item.get('final_suggestion') or '未提供'))}</p></div></details>"
         )
-    rows_html = "".join(
-        "<tr>" + "".join(f"<td>{html.escape(str(item.get(k, '')))}</td>" for k in ("status", "rule_id", "category", "excel_row", "kks_code", "name", "message", "suggestion")) +
-        f"<td>{ai_html(item)}</td></tr>"
-        for item in rows
-    ) or '<tr><td colspan="9">未发现问题</td></tr>'
-    resolved_html = "".join(
-        f"<tr><td>{item['excel_row']}</td><td>{html.escape(item['kks_code'])}</td><td>{html.escape(item['message'])}</td></tr>"
-        for item in result["resolved_reviews"]
-    ) or '<tr><td colspan="3">无</td></tr>'
-    notes = "".join(f"<li>{html.escape(str(x))}</li>" for x in result["structural_notes"])
-    coverage = result.get("skill_coverage", {})
-    template_rules = coverage.get("template_rules", {}).get("executed_rules", [])
-    additional_rules = coverage.get("additional_rules", {}).get("executed_rules", [])
+
+    ai_rows = "".join(
+        f"<tr><td>{html.escape(str(item.get('priority', 'P2')))}</td><td>{html.escape(str(item.get('excel_row', '')))}</td><td>{html.escape(str(item.get('kks_code', '')))}</td><td>{ai_detail(item)}</td></tr>"
+        for item in rows if item.get("ai_decision") or item.get("ai_initial_decision") or item.get("ai_evidence")
+    ) or '<tr><td colspan="4" class="empty">本次未产生 AI 复核明细</td></tr>'
     comparison = result.get("scope_comparison")
     comparison_html = ""
     if comparison:
-        waterfall = comparison["quantity_waterfall"]
-        comparison_html = (
-            "<h2>跨范围对比</h2>"
-            f"<p>对比文件：{html.escape(str(comparison['comparison']['file']))}；"
-            f"有效编码数量差：{waterfall['primary_minus_comparison']}；"
-            f"数量瀑布闭合：{html.escape(str(waterfall['closed']))}，闭合差：{waterfall['closure_delta']}。</p>"
-            f"<pre>{html.escape(json.dumps(comparison, ensure_ascii=False, indent=2))}</pre>"
-        )
-    body = f"""<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><title>KKS 编码审核报告</title>
-<style>body{{font-family:Segoe UI,Microsoft YaHei,sans-serif;color:#243447;margin:32px;line-height:1.5}}h1{{color:#0f4c5c}}h2{{border-bottom:2px solid #d7e7ea;padding-bottom:6px}}.kpi{{display:inline-block;min-width:130px;margin:6px;padding:14px 18px;border-radius:8px;background:#eef6f7}}table{{border-collapse:collapse;width:100%;font-size:13px}}th,td{{border-bottom:1px solid #dfe7ea;padding:7px;text-align:left;vertical-align:top}}th{{background:#0f4c5c;color:white;position:sticky;top:0}}.small{{color:#5b6770;font-size:13px}}</style></head><body>
-<h1>KKS 编码审核报告</h1><p><b>源文件：</b>{html.escape(result['source_file'])}<br><b>主表：</b>{html.escape(result['sheet'])}；<b>表头行：</b>{result['header_row']}；<b>有效编码行：</b>{result['data_rows']}</p>
-<p><b>总体结论：</b>{html.escape(result['conclusion'])}</p>
-<div class='kpi'><b>问题总数</b><br><span>{result.get('issue_count', len(rows))}</span></div><div class='kpi'><b>已澄清项</b><br><span>{result.get('resolved_count', len(result['resolved_reviews']))}</span></div><div class='kpi'><b>AI 复核候选</b><br><span>{ai.get('candidate_count', 0)}</span></div><div class='kpi'><b>AI 已复核</b><br><span>{ai.get('reviewed_count', 0)}</span></div>
-<h2>AI 二次复核</h2><p>{html.escape(str(ai.get('status', 'disabled')))}；候选项 {ai.get('candidate_count', 0)}，已复核 {ai.get('reviewed_count', 0)}，分组 {ai.get('group_count', 0)}，疑似误报二次核验 {ai.get('verified_count', 0)} 条，模型：{html.escape(str(ai.get('model') or '未配置'))}。AI 结果只作为复核建议，不自动关闭问题。</p>
-<h2>关键指标</h2><ul><li>唯一 KKS 码：{result['metrics']['unique_codes']}；重复码组：{result['metrics']['duplicate_code_groups']}</li><li>父级孤儿：{result['metrics']['orphan_rows']}；父子前缀不一致：{result['metrics']['prefix_mismatch_rows']}</li><li>12 位以上扩展码：{result['metrics']['long_code_rows']}；长度分布：{html.escape(json.dumps(result['code_length_distribution'], ensure_ascii=False))}</li></ul>
-<h2>Skill 执行覆盖</h2><p>规则来源：{html.escape(str(coverage.get('source', 'kks-audit/SKILL.md')))}；正式模板已加载：{html.escape(str(coverage.get('template_loaded', False)))}。</p><p>模板规则：{html.escape(', '.join(template_rules))}<br>增强规则：{html.escape(', '.join(additional_rules))}<br>DM8 导入策略：保留历史 KKS，使用映射层/双码共存；本次未连接真实 DM8。</p>
-<h2>结构说明</h2><ul>{notes}</ul>
-{comparison_html}
-<h2>问题清单（全部问题）</h2><table><thead><tr><th>状态</th><th>规则</th><th>类别</th><th>行号</th><th>KKS</th><th>名称</th><th>审核意见</th><th>建议</th><th>AI复核</th></tr></thead><tbody>{rows_html}</tbody></table>
-<h2>规则命中但已语义排除</h2><table><thead><tr><th>行号</th><th>KKS</th><th>复核结论</th></tr></thead><tbody>{resolved_html}</tbody></table>
-<p class='small'>本报告由规则扫描与可选 AI 二次复核生成；源 Excel 未修改。未连接 DM8/LOCATIONS 做真实导入验证，AI 结果仅为候选判断，需人工确认。</p></body></html>"""
+        waterfall = comparison.get("quantity_waterfall", {})
+        comparison_html = f"<details class='technical'><summary>查看跨范围对比结果</summary><p>对比文件：{html.escape(str(comparison.get('comparison', {}).get('file', '')))}；有效编码数量差：{waterfall.get('primary_minus_comparison', '—')}；瀑布闭合：{html.escape(str(waterfall.get('closed', '—')))}。</p><pre>{html.escape(json.dumps(comparison, ensure_ascii=False, indent=2))}</pre></details>"
+    ai_meta = f"状态：{html.escape(str(ai.get('status', 'disabled')))}；候选项 {ai.get('candidate_count', 0)}；已复核 {ai.get('reviewed_count', 0)}；疑似误报二次核验 {ai.get('verified_count', 0)}。"
+    body = f"""<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>KKS 编码质量审核报告</title>
+<style>
+:root{{--blue:#1d4ed8;--navy:#102a43;--ink:#243b53;--muted:#627d98;--line:#d9e2ec;--soft:#f7faff;--green:#16845b;--amber:#b45309;--red:#c2413b}}
+*{{box-sizing:border-box}}body{{margin:0;background:#f5f8fc;color:var(--ink);font:14px/1.65 "Segoe UI","Microsoft YaHei",Arial,sans-serif}}.page{{max-width:1440px;margin:0 auto;padding:32px 38px 56px}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;padding:22px 26px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 24px rgba(16,42,67,.05)}}h1{{margin:0;color:var(--navy);font-size:30px;letter-spacing:-.5px}}.eyebrow{{margin-bottom:5px;color:#315dcc;font-size:11px;font-weight:800;letter-spacing:1.6px}}.meta{{margin:10px 0 0;color:var(--muted);font-size:13px}}.status{{padding:8px 13px;border:1px solid #bbf7d0;border-radius:999px;background:#f0fdf4;color:var(--green);font-weight:700;white-space:nowrap}}.section{{margin-top:22px;padding:24px 26px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 20px rgba(16,42,67,.04)}}h2{{margin:0 0 15px;color:var(--navy);font-size:20px;border-left:4px solid var(--blue);padding-left:11px}}h3{{margin:0 0 12px;color:var(--navy);font-size:16px}}.conclusion{{padding:16px 18px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff;font-size:15px;font-weight:650;color:#173f7a}}.kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.kpi{{min-height:94px;padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,#fff,#f8fbff)}}.kpi label{{display:block;color:var(--muted);font-size:12px;font-weight:650}}.kpi b{{display:block;margin-top:6px;color:var(--navy);font-size:27px;line-height:1.1}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:12px;font-size:13px}}th,td{{padding:10px 11px;text-align:left;vertical-align:top;border-bottom:1px solid #e8eef5}}th{{background:#eff6ff;color:#173f7a;font-weight:800}}tr:last-child td{{border-bottom:0}}tbody tr:hover{{background:#fbfdff}}.result-pill{{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:750}}.result-pill.ok{{background:#ecfdf5;color:#047857}}.result-pill.warn{{background:#fff7ed;color:#b45309}}.priority-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}.priority-card{{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:15px 16px;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:12px;background:#fbfdff}}.priority-card strong{{font-size:14px}}.priority-card b{{grid-row:span 2;color:var(--navy);font-size:28px}}.priority-card span{{color:var(--muted);font-size:12px}}.priority-card.p0{{border-left-color:var(--red);background:#fffafa}}.priority-card.p1{{border-left-color:#f59e0b;background:#fffdf7}}.priority-card.p2{{border-left-color:var(--blue)}}.priority{{display:inline-flex;min-width:34px;justify-content:center;padding:3px 8px;border-radius:6px;font-weight:800}}.priority.p0{{background:#fee2e2;color:#b91c1c}}.priority.p1{{background:#fef3c7;color:#a16207}}.priority.p2{{background:#dbeafe;color:#1d4ed8}}code{{padding:2px 5px;border-radius:5px;background:#f1f5f9;color:#19324d;font-family:Consolas,monospace;font-size:12px}}.methods{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 24px;margin:0;padding-left:22px}}.methods li{{color:#3e5871}}.advice{{padding:15px 17px;border-radius:12px;background:#f8fafc;border:1px solid var(--line)}}.import{{padding:16px 18px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#92400e;font-weight:650}}.empty{{padding:18px;text-align:center;color:#94a3b8}}details{{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:#fbfdff}}summary{{cursor:pointer;padding:10px 12px;color:#2454ad;font-weight:750}}.ai-detail{{margin:0;border:0;background:transparent}}.ai-detail summary{{padding:0 0 7px;font-size:12px}}.ai-grid{{display:grid;grid-template-columns:80px 1fr;gap:5px 10px;padding:0 12px 12px;color:var(--muted);font-size:12px}}.ai-grid b{{color:var(--ink)}}.ai-grid p{{margin:0;color:var(--ink)}}.technical pre{{max-height:360px;overflow:auto;padding:12px;background:#172033;color:#dbeafe;border-radius:8px;font-size:12px}}.footer{{margin-top:22px;color:#718096;font-size:12px}}@media(max-width:950px){{.page{{padding:20px 16px 40px}}.kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.priority-grid{{grid-template-columns:1fr}}.top{{display:block}}.status{{display:inline-flex;margin-top:12px}}}}@media(max-width:560px){{.kpis{{grid-template-columns:1fr 1fr;gap:8px}}.section{{padding:18px 15px}}h1{{font-size:24px}}table{{font-size:12px}}th,td{{padding:8px}}.methods{{grid-template-columns:1fr}}}}
+@media print{{body{{background:#fff}}.page{{max-width:none;padding:0}}.section,.top{{box-shadow:none;break-inside:avoid}}details{{display:none}}}}
+</style></head><body><main class='page'>
+<header class='top'><div><div class='eyebrow'>KKS QUALITY CONTROL</div><h1>KKS 编码质量审核报告</h1><p class='meta'>源文件：{html.escape(str(result['source_file']))}<br>主表：{html.escape(str(result['sheet']))} · 表头行：{result['header_row']} · 审核范围：{metrics['effective_kks']} 条有效 KKS</p></div><span class='status'>质量审核结论</span></header>
+<section class='section'><h2>一、总体结论</h2><div class='conclusion'>{html.escape(report_import_conclusion(result))}</div></section>
+<section class='section'><h2>二、关键质量指标</h2><div class='kpis'><div class='kpi'><label>有效 KKS 数量</label><b>{metrics['effective_kks']}</b></div><div class='kpi'><label>设备级编码</label><b>{metrics['device_level_codes']}</b></div><div class='kpi'><label>重复编码</label><b>{metrics['duplicate_codes']}</b></div><div class='kpi'><label>父级错误</label><b>{metrics['parent_errors']}</b></div><div class='kpi'><label>高风险问题（P0）</label><b>{metrics['p0']}</b></div><div class='kpi'><label>待治理问题（P1）</label><b>{metrics['p1']}</b></div><div class='kpi'><label>历史迁移问题（P2）</label><b>{metrics['p2']}</b></div></div></section>
+<section class='section'><h2>三、KKS 八维审核结果</h2><table><thead><tr><th>维度</th><th>检查项</th><th>结果</th><th>说明</th></tr></thead><tbody>{dimension_rows}</tbody></table></section>
+<section class='section'><h2>四、P0/P1/P2 问题分析</h2><div class='priority-grid'>{priority_rows}</div></section>
+<section class='section'><h2>五、问题整改建议</h2><div class='advice'>优先处理 P0 阻断问题；再治理 P1 扩展编码；P2 历史迁移保留原始证据，不直接覆盖源 Excel。其余规则提示仍保留在详细问题清单，整改完成后应重新审核，并在目标库做导入前验证。</div><h3 style='margin-top:18px'>审核方法</h3><ol class='methods'>{methods_html}</ol></section>
+<section class='section'><h2>六、导入评估结论</h2><div class='import'>{html.escape(report_import_conclusion(result))}<br><span style='font-weight:400'>源 Excel 始终只读；本次未连接真实 DM8/LOCATIONS 做导入验证。</span></div>{comparison_html}</section>
+<section class='section'><h2>七、详细问题清单</h2><table><thead><tr><th>等级</th><th>规则</th><th>行号</th><th>KKS</th><th>问题</th><th>整改建议</th></tr></thead><tbody>{rows_html}</tbody></table></section>
+<section class='section'><details class='technical'><summary>查看 AI 语义复核依据（技术人员）</summary><p class='meta'>{ai_meta} AI 仅对规则筛出的不确定项提供辅助判断，正式结论仍保留规则证据和人工确认入口。</p><table><thead><tr><th>等级</th><th>行号</th><th>KKS</th><th>AI 依据</th></tr></thead><tbody>{ai_rows}</tbody></table></details><details class='technical'><summary>查看结构扫描备注</summary><ul>{notes_html}</ul></details></section>
+<p class='footer'>本报告定位为 KKS 编码质量审核验收报告。源 Excel 未修改；AI 复核过程和详细证据已保留在折叠区域及问题 Excel 的“AI复核（技术）”隐藏页。</p></main></body></html>"""
     path.write_text(body, encoding="utf-8")
 
 
@@ -1370,7 +1618,16 @@ def main() -> int:
     parser.add_argument("--sheet", default=None)
     parser.add_argument("--compare-file", type=Path, default=None, help="可选：用于专业覆盖、编码深度和数量闭合对比的另一份 Excel")
     args = parser.parse_args()
-    result = audit_file(args.input, args.output_dir, args.sheet, args.compare_file)
+    # Use the same workflow-first Agent entry point as the web service.  The
+    # deterministic audit function remains the bounded workbook tool.
+    from agent_runtime import KksAuditAgent
+
+    result = KksAuditAgent().run(
+        args.input,
+        args.output_dir,
+        requested_sheet=args.sheet,
+        comparison_path=args.compare_file,
+    )
     print(json.dumps({"conclusion": result["conclusion"], "issue_count": result.get("issue_count", 0), "resolved_count": result.get("resolved_count", 0), "output_dir": str(args.output_dir)}, ensure_ascii=False))
     return 0
 

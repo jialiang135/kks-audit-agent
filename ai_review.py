@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -28,6 +29,8 @@ DEFAULT_TIMEOUT_SECONDS = 90
 LOGGER = logging.getLogger("kks-audit.ai")
 ProgressCallback = Callable[[dict[str, Any]], None]
 INTERNAL_GROUP_SIZE = 12
+REQUEST_ATTEMPTS = 2
+RETRY_BACKOFF_SECONDS = 2
 MAX_CONTEXT_ROWS = 12
 MAX_ADJACENT_ROWS = 5
 RULE_CONTEXT_HINTS = {
@@ -158,17 +161,30 @@ class OpenAICompatibleClient:
                 "User-Agent": "kks-audit-agent/0.2",
             },
         )
-        try:
-            with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
-                raw = response.read().decode("utf-8", errors="replace")
-            LOGGER.info("model_request path=%s status=200 bytes=%s", path, len(raw))
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:500]
-            raise AIReviewError(f"模型接口 HTTP {exc.code}：{detail}") from exc
-        except urllib.error.URLError as exc:
-            raise AIReviewError(f"模型接口连接失败：{exc.reason}") from exc
-        except TimeoutError as exc:
-            raise AIReviewError("模型接口请求超时") from exc
+        last_error: AIReviewError | None = None
+        for attempt in range(1, REQUEST_ATTEMPTS + 1):
+            try:
+                with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
+                    raw = response.read().decode("utf-8", errors="replace")
+                LOGGER.info("model_request path=%s status=200 bytes=%s attempt=%s", path, len(raw), attempt)
+                break
+            except urllib.error.HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")[:500]
+                last_error = AIReviewError(f"模型接口 HTTP {exc.code}：{detail}")
+                if exc.code not in {408, 425, 429, 500, 502, 503, 504} or attempt >= REQUEST_ATTEMPTS:
+                    raise last_error from exc
+            except urllib.error.URLError as exc:
+                last_error = AIReviewError(f"模型接口连接失败：{exc.reason}")
+                if attempt >= REQUEST_ATTEMPTS:
+                    raise last_error from exc
+            except TimeoutError as exc:
+                last_error = AIReviewError("模型接口请求超时")
+                if attempt >= REQUEST_ATTEMPTS:
+                    raise last_error from exc
+            LOGGER.warning("model_request_retry path=%s attempt=%s error=%s", path, attempt, last_error)
+            time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+        else:
+            raise last_error or AIReviewError("模型接口请求失败")
         try:
             decoded = json.loads(raw)
         except json.JSONDecodeError as exc:

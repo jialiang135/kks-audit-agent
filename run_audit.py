@@ -1612,6 +1612,7 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
 
 
 def main() -> int:
+    configure_logging(clear=True)
     parser = argparse.ArgumentParser(description="审核 KKS Excel 并生成 HTML 报告和 Excel 问题清单")
     parser.add_argument("input", type=Path)
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/kks-audit"))

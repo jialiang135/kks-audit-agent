@@ -285,11 +285,42 @@ def environment_value(name: str, config_value: Any = "") -> str:
     return local.get(name, "")
 
 
-def configure_logging() -> logging.Logger:
+def _reset_log_files() -> None:
+    """Start a fresh visible log for each top-level application run."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    file_handlers = [
+        handler
+        for handler in logging.getLogger("kks-audit").handlers
+        if isinstance(handler, logging.FileHandler)
+    ]
+    if file_handlers:
+        for handler in file_handlers:
+            handler.acquire()
+            try:
+                handler.flush()
+                if handler.stream is not None:
+                    handler.stream.seek(0)
+                    handler.stream.truncate(0)
+                    handler.stream.flush()
+            finally:
+                handler.release()
+    else:
+        LOG_PATH.write_text("", encoding="utf-8")
+    for rotated_path in LOG_DIR.glob(f"{LOG_PATH.name}.*"):
+        if rotated_path.is_file():
+            try:
+                rotated_path.unlink()
+            except OSError:
+                pass
+
+
+def configure_logging(*, clear: bool = False) -> logging.Logger:
     logger = logging.getLogger("kks-audit")
     logger.setLevel(logging.INFO)
     logger.propagate = False
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    if clear:
+        _reset_log_files()
     if not any(isinstance(handler, logging.handlers.RotatingFileHandler) for handler in logger.handlers):
         file_handler = logging.handlers.RotatingFileHandler(
             LOG_PATH, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"

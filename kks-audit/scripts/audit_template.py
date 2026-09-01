@@ -84,7 +84,7 @@ def probe(cols, rows):
         c = str(c).strip()
         codes.append(c)
         lens[len(c)] += 1
-        if re.search(r'[^A-Z0-9\-/~]', c):
+        if re.search(r'[^A-Z0-9\-]', c):
             illegal += 1
         par = r[p] if p is not None else None
         if par:
@@ -105,8 +105,6 @@ def classify_long(code):
         return '部件级附加码(-XXnn)'
     if re.search(r'[A-Z]{2}\d{3}[ABC]$', code):
         return '末位A/B/C(分相/变体)'
-    if '~' in code:
-        return '区间设备组'
     return '其它超长'
 
 def old_base(o):
@@ -154,7 +152,7 @@ def diag_prefix(cols, rows, orphans):
     for par, kids in list(samples.items())[:8]:
         print(f"  父缺 {par}: 子样本 {kids[:3]} ...")
         if re.match(r'^(50|60|L0)', par):
-            print(f"    -> 旧格式未迁移(应 05/06/61 前缀)")
+            print(f"    -> 旧版前缀(国标下 G=5/6/L 合法，仅提示核对，非迁移错误)")
 
 # ============ 5. 用户新增 3 条校验 ============
 # ---- #24 命名模糊/歧义 ----
@@ -440,25 +438,29 @@ def expected_missing(cols, rows):
 # 设备术语词典（starter，ADAPT HERE 按厂扩充；用于 #27 语义可解性 P2）
 EQUIP_TERMS = set('泵 阀 机 风机 电机 电动机 马达 压缩机 换热器 加热器 凝汽器 除氧器 锅炉 汽轮机 发电机 变压器 开关柜 配电柜 皮带机 刮板机 碎煤机 给煤机 磨煤机 空预器 除尘器 脱硫塔 吸收塔 烟囱 管道 容器 罐 箱 执行机构 传感器 变送器 液位计 温度计 压力表 流量计 MCC PC'.split())
 
-# 机组一致性（ADAPT HERE：10版 50/60 需覆写 UNIT_OVERRIDE）
-# 通用默认：20版编码机组位前缀数字 == 名称所写机组号（05↔5号, 06↔6号, 07↔7号）
-COMMON_CODES = {'61', '00', 'L0'}   # 两炉公用 / 全厂公用 / 10版公用根
-UNIT_OVERRIDE = {}                  # ADAPT: 10版例 {'50':5,'60':6}
-MAX_UNIT = 12                       # 机组号上限护栏：超过即判定为"非机组前缀"（10版旧码/公用段）
+# 机组一致性（GB/T 50549-2010 表 3.3.2 全厂码 G：1-9 → 1~9 号机；A-G → 10~16 号机）
+# 通用默认：20版编码机组位前缀数字 == 名称所写机组号（1↔1号, 2↔2号, A↔10号）
+COMMON_CODES = {'J','K','L','M','N','P','Q','R','S','T','U','V','Y'}   # 期别公用 J-R / 多期公用 S-V / 全厂公用 Y
+FREE_CODES = {'H','W','X','Z'}                                          # 自由使用（火电厂导则 5.1 表2 注3）
+UNIT_OVERRIDE = {}                  # ADAPT: 个别厂 G 取值与名称不一致时显式覆写，例 {'E':14}
+MAX_UNIT = 16                       # 机组号上限护栏（A-G 对应 10-16）
 CN_NUM = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10}
+UNIT_LETTER_MAP = {'A':10,'B':11,'C':12,'D':13,'E':14,'F':15,'G':16}
 
-def _code_unit(prefix):
-    """把编码前2位翻译成机组号；无法可靠翻译时返回 None（跳过，不误报）。
+def _code_unit(g_char):
+    """把全厂码 G（1 位）翻译成机组号；无法可靠翻译时返回 None（跳过，不误报）。
     ★护栏：滁州实证——10版残留前缀 '60' 被当成"60号机"，凭空产生 7 条误报。
-      凡 int(prefix) > MAX_UNIT 一律视为非机组前缀，需要判定就显式写进 UNIT_OVERRIDE。"""
-    if prefix in COMMON_CODES:
-        return None                      # 公用，跳过
-    if prefix in UNIT_OVERRIDE:
-        return UNIT_OVERRIDE[prefix]
-    if prefix.isdigit():
-        v = int(prefix)
-        return v if 1 <= v <= MAX_UNIT else None   # 05->5, 06->6；60/50 需走 UNIT_OVERRIDE
-    return None                         # 非标准前缀跳过
+      国标体系下 G 只取 1 位（1-9/A-G），J-R/S-V/Y 为公用，H/W/X/Z 自由使用。"""
+    if not g_char:
+        return None
+    if g_char in COMMON_CODES or g_char in FREE_CODES:
+        return None                      # 公用/自由，跳过
+    if g_char in UNIT_OVERRIDE:
+        return UNIT_OVERRIDE[g_char]
+    if g_char.isdigit():
+        v = int(g_char)
+        return v if 1 <= v <= 9 else None
+    return UNIT_LETTER_MAP.get(g_char.upper())
 
 def name_text_hygiene(cols, rows):
     """#27 名称文本卫生 + 语义可解性。返回 (symbol_issues[P1], semantic_voids[P2])。
@@ -491,16 +493,16 @@ def name_text_hygiene(cols, rows):
     return symbol_issues, semantic_voids
 
 def unit_consistency(cols, rows):
-    """#28 机组三方一致（原B升级）：机组列 ↔ 名称机组指代 ↔ 编码机组位。"""
+    """#28 机组三方一致（原B升级）：机组列 ↔ 名称机组指代 ↔ 全厂码 G（GB/T 表 3.3.2）。"""
     k = cols['kks']; n = cols['name']; u = cols['unit']
     issues = []
-    name_unit_pat = re.compile(r'([一二三四五六七八九十\d])\s*号\s*(机|炉|机组)')
+    name_unit_pat = re.compile(r'(\d{1,2}|[一二三四五六七八九十])\s*号\s*(机|炉|机组)')
     for i, r in enumerate(rows):
         c = r[k] if k is not None else None
         if not c:
             continue
         c = str(c).strip()
-        code_prefix = c[:2]
+        code_g = c[0]
         nm = r[n] if n is not None else None
         nu = None
         if nm:
@@ -511,26 +513,26 @@ def unit_consistency(cols, rows):
         uc = r[u] if u is not None else None
         uc_num = None
         if uc:
-            um = re.search(r'[一二三四五六七八九十\d]', str(uc))
+            um = re.search(r'\d{1,2}|[一二三四五六七八九十]', str(uc))
             if um:
                 key = um.group(0)
                 uc_num = CN_NUM.get(key, int(key)) if not key.isdigit() else int(key)
-        if (uc and ('公用' in str(uc) or '公共' in str(uc))) or code_prefix in COMMON_CODES:
-            continue                                        # 公用白名单，勿误报
-        expect = _code_unit(code_prefix)
+        if (uc and ('公用' in str(uc) or '公共' in str(uc))) or code_g in COMMON_CODES or code_g in FREE_CODES:
+            continue                                        # 公用/自由白名单，勿误报
+        expect = _code_unit(code_g)
         if expect is None:
             continue                                        # 根/非标准前缀跳过
         if nu is not None and nu != expect:
-            issues.append((i, c, f'名称指{nu}号但编码前缀{code_prefix}(应{expect}号)'))
+            issues.append((i, c, f'名称指{nu}号但编码全厂码G={code_g}(应{expect}号)'))
         if uc_num is not None and uc_num != expect:
-            issues.append((i, c, f'机组列指{uc_num}号但编码前缀{code_prefix}(应{expect}号)'))
+            issues.append((i, c, f'机组列指{uc_num}号但编码全厂码G={code_g}(应{expect}号)'))
     return issues
 
-# ---- 分段字符类型（KKS 12 位骨架）----
-# 位1-2 机组(数字/L0等) | 位3-5 系统字母 | 位6-7 系统号(数字) | 位8-9 设备字母 | 位10-12 设备号(数字)
-SEG_12 = [(1, 2, 'DIGITISH', '机组位'), (3, 5, 'ALPHA', '系统字母'),
-          (6, 7, 'DIGIT', '系统编号'), (8, 9, 'ALPHA', '设备字母'),
-          (10, 12, 'DIGIT', '设备顺序号')]
+# ---- 分段字符类型（KKS 12 位骨架，GB/T 50549-2010 附录 A 图 A.0.1）----
+# 位1 全厂码G(字母/数字) | 位2 系统前缀号F0(数字) | 位3-5 系统分类码F1F2F3 | 位6-7 系统编号FN | 位8-9 设备分类码A1A2 | 位10-12 设备编号AN
+SEG_12 = [(1, 1, 'ALNUM', '全厂码G'), (2, 2, 'DIGIT', '系统前缀号F0'),
+          (3, 5, 'ALPHA', '系统分类码F1F2F3'), (6, 7, 'DIGIT', '系统编号FN'),
+          (8, 9, 'ALPHA', '设备分类码A1A2'), (10, 12, 'DIGIT', '设备编号AN')]
 
 def segment_type_check(cols, rows):
     """★P0 位置感知字符类型校验（补"非法字符"盲区）：
@@ -557,6 +559,8 @@ def segment_type_check(cols, rows):
                             body[:a-1] + sug + body[b:] if sug != seg else ''))
             elif want == 'ALPHA' and not seg.isalpha():
                 res.append((i, c, f'{label}(第{a}-{b}位)="{seg}" 含非字母', ''))
+            elif want == 'ALNUM' and not seg.isalnum():
+                res.append((i, c, f'{label}(第{a}-{b}位)="{seg}" 含非字母数字', ''))
     return res
 
 def ocr_confusable(cols, rows):

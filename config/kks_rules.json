@@ -1,16 +1,30 @@
 {
   "standard_device_length": 12,
-  "accepted_base_lengths": [2, 3, 4, 5, 7, 12],
-  "accepted_code_lengths": [2, 3, 4, 5, 7, 12, 13],
+  "accepted_base_lengths": [1, 2, 3, 4, 5, 6, 7, 11, 12, 13],
+  "accepted_code_lengths": [1, 2, 3, 4, 5, 6, 7, 11, 12, 13, 16, 17],
   "root_parent_values": ["", "-1"],
-  "allowed_code_characters": "A-Z0-9-/~",
+  "allowed_code_characters": "A-Z0-9-",
+  "unit_code_table": {
+    "note": "GB/T 50549-2010 表 3.3.2 全厂码 G 取值（工艺相关标识 0 级码，1 位）",
+    "units_1to9": ["1", "2", "3", "4", "5", "6", "7", "8", "9"],
+    "units_10to16": ["A", "B", "C", "D", "E", "F", "G"],
+    "phase_common": ["J", "K", "L", "M", "N", "P", "Q", "R"],
+    "multi_phase_common": ["S", "T", "U", "V"],
+    "plant_common": ["Y"],
+    "free_use": ["H", "W", "X", "Z"],
+    "unit_mapping": {
+      "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
+      "A": 10, "B": 11, "C": 12, "D": 13, "E": 14, "F": 15, "G": 16
+    }
+  },
   "old_prefix_migrations": {
+    "note": "10 版旧前缀历史参考（国标体系下 G=5/6/L/J 本身合法，迁移为项目约定，不再作为 P1 阻断）",
     "50": "05",
     "60": "06",
     "L0": "61",
     "J0": "61"
   },
-  "common_unit_prefixes": ["00", "61", "L0"],
+  "common_unit_prefixes": ["J", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "U", "V", "Y"],
   "valid_letter_pairs": {},
   "letter_reallocations": {
     "system": {},

@@ -43,7 +43,7 @@ class ReportPresentationTests(unittest.TestCase):
             "_ai_context": {"records": [{"kks_code": "01AAA10QM001"}, {"kks_code": "01AAA10QM001A"}]},
         }
 
-    def test_business_metrics_use_quality_groups(self):
+    def test_business_metrics_use_real_priority_counts(self):
         result = self.make_result()
         self.assertEqual(
             run_audit.quality_metrics(result),
@@ -57,6 +57,8 @@ class ReportPresentationTests(unittest.TestCase):
                 "p2": 1,
                 "rule_p1": 1,
                 "rule_p2": 1,
+                "focused_p1": 1,
+                "focused_p2": 1,
             },
         )
 

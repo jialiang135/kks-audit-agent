@@ -30,10 +30,16 @@ VERSION = "0.4.0"
 LOGGER = logging.getLogger("kks-audit")
 ProgressCallback = Callable[[dict[str, Any]], None]
 ROOT_PARENTS = {"", "-1"}
+# 10 版旧前缀历史参考（国标体系下 G=5/6/L/J 本身合法，迁移为项目约定，不再作为 P1 阻断）
 OLD_PREFIX = {"50": "05", "60": "06", "L0": "61", "J0": "61"}
-COMMON_UNITS = {"00", "61", "L0"}
-ALLOWED_CODE = re.compile(r"^[A-Z0-9\-/~]+$")
-NAME_UNIT = re.compile(r"([一二三四五六七八九十\d])\s*号\s*(机|炉|机组)")
+# GB/T 50549-2010 表 3.3.2 全厂码 G：公用取值（期别公用 J-R / 多期公用 S-V / 全厂公用 Y）
+COMMON_UNITS = {"J", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "U", "V", "Y"}
+# GB/T 50549-2010 表 3.3.2：自由使用字母（火电厂导则 Q/WL 5.1 表 2 注 3）
+FREE_UNIT_LETTERS = {"H", "W", "X", "Z"}
+# GB/T 50549-2010 表 3.3.2：机组映射（1-9 → 1~9 号；A-G → 10~16 号）
+UNIT_LETTER_MAP = {"A": 10, "B": 11, "C": 12, "D": 13, "E": 14, "F": 15, "G": 16}
+ALLOWED_CODE = re.compile(r"^[A-Z0-9-]+$")
+NAME_UNIT = re.compile(r"(\d{1,2}|[一二三四五六七八九十])\s*号\s*(机|炉|机组)")
 CN_NUM = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
 
 
@@ -82,27 +88,28 @@ def _report_issues(result: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def quality_metrics(result: dict[str, Any]) -> dict[str, int]:
-    """Return business-facing quality metrics used by the report and UI."""
+    """Return business-facing quality metrics used by the report and UI.
+
+    P0/P1/P2 均为真实规则级计数（与详细问题清单自洽）。
+    另保留两个业务治理重点的聚焦计数（扩展码治理 KKS-17/22、历史迁移 KKS-18）
+    供报告明细作为治理提示，不作为首页大数字口径。
+    """
     records = result.get("_ai_context", {}).get("records", [])
     codes = [text(item.get("kks_code")) for item in records if isinstance(item, dict)]
     metrics = result.get("metrics", {})
     priority_counts = Counter(item.get("priority", "P2") for item in _report_issues(result))
-    # The landing-page P1/P2 figures are the two business-critical governance
-    # groups requested for delivery: extension-code governance and historical
-    # migration. The complete rule-level distribution remains in the detail
-    # list and the technical coverage sheet.
-    focused_p1 = _rule_issue_count(result, {"KKS-17", "KKS-22"})
-    focused_p2 = _rule_issue_count(result, {"KKS-18"})
     return {
         "effective_kks": int(result.get("data_rows", len(codes)) or 0),
         "device_level_codes": sum(1 for code in codes if len(code) == 12),
         "duplicate_codes": int(metrics.get("duplicate_code_groups", 0) or 0),
         "parent_errors": int(metrics.get("orphan_rows", 0) or 0) + int(metrics.get("prefix_mismatch_rows", 0) or 0),
         "p0": int(priority_counts.get("P0", 0)),
-        "p1": int(focused_p1),
-        "p2": int(focused_p2),
+        "p1": int(priority_counts.get("P1", 0)),
+        "p2": int(priority_counts.get("P2", 0)),
         "rule_p1": int(priority_counts.get("P1", 0)),
         "rule_p2": int(priority_counts.get("P2", 0)),
+        "focused_p1": _rule_issue_count(result, {"KKS-17", "KKS-22"}),
+        "focused_p2": _rule_issue_count(result, {"KKS-18"}),
     }
 
 
@@ -317,13 +324,32 @@ def add_issue(issues: list[dict[str, Any]], *, priority: str, rule_id: str, cate
     })
 
 
-def code_unit(prefix: str, common_units: set[str] | None = None) -> int | None:
-    if prefix in (common_units or COMMON_UNITS):
+def code_unit(g_char: str, common_units: set[str] | None = None) -> int | None:
+    """GB/T 50549-2010 表 3.3.2 全厂码 G（1 位）→ 机组号。
+
+    - 1~9 → 1~9 号机组；A~G → 10~16 号机组
+    - J~R/S~V/Y（公用）与 H/W/X/Z（自由使用）→ None（跳过，不误报）
+    - 其他取值（0、I/O、数字外字符）→ None（由 G 取值合规检查另行报错）
+    """
+    if not g_char:
         return None
-    if prefix.isdigit():
-        value = int(prefix)
-        return value if 1 <= value <= 12 else None
-    return None
+    if g_char in (common_units or COMMON_UNITS):
+        return None
+    if g_char in FREE_UNIT_LETTERS:
+        return None
+    if g_char.isdigit():
+        value = int(g_char)
+        return value if 1 <= value <= 9 else None
+    return UNIT_LETTER_MAP.get(g_char.upper())
+
+
+def valid_g_char(g_char: str) -> bool:
+    """GB/T 50549-2010 表 3.3.2 全厂码 G 合法取值：1-9 / A-G / J-R / S-V / Y / 自由字母 H/W/X/Z。"""
+    if not g_char:
+        return False
+    if g_char.isdigit():
+        return 1 <= int(g_char) <= 9
+    return g_char.upper() in (set(UNIT_LETTER_MAP) | COMMON_UNITS | FREE_UNIT_LETTERS)
 
 
 def classify_extension(code: str) -> str:
@@ -335,8 +361,6 @@ def classify_extension(code: str) -> str:
         return "A/B 位置扩展"
     if len(code) == 13 and code[-1] in "C":
         return "末位 A/B/C 扩展"
-    if "~" in code:
-        return "区间设备组"
     return "其他超长码"
 
 
@@ -645,17 +669,18 @@ def _apply_template_skill_rules(
     return diagnostics
 
 
+# GB/T 50549-2010 附录 E 设备索引（A 码）——10 版 VGB 旧字母（QM/MA/BT/FT/LS 等）不再用于名实一致性判定
 DEVICE_LETTER_SEMANTICS = {
-    "泵": {"BG", "AP", "CP"},
-    "阀": {"QM", "AA"},
-    "门": {"QM", "AA"},
-    "执行机构": {"MA", "CA"},
-    "测温": {"BT"},
-    "温度": {"BT"},
-    "流量": {"BW", "FT"},
-    "液位": {"LS"},
-    "给煤机": {"GL"},
-    "压缩机": {"CM"},
+    "泵": {"AP", "BN"},
+    "阀": {"AA"},
+    "门": {"AA", "AB"},
+    "执行机构": {"AS"},
+    "测温": {"CT"},
+    "温度": {"CT"},
+    "流量": {"CF"},
+    "液位": {"CL"},
+    "风机": {"AN"},
+    "压缩机": {"AN"},
 }
 KNOWN_DEVICE_LETTERS = set().union(*DEVICE_LETTER_SEMANTICS.values())
 NAME_CONTEXT_TERMS = ("管道", "系统", "水室", "用汽", "冷却水", "油处理")
@@ -777,8 +802,8 @@ def _apply_additional_skill_rules(
             continue
         if old[:2] in old_prefix_migrations and new[:2] != old_prefix_migrations[old[:2]]:
             _append_skill_issue(
-                issues, seen, records_by_index, rule_id="KKS-16", priority="P1", category="旧格式码未正确迁移", index=index,
-                message=f"原码/新码前缀迁移疑点：{old[:2]} → {new[:2]}。", suggestion="核对 10 版→20 版迁移表，不直接覆盖历史码。",
+                issues, seen, records_by_index, rule_id="KKS-16", priority="P2", category="旧版前缀历史提示", index=index,
+                message=f"原码/新码前缀命中 10 版旧前缀表：{old[:2]} → {new[:2]}。", suggestion="国标体系不定义版本迁移；如属项目约定请核对迁移表，历史原码保留。", status="needs_review",
             )
         if old[2:5] in system_map and system_map[old[2:5]] != new[2:5]:
             _append_skill_issue(
@@ -907,7 +932,7 @@ def audit_tree_collection(
     child_groups: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
     relation_counts: Counter[str] = Counter()
     missing_child = 0
-    accepted_lengths = {2, 3, 4, 5, 7, 12, 13}
+    accepted_lengths = {1, 3, 4, 5, 6, 7, 11, 12, 13, 16, 17}
 
     def normalized(code: str) -> str:
         return code.replace("O", "0").replace("o", "0").replace("I", "1").replace("i", "1")
@@ -934,10 +959,16 @@ def audit_tree_collection(
         if len(child_code) not in accepted_lengths:
             add_issue(issues, priority="P0", rule_id="KKS-05", category="编码长度异常", rec=rec, message=f"子设备编码长度为 {len(child_code)}，不在已识别范围内。", suggestion="核对变长层级或扩展建模。")
         if len(child_code) >= 12:
-            for start, end, label in ((0, 2, "机组位"), (2, 5, "系统字母"), (5, 7, "系统编号"), (7, 9, "设备字母"), (9, 12, "设备顺序号")):
+            for start, end, label, want in ((0, 1, "全厂码G", "ALNUM"), (1, 2, "系统前缀号F0", "DIGIT"), (2, 5, "系统分类码F1F2F3", "ALPHA"),
+                                            (5, 7, "系统编号FN", "DIGIT"), (7, 9, "设备分类码A1A2", "ALPHA"), (9, 12, "设备编号AN", "DIGIT")):
                 part = child_code[start:end]
-                should_digit = label in {"机组位", "系统编号", "设备顺序号"}
-                if (part.isdigit() if should_digit else part.isalpha()) is False:
+                if want == "ALNUM":
+                    ok = part.isalnum()
+                elif want == "DIGIT":
+                    ok = part.isdigit()
+                else:
+                    ok = part.isalpha()
+                if not ok:
                     add_issue(issues, priority="P0", rule_id="KKS-04b", category="分段字符类型错误", rec=rec, message=f"{label}片段 {part!r} 含错误字符。", suggestion="按同层兄弟码和图纸人工确认修正值。")
                     break
             if any(char in child_code for char in "IiOo"):
@@ -1122,16 +1153,22 @@ def audit_file(
                       message=f"父级长度 {len(parent)} 不小于子码长度 {len(code)}。", suggestion="核对层级关系。")
 
         if len(code) >= 12:
-            segments = ((0, 2, "机组位"), (2, 5, "系统字母"), (5, 7, "系统编号"), (7, 9, "设备字母"), (9, 12, "设备顺序号"))
+            # GB/T 50549-2010 附录 A 图 A.0.1：全厂码G(1) + 系统前缀号F0(1) + 系统分类码F1F2F3(3) + 系统编号FN(2) + 设备分类码A1A2(2) + 设备编号AN(3)
+            segments = ((0, 1, "全厂码G", "ALNUM"), (1, 2, "系统前缀号F0", "DIGIT"), (2, 5, "系统分类码F1F2F3", "ALPHA"),
+                        (5, 7, "系统编号FN", "DIGIT"), (7, 9, "设备分类码A1A2", "ALPHA"), (9, 12, "设备编号AN", "DIGIT"))
             seg_has_issue = False
-            for start, end, label in segments:
+            for start, end, label, want in segments:
                 part = code[start:end]
-                should_digit = label in {"机组位", "系统编号", "设备顺序号"}
-                ok = part.isdigit() if should_digit else part.isalpha()
+                if want == "ALNUM":
+                    ok = part.isalnum()
+                elif want == "DIGIT":
+                    ok = part.isdigit()
+                else:
+                    ok = part.isalpha()
                 if not ok:
                     seg_has_issue = True
                     suggestion = code
-                    if label == "设备顺序号":
+                    if label == "设备编号AN":
                         suggestion = code[:start] + part.replace("O", "0").replace("o", "0").replace("I", "1").replace("i", "1").replace("l", "1") + code[end:]
                     add_issue(issues, priority="P0", rule_id="KKS-04b", category="分段字符类型错误", rec=rec,
                               message=f"{label}片段 {part!r} 含错误字符。", suggestion=f"建议候选：{suggestion}；必须结合兄弟码/图纸人工确认。")
@@ -1171,7 +1208,7 @@ def audit_file(
             add_issue(issues, priority="P2", rule_id="KKS-27", category="名称语义需人核", rec=rec,
                       message="名称过短或无法提取中文/字母语义。", suggestion="人工核对名称，不按此项自动判错。", status="needs_review")
 
-        expected = code_unit(code[:2], common_units)
+        expected = code_unit(code[0], common_units)
         if expected is not None:
             for field, label in (("name", "名称"), ("unit", "机组列")):
                 m = NAME_UNIT.search(rec[field]) if rec[field] else None
@@ -1188,18 +1225,24 @@ def audit_file(
                                   message=f"{label}指向 {found} 号，但编码前缀指向 {expected} 号。", suggestion="核对编码、机组列与名称三方，不自动改码。")
 
         old, new = rec["old_code"], rec["kks_code"]
+        # 全厂码 G 取值合规（GB/T 50549-2010 表 3.3.2）：G 必须在 1-9 / A-G / J-R / S-V / Y / 自由字母内
+        g_char = code[0] if code else ""
+        if g_char and not valid_g_char(g_char):
+            add_issue(issues, priority="P0", rule_id="KKS-06", category="全厂码 G 取值非法", rec=rec,
+                      message=f"全厂码 G={g_char!r} 不在 GB/T 50549-2010 表 3.3.2 取值范围内（1-9/A-G/J-R/S-V/Y，自由字母 H/W/X/Z）。", suggestion="核对是否为旧版前缀（50/60/L0/J0 在国标体系下 G=5/6/L/J 合法）或录入错误。")
+        # 10 版旧前缀迁移：国标体系下 G=5/6/L/J 本身合法，迁移 50→05 等属项目约定，仅作 P2 历史提示
         if old and new and old[:2] != new[:2]:
             expected_prefix = old_prefix_migrations.get(old[:2])
             if expected_prefix and new[:2] != expected_prefix:
-                add_issue(issues, priority="P1", rule_id="KKS-13/16", category="旧码迁移疑点", rec=rec,
-                          message=f"原码前缀 {old[:2]} 按规则应迁移为 {expected_prefix}，当前新码为 {new[:2]}。", suggestion="核对 10 版→20 版迁移表和设备语义。")
+                add_issue(issues, priority="P2", rule_id="KKS-13/16", category="旧码迁移历史提示", rec=rec,
+                          message=f"原码前缀 {old[:2]} 若按项目 10 版→20 版约定应迁移为 {expected_prefix}，当前新码为 {new[:2]}。", suggestion="国标体系不定义版本迁移；如属项目约定请核对迁移表，历史原码保留。", status="needs_review")
             else:
                 add_issue(issues, priority="P2", rule_id="KKS-18", category="历史原码与新码前缀变化", rec=rec,
                           message=f"原 KKS 前缀 {old[:2]} 与新 KKS 前缀 {new[:2]} 不同。", suggestion="确认历史映射；若新码、父级、机组三方一致，可作为历史提示保留。", status="needs_review")
 
         if code[:2] in old_prefix_migrations:
-            add_issue(issues, priority="P1", rule_id="KKS-16", category="新码仍保留旧格式前缀", rec=rec,
-                      message=f"当前 KKS 编码仍使用旧格式前缀 {code[:2]}。", suggestion="核对 10 版→20 版迁移结果；历史原码可以保留，但新码不应直接沿用。")
+            add_issue(issues, priority="P2", rule_id="KKS-16", category="旧版前缀历史提示", rec=rec,
+                      message=f"当前 KKS 编码前两位 {code[:2]} 命中 10 版旧前缀表（{code[:2]}）。", suggestion="国标体系下 G=5/6/L/J 本身合法（分别为 5/6 号机与期别公用），仅提示核对；历史原码可保留。", status="needs_review")
 
     unique_records_by_code = {code: group[0] for code, group in by_code.items() if len(group) == 1}
     skill_template_diagnostics = _apply_template_skill_rules(
@@ -1394,7 +1437,7 @@ def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
     header_style(summary, "A8:H8")
     summary.append(["指标", "结果", "指标", "结果", "指标", "结果", "指标", "结果"])
     header_style(summary, f"A{summary.max_row}:H{summary.max_row}")
-    metric_pairs = [("有效 KKS 数量", metrics["effective_kks"]), ("设备级编码", metrics["device_level_codes"]), ("重复编码", metrics["duplicate_codes"]), ("父级错误", metrics["parent_errors"]), ("高风险问题（P0）", metrics["p0"]), ("待治理问题（P1）", metrics["p1"]), ("历史迁移问题（P2）", metrics["p2"])]
+    metric_pairs = [("有效 KKS 数量", metrics["effective_kks"]), ("设备级编码", metrics["device_level_codes"]), ("重复编码", metrics["duplicate_codes"]), ("父级错误", metrics["parent_errors"]), ("高风险问题（P0）", metrics["p0"]), ("待整改问题（P1）", metrics["p1"]), ("提示问题（P2）", metrics["p2"])]
     for index in range(0, len(metric_pairs), 4):
         row = []
         for label, value in metric_pairs[index:index + 4]:
@@ -1563,7 +1606,7 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
     )
     priority_rows = "".join(
         f"<div class='priority-card p{level[-1]}'><strong>{level} · {meaning}</strong><b>{metrics[level.lower()]}</b><span>{requirement}</span></div>"
-        for level, meaning, requirement in (("P0", "阻断问题", "必须修改并复核后才能导入"), ("P1", "结构治理问题", "完成治理或人工确认后再导入"), ("P2", "历史迁移问题", "保留原码证据，按迁移策略处理"))
+        for level, meaning, requirement in (("P0", "阻断问题", "必须修改并复核后才能导入"), ("P1", "需整改问题", "完成治理或人工确认后再导入"), ("P2", "提示问题", "需人工确认或按治理策略处理"))
     )
     methods_html = "".join(f"<li>{html.escape(method)}</li>" for method in REPORT_METHODS)
     notes_html = "".join(f"<li>{html.escape(str(note))}</li>" for note in result.get("structural_notes", []))

@@ -30,13 +30,13 @@ VERSION = "0.4.0"
 LOGGER = logging.getLogger("kks-audit")
 ProgressCallback = Callable[[dict[str, Any]], None]
 ROOT_PARENTS = {"", "-1"}
-# 10 版旧前缀历史参考（国标体系下 G=5/6/L/J 本身合法，迁移为项目约定，不再作为 P1 阻断）
+# 10 版旧前缀历史参考（G=5/6/L/J 本身合法，迁移为项目约定，不再作为 P1 阻断）
 OLD_PREFIX = {"50": "05", "60": "06", "L0": "61", "J0": "61"}
-# GB/T 50549-2010 表 3.3.2 全厂码 G：公用取值（期别公用 J-R / 多期公用 S-V / 全厂公用 Y）
+# 全厂码 G：公用取值（期别公用 J-R / 多期公用 S-V / 全厂公用 Y）
 COMMON_UNITS = {"J", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "U", "V", "Y"}
-# GB/T 50549-2010 表 3.3.2：自由使用字母（火电厂导则 Q/WL 5.1 表 2 注 3）
+# 全厂码 G：自由使用字母
 FREE_UNIT_LETTERS = {"H", "W", "X", "Z"}
-# GB/T 50549-2010 表 3.3.2：机组映射（1-9 → 1~9 号；A-G → 10~16 号）
+# 全厂码 G：机组映射（1-9 → 1~9 号；A-G → 10~16 号）
 UNIT_LETTER_MAP = {"A": 10, "B": 11, "C": 12, "D": 13, "E": 14, "F": 15, "G": 16}
 ALLOWED_CODE = re.compile(r"^[A-Z0-9-]+$")
 NAME_UNIT = re.compile(r"(\d{1,2}|[一二三四五六七八九十])\s*号\s*(机|炉|机组)")
@@ -196,6 +196,51 @@ def _load_executable_skill_rules():
 SKILL_RULES = _load_executable_skill_rules()
 SKILL_RULE_SOURCE = "kks-audit/SKILL.md"
 
+# 规则问题定义表：每条审核规则的一句话定义（判定语义）。
+# 由 references/KKS编码审核标准检查清单.md 的"校验原理"提炼，
+# 作为 HTML 报告 / Excel 问题清单 / Web 预览"问题定义"列的统一数据源。
+RULE_DEFINITIONS: dict[str, str] = {
+    "KKS-00": "数据行缺少 KKS 编码：非空记录应含设备 KKS 码，缺失则无法入库定位。",
+    "KKS-01": "多 Sheet 定位主表：应区分主表与导出/草稿表，防止重复或漏审。",
+    "KKS-02": "表头与数据起始行定位：表头不总在第 1 行，错读将导致整列错位。",
+    "KKS-03": "关键列动态定位：按表头名匹配 KKS/父级/名称/类型列，不依赖固定列序。",
+    "KKS-04": "字符合法性：仅允许大写字母 A-Z、数字 0-9 与分隔符 -；小写、中文、全角及 ~、/ 等未定义字符判非法。",
+    "KKS-04b": "分段字符类型校验：12 位骨架逐段定类型——G/F1F2F3/A1A2 为字母段，F0/FN/AN 为数字段，数字段出现字母或字母段出现数字即错。",
+    "KKS-05": "编码长度合规：设备级 12 位、系统级 5/6/7 位、根节点 1 位；超过 12 位不立即判错，转编码深度定性。",
+    "KKS-06": "结构位取值合规：全厂码 G 须在 1-9/A-G/J-R/S-V/Y 或自由字母 H/W/X/Z 取值内；编码不得含 I/O 等易混字母。",
+    "KKS-07": "重复 KKS 码：主键须唯一；区分位置后缀丢失（可机械修复）与异设备真碰撞（须人工重编）。",
+    "KKS-08": "父级参照完整性：非根节点父级码须作为某行真实存在，否则层级断链、破坏外键。",
+    "KKS-09": "子码前缀一致性：子码须以父码为前缀（结合父级列值判定，不按固定位数截取推导）。",
+    "KKS-10": "自引用/环检测：父级不得指向自身，编码树不得形成闭合环。",
+    "KKS-11": "父级长度约束：父码长度应小于子码（父码应是子码的短前缀）。",
+    "KKS-12": "根节点哨兵：根节点父级应为空或 -1，不得指向不存在的编码。",
+    "KKS-13/16": "旧前缀迁移提示：50/60/L0/J0 等旧前缀编码仅作历史提示，需人工核对是否迁移遗漏。",
+    "KKS-14": "字母重分配：系统/设备类型字母变更应在重分配映射表内，避免随意改字母导致语义漂移。",
+    "KKS-15": "层级重排：版本间同一设备的层级位置调整，须人工核验语义未变。",
+    "KKS-16": "旧码遗留：父级或个别码仍命中旧前缀表，提示核对是否为历史遗留。",
+    "KKS-17/22": "12 位以上扩展码定性：区分纯 DCS 点号（-KF）、部件级附加码（-XXnn）与电气 A/B/C 分相，评估导入方式。",
+    "KKS-18": "旧→新码语义一致：迁移后设备语义应与原码对应，避免码变设备不对。",
+    "KKS-19/20/21": "跨厂/范围对比：专业覆盖差异、编码深度差异与数量瀑布分解闭合。",
+    "KKS-22": "码长与导入结构：超过 12 位的编码无法原样套用 LOCATIONS 结构，需扩展表/分层承载。",
+    "KKS-23": "两票/缺陷历史兼容：纸质票面已打印的历史 KKS 不可改写，采用映射层+双码共存+冻结历史。",
+    "KKS-24": "命名模糊/歧义：名称省略关键限定词致多解（如 1号2号高加3号液位计），需补全机组/位置限定。",
+    "KKS-25": "同设备异码：同一物理设备被编了多个 KKS 码，按归一名称聚类提示人工确认。",
+    "KKS-25b": "同物异名候选：名称风格不一（如 电机/电动机/马达）聚簇出的高可疑对，仅供人工抽检。",
+    "KKS-25c": "结构身份键一对多：同一旧码对应多个不同新码，疑似真重复，须人工裁定。",
+    "KKS-26": "应编未编：父设备按惯例应含可独立标识的子部件（隔离点/回路/执行机构）却缺失。",
+    "KKS-27": "名称文本卫生与语义可解性：名称含非常规符号/控制符判脏；提取不到任何已知设备名词判语义需人核。",
+    "KKS-28": "机组三方一致：机组列、名称中的机组指代、全厂码 G 三方须一致；公用/自由字母跳过不误报。",
+    "KKS-29": "OCR 易混字符待核：编码含 I/i/L/l/O/o 等易混字符，人工核对是否为数字 1/0 的识别错误。",
+    "KKS-30": "文本卫生：码与名称的首尾空白、换行、制表符、全角空格等脏数据，标记并附清洗。",
+    "KKS-31": "父子名称语义一致性：直接父子一级、同类设备的名称标识 token 应一致，矛盾即报。",
+    "KKS-A": "名称语义与设备字母一致：名称含泵/阀等词应对应泵类/阀类字母，不符即名实疑点。",
+    "KKS-C": "命名风格归一：1号机/1#机/#1机/一号机 等风格混用，提示统一风格。",
+    "KKS-D": "空/缺名称：名称列为空、-、无、None 等，设为必填字段时按 P0 阻断。",
+    "KKS-E": "设备类型列与名称一致：类型列值（如 截止阀）与名称推导类型（如 闸阀）矛盾。",
+    "KKS-F": "同父级编号断号：同父设备编号序列缺号（001/002/004），可能漏编。",
+    "KKS-G": "字母组合合法性：系统字母与设备字母的标准配对校验。",
+}
+
 
 def text(value: Any) -> str:
     if value is None:
@@ -313,6 +358,7 @@ def add_issue(issues: list[dict[str, Any]], *, priority: str, rule_id: str, cate
         "status": status,
         "rule_id": rule_id,
         "category": category,
+        "definition": RULE_DEFINITIONS.get(rule_id, ""),
         "excel_row": rec.get("excel_row", ""),
         "kks_code": rec.get("kks_code", ""),
         "parent_code": rec.get("parent_code", ""),
@@ -325,7 +371,7 @@ def add_issue(issues: list[dict[str, Any]], *, priority: str, rule_id: str, cate
 
 
 def code_unit(g_char: str, common_units: set[str] | None = None) -> int | None:
-    """GB/T 50549-2010 表 3.3.2 全厂码 G（1 位）→ 机组号。
+    """全厂码 G（1 位）→ 机组号。
 
     - 1~9 → 1~9 号机组；A~G → 10~16 号机组
     - J~R/S~V/Y（公用）与 H/W/X/Z（自由使用）→ None（跳过，不误报）
@@ -344,7 +390,7 @@ def code_unit(g_char: str, common_units: set[str] | None = None) -> int | None:
 
 
 def valid_g_char(g_char: str) -> bool:
-    """GB/T 50549-2010 表 3.3.2 全厂码 G 合法取值：1-9 / A-G / J-R / S-V / Y / 自由字母 H/W/X/Z。"""
+    """全厂码 G 合法取值：1-9 / A-G / J-R / S-V / Y / 自由字母 H/W/X/Z。"""
     if not g_char:
         return False
     if g_char.isdigit():
@@ -669,7 +715,7 @@ def _apply_template_skill_rules(
     return diagnostics
 
 
-# GB/T 50549-2010 附录 E 设备索引（A 码）——10 版 VGB 旧字母（QM/MA/BT/FT/LS 等）不再用于名实一致性判定
+# 设备索引字母（A 码）——10 版 VGB 旧字母（QM/MA/BT/FT/LS 等）不再用于名实一致性判定
 DEVICE_LETTER_SEMANTICS = {
     "泵": {"AP", "BN"},
     "阀": {"AA"},
@@ -803,7 +849,7 @@ def _apply_additional_skill_rules(
         if old[:2] in old_prefix_migrations and new[:2] != old_prefix_migrations[old[:2]]:
             _append_skill_issue(
                 issues, seen, records_by_index, rule_id="KKS-16", priority="P2", category="旧版前缀历史提示", index=index,
-                message=f"原码/新码前缀命中 10 版旧前缀表：{old[:2]} → {new[:2]}。", suggestion="国标体系不定义版本迁移；如属项目约定请核对迁移表，历史原码保留。", status="needs_review",
+                message=f"原码/新码前缀命中 10 版旧前缀表：{old[:2]} → {new[:2]}。", suggestion="编码体系不定义版本迁移；如属项目约定请核对迁移表，历史原码保留。", status="needs_review",
             )
         if old[2:5] in system_map and system_map[old[2:5]] != new[2:5]:
             _append_skill_issue(
@@ -1153,7 +1199,7 @@ def audit_file(
                       message=f"父级长度 {len(parent)} 不小于子码长度 {len(code)}。", suggestion="核对层级关系。")
 
         if len(code) >= 12:
-            # GB/T 50549-2010 附录 A 图 A.0.1：全厂码G(1) + 系统前缀号F0(1) + 系统分类码F1F2F3(3) + 系统编号FN(2) + 设备分类码A1A2(2) + 设备编号AN(3)
+            # 分段结构：全厂码G(1) + 系统前缀号F0(1) + 系统分类码F1F2F3(3) + 系统编号FN(2) + 设备分类码A1A2(2) + 设备编号AN(3)
             segments = ((0, 1, "全厂码G", "ALNUM"), (1, 2, "系统前缀号F0", "DIGIT"), (2, 5, "系统分类码F1F2F3", "ALPHA"),
                         (5, 7, "系统编号FN", "DIGIT"), (7, 9, "设备分类码A1A2", "ALPHA"), (9, 12, "设备编号AN", "DIGIT"))
             seg_has_issue = False
@@ -1225,24 +1271,24 @@ def audit_file(
                                   message=f"{label}指向 {found} 号，但编码前缀指向 {expected} 号。", suggestion="核对编码、机组列与名称三方，不自动改码。")
 
         old, new = rec["old_code"], rec["kks_code"]
-        # 全厂码 G 取值合规（GB/T 50549-2010 表 3.3.2）：G 必须在 1-9 / A-G / J-R / S-V / Y / 自由字母内
+        # 全厂码 G 取值合规：G 必须在 1-9 / A-G / J-R / S-V / Y / 自由字母内
         g_char = code[0] if code else ""
         if g_char and not valid_g_char(g_char):
             add_issue(issues, priority="P0", rule_id="KKS-06", category="全厂码 G 取值非法", rec=rec,
-                      message=f"全厂码 G={g_char!r} 不在 GB/T 50549-2010 表 3.3.2 取值范围内（1-9/A-G/J-R/S-V/Y，自由字母 H/W/X/Z）。", suggestion="核对是否为旧版前缀（50/60/L0/J0 在国标体系下 G=5/6/L/J 合法）或录入错误。")
-        # 10 版旧前缀迁移：国标体系下 G=5/6/L/J 本身合法，迁移 50→05 等属项目约定，仅作 P2 历史提示
+                      message=f"全厂码 G={g_char!r} 不在合法取值范围内（1-9/A-G/J-R/S-V/Y，自由字母 H/W/X/Z）。", suggestion="核对是否为旧版前缀（50/60/L0/J0 现行体系下 G=5/6/L/J 合法）或录入错误。")
+        # 10 版旧前缀迁移：G=5/6/L/J 本身合法，迁移 50→05 等属项目约定，仅作 P2 历史提示
         if old and new and old[:2] != new[:2]:
             expected_prefix = old_prefix_migrations.get(old[:2])
             if expected_prefix and new[:2] != expected_prefix:
                 add_issue(issues, priority="P2", rule_id="KKS-13/16", category="旧码迁移历史提示", rec=rec,
-                          message=f"原码前缀 {old[:2]} 若按项目 10 版→20 版约定应迁移为 {expected_prefix}，当前新码为 {new[:2]}。", suggestion="国标体系不定义版本迁移；如属项目约定请核对迁移表，历史原码保留。", status="needs_review")
+                          message=f"原码前缀 {old[:2]} 若按项目 10 版→20 版约定应迁移为 {expected_prefix}，当前新码为 {new[:2]}。", suggestion="编码体系不定义版本迁移；如属项目约定请核对迁移表，历史原码保留。", status="needs_review")
             else:
                 add_issue(issues, priority="P2", rule_id="KKS-18", category="历史原码与新码前缀变化", rec=rec,
                           message=f"原 KKS 前缀 {old[:2]} 与新 KKS 前缀 {new[:2]} 不同。", suggestion="确认历史映射；若新码、父级、机组三方一致，可作为历史提示保留。", status="needs_review")
 
         if code[:2] in old_prefix_migrations:
             add_issue(issues, priority="P2", rule_id="KKS-16", category="旧版前缀历史提示", rec=rec,
-                      message=f"当前 KKS 编码前两位 {code[:2]} 命中 10 版旧前缀表（{code[:2]}）。", suggestion="国标体系下 G=5/6/L/J 本身合法（分别为 5/6 号机与期别公用），仅提示核对；历史原码可保留。", status="needs_review")
+                      message=f"当前 KKS 编码前两位 {code[:2]} 命中 10 版旧前缀表（{code[:2]}）。", suggestion="G=5/6/L/J 本身合法（分别为 5/6 号机与期别公用），仅提示核对；历史原码可保留。", status="needs_review")
 
     unique_records_by_code = {code: group[0] for code, group in by_code.items() if len(group) == 1}
     skill_template_diagnostics = _apply_template_skill_rules(
@@ -1501,20 +1547,22 @@ def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
     for column, width in {"A": 19, "B": 13, "C": 19, "D": 13, "E": 19, "F": 13, "G": 19, "H": 13}.items():
         summary.column_dimensions[column].width = width
 
-    issue_headers = ["等级", "规则", "Excel 行号", "KKS", "问题", "整改建议"]
+    issue_headers = ["等级", "规则", "Excel 行号", "KKS", "问题定义", "问题", "整改建议"]
     issues_ws.append(issue_headers)
     for item in report_issues:
         decision = str(item.get("final_decision", ""))
         action = {"confirmed_issue": "需整改", "needs_human": "需确认", "likely_false_positive": "建议抽查"}.get(decision, "待确认")
         message = item.get("final_summary") or item.get("message") or item.get("category") or "待核问题"
         suggestion = item.get("final_suggestion") or item.get("suggestion") or "请结合原始 Excel 和业务资料确认。"
-        issues_ws.append([item.get("priority", "P2"), item.get("rule_id", ""), item.get("excel_row", ""), item.get("kks_code", ""), f"{action}：{message}", suggestion])
-    header_style(issues_ws, "A1:F1")
-    body_style(issues_ws, f"A1:F{max(1, issues_ws.max_row)}")
+        definition = item.get("definition") or item.get("category") or ""
+        issues_ws.append([item.get("priority", "P2"), item.get("rule_id", ""), item.get("excel_row", ""), item.get("kks_code", ""), definition, f"{action}：{message}", suggestion])
+    header_style(issues_ws, "A1:G1")
+    body_style(issues_ws, f"A1:G{max(1, issues_ws.max_row)}")
     issues_ws.freeze_panes = "A2"
-    issues_ws.auto_filter.ref = f"A1:F{max(1, issues_ws.max_row)}"
+    issues_ws.auto_filter.ref = f"A1:G{max(1, issues_ws.max_row)}"
     autosize(issues_ws, 60)
-    add_table(issues_ws, "KKSIssues", 6)
+    issues_ws.column_dimensions["E"].width = 42
+    add_table(issues_ws, "KKSIssues", 7)
 
     ai_headers = ["内部状态", "等级", "规则", "Excel 行号", "KKS", "原始问题", "规则证据", "AI 初审", "AI 二次复核", "AI 置信度", "AI 证据", "AI 原因", "AI 建议", "最终判断", "最终证据", "最终原因", "最终建议"]
     ai_ws.append(ai_headers)
@@ -1593,10 +1641,11 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
         f"<tr><td><span class='priority p{html.escape(str(item.get('priority', 'P2'))[-1])}'>{html.escape(str(item.get('priority', 'P2')))}</span></td>"
         f"<td>{html.escape(str(item.get('rule_id', '')))}</td><td>{html.escape(str(item.get('excel_row', '')))}</td>"
         f"<td><code>{html.escape(str(item.get('kks_code', '')))}</code></td>"
+        f"<td class='def-cell'>{html.escape(str(item.get('definition') or item.get('category') or ''))}</td>"
         f"<td><b>{html.escape(action_label(item))}</b>：{html.escape(detail_text(item))}</td>"
         f"<td>{html.escape(suggestion_text(item))}</td></tr>"
         for item in rows
-    ) or '<tr><td colspan="6" class="empty">未发现需要列入清单的问题</td></tr>'
+    ) or '<tr><td colspan="7" class="empty">未发现需要列入清单的问题</td></tr>'
 
     dimension_rows = "".join(
         f"<tr><td><b>{html.escape(item['dimension'])}</b></td><td>{html.escape(item['check'])}</td>"
@@ -1638,7 +1687,7 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
     body = f"""<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>KKS 编码质量审核报告</title>
 <style>
 :root{{--blue:#1d4ed8;--navy:#102a43;--ink:#243b53;--muted:#627d98;--line:#d9e2ec;--soft:#f7faff;--green:#16845b;--amber:#b45309;--red:#c2413b}}
-*{{box-sizing:border-box}}body{{margin:0;background:#f5f8fc;color:var(--ink);font:14px/1.65 "Segoe UI","Microsoft YaHei",Arial,sans-serif}}.page{{max-width:1440px;margin:0 auto;padding:32px 38px 56px}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;padding:22px 26px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 24px rgba(16,42,67,.05)}}h1{{margin:0;color:var(--navy);font-size:30px;letter-spacing:-.5px}}.eyebrow{{margin-bottom:5px;color:#315dcc;font-size:11px;font-weight:800;letter-spacing:1.6px}}.meta{{margin:10px 0 0;color:var(--muted);font-size:13px}}.status{{padding:8px 13px;border:1px solid #bbf7d0;border-radius:999px;background:#f0fdf4;color:var(--green);font-weight:700;white-space:nowrap}}.section{{margin-top:22px;padding:24px 26px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 20px rgba(16,42,67,.04)}}h2{{margin:0 0 15px;color:var(--navy);font-size:20px;border-left:4px solid var(--blue);padding-left:11px}}h3{{margin:0 0 12px;color:var(--navy);font-size:16px}}.conclusion{{padding:16px 18px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff;font-size:15px;font-weight:650;color:#173f7a}}.kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.kpi{{min-height:94px;padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,#fff,#f8fbff)}}.kpi label{{display:block;color:var(--muted);font-size:12px;font-weight:650}}.kpi b{{display:block;margin-top:6px;color:var(--navy);font-size:27px;line-height:1.1}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:12px;font-size:13px}}th,td{{padding:10px 11px;text-align:left;vertical-align:top;border-bottom:1px solid #e8eef5}}th{{background:#eff6ff;color:#173f7a;font-weight:800}}tr:last-child td{{border-bottom:0}}tbody tr:hover{{background:#fbfdff}}.result-pill{{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:750}}.result-pill.ok{{background:#ecfdf5;color:#047857}}.result-pill.warn{{background:#fff7ed;color:#b45309}}.priority-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}.priority-card{{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:15px 16px;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:12px;background:#fbfdff}}.priority-card strong{{font-size:14px}}.priority-card b{{grid-row:span 2;color:var(--navy);font-size:28px}}.priority-card span{{color:var(--muted);font-size:12px}}.priority-card.p0{{border-left-color:var(--red);background:#fffafa}}.priority-card.p1{{border-left-color:#f59e0b;background:#fffdf7}}.priority-card.p2{{border-left-color:var(--blue)}}.priority{{display:inline-flex;min-width:34px;justify-content:center;padding:3px 8px;border-radius:6px;font-weight:800}}.priority.p0{{background:#fee2e2;color:#b91c1c}}.priority.p1{{background:#fef3c7;color:#a16207}}.priority.p2{{background:#dbeafe;color:#1d4ed8}}code{{padding:2px 5px;border-radius:5px;background:#f1f5f9;color:#19324d;font-family:Consolas,monospace;font-size:12px}}.methods{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 24px;margin:0;padding-left:22px}}.methods li{{color:#3e5871}}.advice{{padding:15px 17px;border-radius:12px;background:#f8fafc;border:1px solid var(--line)}}.import{{padding:16px 18px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#92400e;font-weight:650}}.empty{{padding:18px;text-align:center;color:#94a3b8}}details{{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:#fbfdff}}summary{{cursor:pointer;padding:10px 12px;color:#2454ad;font-weight:750}}.ai-detail{{margin:0;border:0;background:transparent}}.ai-detail summary{{padding:0 0 7px;font-size:12px}}.ai-grid{{display:grid;grid-template-columns:80px 1fr;gap:5px 10px;padding:0 12px 12px;color:var(--muted);font-size:12px}}.ai-grid b{{color:var(--ink)}}.ai-grid p{{margin:0;color:var(--ink)}}.technical pre{{max-height:360px;overflow:auto;padding:12px;background:#172033;color:#dbeafe;border-radius:8px;font-size:12px}}.footer{{margin-top:22px;color:#718096;font-size:12px}}@media(max-width:950px){{.page{{padding:20px 16px 40px}}.kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.priority-grid{{grid-template-columns:1fr}}.top{{display:block}}.status{{display:inline-flex;margin-top:12px}}}}@media(max-width:560px){{.kpis{{grid-template-columns:1fr 1fr;gap:8px}}.section{{padding:18px 15px}}h1{{font-size:24px}}table{{font-size:12px}}th,td{{padding:8px}}.methods{{grid-template-columns:1fr}}}}
+*{{box-sizing:border-box}}body{{margin:0;background:#f5f8fc;color:var(--ink);font:14px/1.65 "Segoe UI","Microsoft YaHei",Arial,sans-serif}}.page{{max-width:1440px;margin:0 auto;padding:32px 38px 56px}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;padding:22px 26px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 24px rgba(16,42,67,.05)}}h1{{margin:0;color:var(--navy);font-size:30px;letter-spacing:-.5px}}.eyebrow{{margin-bottom:5px;color:#315dcc;font-size:11px;font-weight:800;letter-spacing:1.6px}}.meta{{margin:10px 0 0;color:var(--muted);font-size:13px}}.status{{padding:8px 13px;border:1px solid #bbf7d0;border-radius:999px;background:#f0fdf4;color:var(--green);font-weight:700;white-space:nowrap}}.section{{margin-top:22px;padding:24px 26px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 20px rgba(16,42,67,.04)}}h2{{margin:0 0 15px;color:var(--navy);font-size:20px;border-left:4px solid var(--blue);padding-left:11px}}h3{{margin:0 0 12px;color:var(--navy);font-size:16px}}.conclusion{{padding:16px 18px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff;font-size:15px;font-weight:650;color:#173f7a}}.kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.kpi{{min-height:94px;padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,#fff,#f8fbff)}}.kpi label{{display:block;color:var(--muted);font-size:12px;font-weight:650}}.kpi b{{display:block;margin-top:6px;color:var(--navy);font-size:27px;line-height:1.1}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:12px;font-size:13px}}th,td{{padding:10px 11px;text-align:left;vertical-align:top;border-bottom:1px solid #e8eef5}}th{{background:#eff6ff;color:#173f7a;font-weight:800}}tr:last-child td{{border-bottom:0}}tbody tr:hover{{background:#fbfdff}}.def-cell{{color:#5b7590;font-size:12.5px;line-height:1.55;min-width:180px;max-width:320px}}.result-pill{{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:750}}.result-pill.ok{{background:#ecfdf5;color:#047857}}.result-pill.warn{{background:#fff7ed;color:#b45309}}.priority-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}.priority-card{{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:15px 16px;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:12px;background:#fbfdff}}.priority-card strong{{font-size:14px}}.priority-card b{{grid-row:span 2;color:var(--navy);font-size:28px}}.priority-card span{{color:var(--muted);font-size:12px}}.priority-card.p0{{border-left-color:var(--red);background:#fffafa}}.priority-card.p1{{border-left-color:#f59e0b;background:#fffdf7}}.priority-card.p2{{border-left-color:var(--blue)}}.priority{{display:inline-flex;min-width:34px;justify-content:center;padding:3px 8px;border-radius:6px;font-weight:800}}.priority.p0{{background:#fee2e2;color:#b91c1c}}.priority.p1{{background:#fef3c7;color:#a16207}}.priority.p2{{background:#dbeafe;color:#1d4ed8}}code{{padding:2px 5px;border-radius:5px;background:#f1f5f9;color:#19324d;font-family:Consolas,monospace;font-size:12px}}.methods{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 24px;margin:0;padding-left:22px}}.methods li{{color:#3e5871}}.advice{{padding:15px 17px;border-radius:12px;background:#f8fafc;border:1px solid var(--line)}}.import{{padding:16px 18px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#92400e;font-weight:650}}.empty{{padding:18px;text-align:center;color:#94a3b8}}details{{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:#fbfdff}}summary{{cursor:pointer;padding:10px 12px;color:#2454ad;font-weight:750}}.ai-detail{{margin:0;border:0;background:transparent}}.ai-detail summary{{padding:0 0 7px;font-size:12px}}.ai-grid{{display:grid;grid-template-columns:80px 1fr;gap:5px 10px;padding:0 12px 12px;color:var(--muted);font-size:12px}}.ai-grid b{{color:var(--ink)}}.ai-grid p{{margin:0;color:var(--ink)}}.technical pre{{max-height:360px;overflow:auto;padding:12px;background:#172033;color:#dbeafe;border-radius:8px;font-size:12px}}.footer{{margin-top:22px;color:#718096;font-size:12px}}@media(max-width:950px){{.page{{padding:20px 16px 40px}}.kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.priority-grid{{grid-template-columns:1fr}}.top{{display:block}}.status{{display:inline-flex;margin-top:12px}}}}@media(max-width:560px){{.kpis{{grid-template-columns:1fr 1fr;gap:8px}}.section{{padding:18px 15px}}h1{{font-size:24px}}table{{font-size:12px}}th,td{{padding:8px}}.methods{{grid-template-columns:1fr}}}}
 @media print{{body{{background:#fff}}.page{{max-width:none;padding:0}}.section,.top{{box-shadow:none;break-inside:avoid}}details{{display:none}}}}
 </style></head><body><main class='page'>
 <header class='top'><div><div class='eyebrow'>KKS QUALITY CONTROL</div><h1>KKS 编码质量审核报告</h1><p class='meta'>源文件：{html.escape(str(result['source_file']))}<br>主表：{html.escape(str(result['sheet']))} · 表头行：{result['header_row']} · 审核范围：{metrics['effective_kks']} 条有效 KKS</p></div><span class='status'>质量审核结论</span></header>
@@ -1648,7 +1697,7 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
 <section class='section'><h2>四、P0/P1/P2 问题分析</h2><div class='priority-grid'>{priority_rows}</div></section>
 <section class='section'><h2>五、问题整改建议</h2><div class='advice'>优先处理 P0 阻断问题；再治理 P1 扩展编码；P2 历史迁移保留原始证据，不直接覆盖源 Excel。其余规则提示仍保留在详细问题清单，整改完成后应重新审核，并在目标库做导入前验证。</div><h3 style='margin-top:18px'>审核方法</h3><ol class='methods'>{methods_html}</ol></section>
 <section class='section'><h2>六、导入评估结论</h2><div class='import'>{html.escape(report_import_conclusion(result))}<br><span style='font-weight:400'>源 Excel 始终只读；本次未连接真实 DM8/LOCATIONS 做导入验证。</span></div>{comparison_html}</section>
-<section class='section'><h2>七、详细问题清单</h2><table><thead><tr><th>等级</th><th>规则</th><th>行号</th><th>KKS</th><th>问题</th><th>整改建议</th></tr></thead><tbody>{rows_html}</tbody></table></section>
+<section class='section'><h2>七、详细问题清单</h2><table><thead><tr><th>等级</th><th>规则</th><th>行号</th><th>KKS</th><th>问题定义</th><th>问题</th><th>整改建议</th></tr></thead><tbody>{rows_html}</tbody></table></section>
 <section class='section'><details class='technical'><summary>查看 AI 语义复核依据（技术人员）</summary><p class='meta'>{ai_meta} AI 仅对规则筛出的不确定项提供辅助判断，正式结论仍保留规则证据和人工确认入口。</p><table><thead><tr><th>等级</th><th>行号</th><th>KKS</th><th>AI 依据</th></tr></thead><tbody>{ai_rows}</tbody></table></details><details class='technical'><summary>查看结构扫描备注</summary><ul>{notes_html}</ul></details></section>
 <p class='footer'>本报告定位为 KKS 编码质量审核验收报告。源 Excel 未修改；AI 复核过程和详细证据已保留在折叠区域及问题 Excel 的“AI复核（技术）”隐藏页。</p></main></body></html>"""
     path.write_text(body, encoding="utf-8")

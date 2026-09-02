@@ -152,7 +152,7 @@ def diag_prefix(cols, rows, orphans):
     for par, kids in list(samples.items())[:8]:
         print(f"  父缺 {par}: 子样本 {kids[:3]} ...")
         if re.match(r'^(50|60|L0)', par):
-            print(f"    -> 旧版前缀(国标下 G=5/6/L 合法，仅提示核对，非迁移错误)")
+            print(f"    -> 旧版前缀(G=5/6/L 合法，仅提示核对，非迁移错误)")
 
 # ============ 5. 用户新增 3 条校验 ============
 # ---- #24 命名模糊/歧义 ----
@@ -438,7 +438,7 @@ def expected_missing(cols, rows):
 # 设备术语词典（starter，ADAPT HERE 按厂扩充；用于 #27 语义可解性 P2）
 EQUIP_TERMS = set('泵 阀 机 风机 电机 电动机 马达 压缩机 换热器 加热器 凝汽器 除氧器 锅炉 汽轮机 发电机 变压器 开关柜 配电柜 皮带机 刮板机 碎煤机 给煤机 磨煤机 空预器 除尘器 脱硫塔 吸收塔 烟囱 管道 容器 罐 箱 执行机构 传感器 变送器 液位计 温度计 压力表 流量计 MCC PC'.split())
 
-# 机组一致性（GB/T 50549-2010 表 3.3.2 全厂码 G：1-9 → 1~9 号机；A-G → 10~16 号机）
+# 机组一致性（全厂码 G：1-9 → 1~9 号机；A-G → 10~16 号机）
 # 通用默认：20版编码机组位前缀数字 == 名称所写机组号（1↔1号, 2↔2号, A↔10号）
 COMMON_CODES = {'J','K','L','M','N','P','Q','R','S','T','U','V','Y'}   # 期别公用 J-R / 多期公用 S-V / 全厂公用 Y
 FREE_CODES = {'H','W','X','Z'}                                          # 自由使用（火电厂导则 5.1 表2 注3）
@@ -450,7 +450,7 @@ UNIT_LETTER_MAP = {'A':10,'B':11,'C':12,'D':13,'E':14,'F':15,'G':16}
 def _code_unit(g_char):
     """把全厂码 G（1 位）翻译成机组号；无法可靠翻译时返回 None（跳过，不误报）。
     ★护栏：滁州实证——10版残留前缀 '60' 被当成"60号机"，凭空产生 7 条误报。
-      国标体系下 G 只取 1 位（1-9/A-G），J-R/S-V/Y 为公用，H/W/X/Z 自由使用。"""
+      G 只取 1 位（1-9/A-G），J-R/S-V/Y 为公用，H/W/X/Z 自由使用。"""
     if not g_char:
         return None
     if g_char in COMMON_CODES or g_char in FREE_CODES:
@@ -493,7 +493,7 @@ def name_text_hygiene(cols, rows):
     return symbol_issues, semantic_voids
 
 def unit_consistency(cols, rows):
-    """#28 机组三方一致（原B升级）：机组列 ↔ 名称机组指代 ↔ 全厂码 G（GB/T 表 3.3.2）。"""
+    """#28 机组三方一致（原B升级）：机组列 ↔ 名称机组指代 ↔ 全厂码 G。"""
     k = cols['kks']; n = cols['name']; u = cols['unit']
     issues = []
     name_unit_pat = re.compile(r'(\d{1,2}|[一二三四五六七八九十])\s*号\s*(机|炉|机组)')
@@ -528,7 +528,7 @@ def unit_consistency(cols, rows):
             issues.append((i, c, f'机组列指{uc_num}号但编码全厂码G={code_g}(应{expect}号)'))
     return issues
 
-# ---- 分段字符类型（KKS 12 位骨架，GB/T 50549-2010 附录 A 图 A.0.1）----
+# ---- 分段字符类型（KKS 12 位骨架）----
 # 位1 全厂码G(字母/数字) | 位2 系统前缀号F0(数字) | 位3-5 系统分类码F1F2F3 | 位6-7 系统编号FN | 位8-9 设备分类码A1A2 | 位10-12 设备编号AN
 SEG_12 = [(1, 1, 'ALNUM', '全厂码G'), (2, 2, 'DIGIT', '系统前缀号F0'),
           (3, 5, 'ALPHA', '系统分类码F1F2F3'), (6, 7, 'DIGIT', '系统编号FN'),

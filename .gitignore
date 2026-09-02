@@ -10,4 +10,5 @@ dist/
 outputs/
 skill_backups/
 source-skill/
+_tmp_extract/
 *.pyc

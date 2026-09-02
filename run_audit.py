@@ -242,6 +242,108 @@ RULE_DEFINITIONS: dict[str, str] = {
 }
 
 
+# ---- 规则依据出处（word 标准文档 · 文件 + 章节）----
+# 三份依据文档（2026-09-02 从 doc/docx 原始文件提取核对）：
+#   火电导则：电力火电厂标识系统（KKS）编码导则-0813（.doc）
+#   风电规范：中国电力投资集团公司风电场标识系统（KKS）编码规范 CPI（.docx）
+#   光伏规范：中国电力投资集团公司光伏发电站标识系统（KKS）编码规范 CPI（.docx）
+# RULE_SOURCES 值为"文件短名 + 条款号（表号）"，直接用于 HTML/Excel/Web"规则依据"列。
+# 编码规范无明文章节的工程/数据质量类规则统一为通用说明，不虚构条款。
+STANDARD_DEFAULT = "huodian"
+STANDARD_NAMES = {"huodian": "火电导则", "wind": "风电规范", "solar": "光伏规范"}
+# 与 国标/ 目录磁盘文件一一对应的完整文档名（展示时直接可对上文件名）
+STANDARD_FILES = {
+    "huodian": "电力火电厂标识系统（KKS）编码导则-0813",
+    "wind": "中国电力投资集团公司风电场标识系统（KKS）编码规范",
+    "solar": "中国电力投资集团公司光伏发电站标识系统（KKS）编码规范",
+}
+# 报告头"规则依据体系"行：完整磁盘文件名（含序号前缀与扩展名，可直接在 国标/ 目录找到）
+STANDARD_FULL = {
+    "huodian": "国标/电力火电厂标识系统（KKS）编码导则-0813.doc（火电导则）",
+    "wind": "国标/3.中国电力投资集团公司风电场标识系统（KKS）编码规范.docx（风电规范）",
+    "solar": "国标/4.中国电力投资集团公司光伏发电站标识系统（KKS）编码规范.docx（光伏规范）",
+}
+GENERIC_SOURCE = "通用审计要求，无专条依据"
+_ST_STRUCT = ("火电导则 5.1.3 KKS编码构成（字符类型 N/A，禁用 I/O）", "风电规范 4.1 编码构成（字符类型 N/A，禁用 I/O）", "光伏规范 4.1 编码构成（字符类型 N/A，禁用 I/O）")
+_ST_SEG = ("火电导则 5.2.1~5.2.3 码段结构（F0/F1F2F3/FN/A1A2/AN）", "风电规范 4.2.1~4.2.3 码段结构", "光伏规范 4.2.1~4.2.3 码段结构")
+_ST_G = ("火电导则 5.1.4 全厂标识（表2）", "风电规范 4.1 全厂码（表1）", "光伏规范 4.1 全厂码（表1）")
+_ST_UNIQ = ("火电导则 3 术语和定义·标识（唯一记号）", "风电规范 3 定义与术语·标识（唯一记号）", "光伏规范 3 定义与术语·标识（唯一记号）")
+_ST_DEV = ("火电导则 6.2 设备索引（表29~37）", "风电规范 5.2 设备索引（表18~24）", "光伏规范 5.2 设备索引（表19~24）")
+_ST_PART = ("火电导则 5.2.3 部件码", "风电规范 4.2.3 部件码", "光伏规范 4.2.3 部件码")
+_ST_COMBO = ("火电导则 6.1+6.2 系统/设备索引", "风电规范 5.1+5.2 系统/设备索引", "光伏规范 5.1+5.2 系统/设备索引")
+
+RULE_SOURCES: dict[str, dict[str, str]] = {}
+for _rid, _vals in {
+    "KKS-04": _ST_STRUCT, "KKS-04b": _ST_SEG, "KKS-05": _ST_STRUCT,
+    "KKS-06": _ST_G, "KKS-07": _ST_UNIQ,
+    "KKS-08": _ST_STRUCT, "KKS-09": _ST_STRUCT, "KKS-10": _ST_STRUCT,
+    "KKS-11": _ST_STRUCT, "KKS-12": _ST_STRUCT,
+    "KKS-25": _ST_UNIQ, "KKS-25c": _ST_UNIQ, "KKS-26": _ST_PART,
+    "KKS-28": _ST_G, "KKS-29": _ST_STRUCT,
+    "KKS-A": _ST_DEV, "KKS-G": _ST_COMBO,
+}.items():
+    RULE_SOURCES[_rid] = dict(zip(("huodian", "wind", "solar"), _vals))
+# 出处列展示为"完整文件名 + 条款"，把元组中的短名前缀替换成 STANDARD_FILES 全名
+for _rid, _tbl in RULE_SOURCES.items():
+    for _std, _short in STANDARD_NAMES.items():
+        _full = STANDARD_FILES[_std]
+        _tbl[_std] = _tbl[_std].replace(_short, _full, 1)
+
+
+def rule_source(rule_id: str, standard: str) -> str:
+    """按审核标准体系取规则出处；支持组键回退（如 KKS-13 命中 KKS-13/16）。"""
+    table = RULE_SOURCES.get(rule_id)
+    if not table:
+        table = next((v for k, v in RULE_SOURCES.items() if rule_id in k.split("/")), None)
+    if not table:
+        return GENERIC_SOURCE
+    return table.get(standard) or table.get(STANDARD_DEFAULT) or GENERIC_SOURCE
+
+
+def detect_standard(records: list[dict[str, Any]]) -> str:
+    """按数据内容推断适用的标准文档体系：火电导则/风电规范/光伏规范。
+
+    依据两类信号打分：
+      1) KKS 码系统分类字母（第 3 位 F1）——对照三份文档的系统索引字母表；
+      2) 设备名称特征词（用无歧义词，如"锅炉/汽轮机"vs"风电机组"vs"光伏/汇流箱"，
+         单字"风机"不采用，暖通风机会误判为风电）。
+    平分或全 0 时回退火电导则（当前主要业务口径）。
+    """
+    huodian_w = ("锅炉", "汽轮机", "汽机", "磨煤机", "给水泵", "凝汽器", "除氧器", "暖通", "热网", "送风机", "引风机", "主蒸汽", "再热器")
+    wind_w = ("风电机组", "风力发电", "轮毂", "塔筒", "机舱", "桨叶")
+    solar_w = ("光伏", "逆变器", "汇流箱", "方阵", "太阳能", "光伏组件")
+    score = {"huodian": 0, "wind": 0, "solar": 0}
+    f1_letters: set[str] = set()
+    seen = 0
+    for rec in records:
+        if seen >= 800:
+            break
+        code = text(rec.get("kks_code"))
+        name = text(rec.get("name"))
+        seen += 1
+        if len(code) >= 6 and code[2].isalpha():
+            f1_letters.add(code[2].upper())
+        for kw in huodian_w:
+            if kw in name:
+                score["huodian"] += 2
+                break
+        for kw in wind_w:
+            if kw in name:
+                score["wind"] += 2
+                break
+        for kw in solar_w:
+            if kw in name:
+                score["solar"] += 2
+                break
+    if "W" in f1_letters:
+        score["solar"] += 2
+    for ch in ("H", "L", "X"):
+        if ch in f1_letters:
+            score["huodian"] += 1
+    best = max(score, key=lambda k: (score[k], k != STANDARD_DEFAULT))
+    return best if score[best] else STANDARD_DEFAULT
+
+
 def text(value: Any) -> str:
     if value is None:
         return ""
@@ -1045,6 +1147,7 @@ def audit_tree_collection(
         if len(group) > 1:
             for rec in group:
                 add_issue(issues, priority="P0", rule_id="KKS-07", category="重复子设备 KKS 码", rec=rec, message=f"子设备 KKS 码 {code} 在树表出现 {len(group)} 次。", suggestion="核对是否为重复挂接或不同设备碰撞。")
+    standard = detect_standard(child_records)
     priority_counts = Counter(item["priority"] for item in issues if item["status"] != "resolved")
     comparison = None
     if comparison_path:
@@ -1060,6 +1163,8 @@ def audit_tree_collection(
     )
     result = {
         "version": VERSION,
+        "standard": standard,
+        "standard_display": STANDARD_FULL.get(standard, STANDARD_FULL[STANDARD_DEFAULT]),
         "source_file": str(input_path),
         "sheet": sheet,
         "header_row": header_idx + 1,
@@ -1154,6 +1259,8 @@ def audit_file(
             records.append(rec)
         else:
             nonempty_without_code.append(rec)
+
+    standard = detect_standard(records)
 
     issues: list[dict[str, Any]] = []
     resolved: list[dict[str, Any]] = []
@@ -1362,6 +1469,8 @@ def audit_file(
     )
     result = {
         "version": VERSION,
+        "standard": standard,
+        "standard_display": STANDARD_FULL.get(standard, STANDARD_FULL[STANDARD_DEFAULT]),
         "source_file": str(input_path),
         "sheet": sheet,
         "header_row": header_idx + 1,
@@ -1458,6 +1567,7 @@ def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
     metrics = quality_metrics(result)
     counts = result.get("final_decision_counts", final_decision_counts(result))
     dimensions = report_quality_dimensions(result)
+    standard = result.get("standard", STANDARD_DEFAULT)
     report_issues = sorted(_report_issues(result), key=lambda item: ({"P0": 0, "P1": 1, "P2": 2}.get(str(item.get("priority")), 9), int(item.get("excel_row", 0) or 0)))
 
     summary.merge_cells("A1:H1")
@@ -1467,7 +1577,7 @@ def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
     summary["A1"].alignment = Alignment(horizontal="center", vertical="center")
     summary.row_dimensions[1].height = 28
     summary.merge_cells("A2:H2")
-    summary["A2"] = f"源文件：{result['source_file']}；主表：{result['sheet']}；表头行：{result['header_row']}"
+    summary["A2"] = f"源文件：{result['source_file']}；主表：{result['sheet']}；表头行：{result['header_row']}；规则依据体系：{result.get('standard_display') or STANDARD_FULL[standard]}（自动识别）"
     summary["A2"].fill = PatternFill("solid", fgColor=pale_blue)
     summary["A2"].alignment = Alignment(wrap_text=True)
     summary.merge_cells("A4:H4")
@@ -1547,7 +1657,7 @@ def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
     for column, width in {"A": 19, "B": 13, "C": 19, "D": 13, "E": 19, "F": 13, "G": 19, "H": 13}.items():
         summary.column_dimensions[column].width = width
 
-    issue_headers = ["等级", "规则", "Excel 行号", "KKS", "问题定义", "问题", "整改建议"]
+    issue_headers = ["等级", "规则", "Excel 行号", "KKS", "问题定义", "规则依据", "问题", "整改建议"]
     issues_ws.append(issue_headers)
     for item in report_issues:
         decision = str(item.get("final_decision", ""))
@@ -1555,14 +1665,16 @@ def write_issue_workbook_xlsx(path: Path, result: dict[str, Any]) -> None:
         message = item.get("final_summary") or item.get("message") or item.get("category") or "待核问题"
         suggestion = item.get("final_suggestion") or item.get("suggestion") or "请结合原始 Excel 和业务资料确认。"
         definition = item.get("definition") or item.get("category") or ""
-        issues_ws.append([item.get("priority", "P2"), item.get("rule_id", ""), item.get("excel_row", ""), item.get("kks_code", ""), definition, f"{action}：{message}", suggestion])
-    header_style(issues_ws, "A1:G1")
-    body_style(issues_ws, f"A1:G{max(1, issues_ws.max_row)}")
+        source = rule_source(str(item.get("rule_id", "")), standard)
+        issues_ws.append([item.get("priority", "P2"), item.get("rule_id", ""), item.get("excel_row", ""), item.get("kks_code", ""), definition, source, f"{action}：{message}", suggestion])
+    header_style(issues_ws, "A1:H1")
+    body_style(issues_ws, f"A1:H{max(1, issues_ws.max_row)}")
     issues_ws.freeze_panes = "A2"
-    issues_ws.auto_filter.ref = f"A1:G{max(1, issues_ws.max_row)}"
+    issues_ws.auto_filter.ref = f"A1:H{max(1, issues_ws.max_row)}"
     autosize(issues_ws, 60)
-    issues_ws.column_dimensions["E"].width = 42
-    add_table(issues_ws, "KKSIssues", 7)
+    issues_ws.column_dimensions["E"].width = 34
+    issues_ws.column_dimensions["F"].width = 54
+    add_table(issues_ws, "KKSIssues", 8)
 
     ai_headers = ["内部状态", "等级", "规则", "Excel 行号", "KKS", "原始问题", "规则证据", "AI 初审", "AI 二次复核", "AI 置信度", "AI 证据", "AI 原因", "AI 建议", "最终判断", "最终证据", "最终原因", "最终建议"]
     ai_ws.append(ai_headers)
@@ -1627,6 +1739,7 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
     final_counts = result.get("final_decision_counts", final_decision_counts(result))
     rows = sorted(_report_issues(result), key=lambda item: ({"P0": 0, "P1": 1, "P2": 2}.get(str(item.get("priority")), 9), int(item.get("excel_row", 0) or 0)))
     ai = result.get("ai_review", {})
+    standard = result.get("standard", STANDARD_DEFAULT)
 
     def action_label(item: dict[str, Any]) -> str:
         return {"confirmed_issue": "需整改", "needs_human": "需确认", "likely_false_positive": "建议抽查"}.get(str(item.get("final_decision", "")), "待确认")
@@ -1637,15 +1750,19 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
     def suggestion_text(item: dict[str, Any]) -> str:
         return str(item.get("final_suggestion") or item.get("suggestion") or "请结合原始 Excel 和业务资料确认。")
 
+    def source_text(item: dict[str, Any]) -> str:
+        return rule_source(str(item.get("rule_id", "")), standard)
+
     rows_html = "".join(
         f"<tr><td><span class='priority p{html.escape(str(item.get('priority', 'P2'))[-1])}'>{html.escape(str(item.get('priority', 'P2')))}</span></td>"
         f"<td>{html.escape(str(item.get('rule_id', '')))}</td><td>{html.escape(str(item.get('excel_row', '')))}</td>"
         f"<td><code>{html.escape(str(item.get('kks_code', '')))}</code></td>"
         f"<td class='def-cell'>{html.escape(str(item.get('definition') or item.get('category') or ''))}</td>"
+        f"<td class='src-cell'>{html.escape(source_text(item))}</td>"
         f"<td><b>{html.escape(action_label(item))}</b>：{html.escape(detail_text(item))}</td>"
         f"<td>{html.escape(suggestion_text(item))}</td></tr>"
         for item in rows
-    ) or '<tr><td colspan="7" class="empty">未发现需要列入清单的问题</td></tr>'
+    ) or '<tr><td colspan="8" class="empty">未发现需要列入清单的问题</td></tr>'
 
     dimension_rows = "".join(
         f"<tr><td><b>{html.escape(item['dimension'])}</b></td><td>{html.escape(item['check'])}</td>"
@@ -1687,17 +1804,17 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
     body = f"""<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>KKS 编码质量审核报告</title>
 <style>
 :root{{--blue:#1d4ed8;--navy:#102a43;--ink:#243b53;--muted:#627d98;--line:#d9e2ec;--soft:#f7faff;--green:#16845b;--amber:#b45309;--red:#c2413b}}
-*{{box-sizing:border-box}}body{{margin:0;background:#f5f8fc;color:var(--ink);font:14px/1.65 "Segoe UI","Microsoft YaHei",Arial,sans-serif}}.page{{max-width:1440px;margin:0 auto;padding:32px 38px 56px}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;padding:22px 26px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 24px rgba(16,42,67,.05)}}h1{{margin:0;color:var(--navy);font-size:30px;letter-spacing:-.5px}}.eyebrow{{margin-bottom:5px;color:#315dcc;font-size:11px;font-weight:800;letter-spacing:1.6px}}.meta{{margin:10px 0 0;color:var(--muted);font-size:13px}}.status{{padding:8px 13px;border:1px solid #bbf7d0;border-radius:999px;background:#f0fdf4;color:var(--green);font-weight:700;white-space:nowrap}}.section{{margin-top:22px;padding:24px 26px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 20px rgba(16,42,67,.04)}}h2{{margin:0 0 15px;color:var(--navy);font-size:20px;border-left:4px solid var(--blue);padding-left:11px}}h3{{margin:0 0 12px;color:var(--navy);font-size:16px}}.conclusion{{padding:16px 18px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff;font-size:15px;font-weight:650;color:#173f7a}}.kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.kpi{{min-height:94px;padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,#fff,#f8fbff)}}.kpi label{{display:block;color:var(--muted);font-size:12px;font-weight:650}}.kpi b{{display:block;margin-top:6px;color:var(--navy);font-size:27px;line-height:1.1}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:12px;font-size:13px}}th,td{{padding:10px 11px;text-align:left;vertical-align:top;border-bottom:1px solid #e8eef5}}th{{background:#eff6ff;color:#173f7a;font-weight:800}}tr:last-child td{{border-bottom:0}}tbody tr:hover{{background:#fbfdff}}.def-cell{{color:#5b7590;font-size:12.5px;line-height:1.55;min-width:180px;max-width:320px}}.result-pill{{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:750}}.result-pill.ok{{background:#ecfdf5;color:#047857}}.result-pill.warn{{background:#fff7ed;color:#b45309}}.priority-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}.priority-card{{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:15px 16px;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:12px;background:#fbfdff}}.priority-card strong{{font-size:14px}}.priority-card b{{grid-row:span 2;color:var(--navy);font-size:28px}}.priority-card span{{color:var(--muted);font-size:12px}}.priority-card.p0{{border-left-color:var(--red);background:#fffafa}}.priority-card.p1{{border-left-color:#f59e0b;background:#fffdf7}}.priority-card.p2{{border-left-color:var(--blue)}}.priority{{display:inline-flex;min-width:34px;justify-content:center;padding:3px 8px;border-radius:6px;font-weight:800}}.priority.p0{{background:#fee2e2;color:#b91c1c}}.priority.p1{{background:#fef3c7;color:#a16207}}.priority.p2{{background:#dbeafe;color:#1d4ed8}}code{{padding:2px 5px;border-radius:5px;background:#f1f5f9;color:#19324d;font-family:Consolas,monospace;font-size:12px}}.methods{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 24px;margin:0;padding-left:22px}}.methods li{{color:#3e5871}}.advice{{padding:15px 17px;border-radius:12px;background:#f8fafc;border:1px solid var(--line)}}.import{{padding:16px 18px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#92400e;font-weight:650}}.empty{{padding:18px;text-align:center;color:#94a3b8}}details{{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:#fbfdff}}summary{{cursor:pointer;padding:10px 12px;color:#2454ad;font-weight:750}}.ai-detail{{margin:0;border:0;background:transparent}}.ai-detail summary{{padding:0 0 7px;font-size:12px}}.ai-grid{{display:grid;grid-template-columns:80px 1fr;gap:5px 10px;padding:0 12px 12px;color:var(--muted);font-size:12px}}.ai-grid b{{color:var(--ink)}}.ai-grid p{{margin:0;color:var(--ink)}}.technical pre{{max-height:360px;overflow:auto;padding:12px;background:#172033;color:#dbeafe;border-radius:8px;font-size:12px}}.footer{{margin-top:22px;color:#718096;font-size:12px}}@media(max-width:950px){{.page{{padding:20px 16px 40px}}.kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.priority-grid{{grid-template-columns:1fr}}.top{{display:block}}.status{{display:inline-flex;margin-top:12px}}}}@media(max-width:560px){{.kpis{{grid-template-columns:1fr 1fr;gap:8px}}.section{{padding:18px 15px}}h1{{font-size:24px}}table{{font-size:12px}}th,td{{padding:8px}}.methods{{grid-template-columns:1fr}}}}
+*{{box-sizing:border-box}}body{{margin:0;background:#f5f8fc;color:var(--ink);font:14px/1.65 "Segoe UI","Microsoft YaHei",Arial,sans-serif}}.page{{max-width:1440px;margin:0 auto;padding:32px 38px 56px}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;padding:22px 26px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 24px rgba(16,42,67,.05)}}h1{{margin:0;color:var(--navy);font-size:30px;letter-spacing:-.5px}}.eyebrow{{margin-bottom:5px;color:#315dcc;font-size:11px;font-weight:800;letter-spacing:1.6px}}.meta{{margin:10px 0 0;color:var(--muted);font-size:13px}}.status{{padding:8px 13px;border:1px solid #bbf7d0;border-radius:999px;background:#f0fdf4;color:var(--green);font-weight:700;white-space:nowrap}}.section{{margin-top:22px;padding:24px 26px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 20px rgba(16,42,67,.04)}}h2{{margin:0 0 15px;color:var(--navy);font-size:20px;border-left:4px solid var(--blue);padding-left:11px}}h3{{margin:0 0 12px;color:var(--navy);font-size:16px}}.conclusion{{padding:16px 18px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff;font-size:15px;font-weight:650;color:#173f7a}}.kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.kpi{{min-height:94px;padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,#fff,#f8fbff)}}.kpi label{{display:block;color:var(--muted);font-size:12px;font-weight:650}}.kpi b{{display:block;margin-top:6px;color:var(--navy);font-size:27px;line-height:1.1}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:12px;font-size:13px}}th,td{{padding:10px 11px;text-align:left;vertical-align:top;border-bottom:1px solid #e8eef5}}th{{background:#eff6ff;color:#173f7a;font-weight:800}}tr:last-child td{{border-bottom:0}}tbody tr:hover{{background:#fbfdff}}.def-cell{{color:#5b7590;font-size:12.5px;line-height:1.55;min-width:180px;max-width:320px}}.src-cell{{color:#0e5a44;font-size:12.5px;line-height:1.55;min-width:150px;max-width:230px;white-space:normal}}.result-pill{{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:750}}.result-pill.ok{{background:#ecfdf5;color:#047857}}.result-pill.warn{{background:#fff7ed;color:#b45309}}.priority-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}.priority-card{{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:15px 16px;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:12px;background:#fbfdff}}.priority-card strong{{font-size:14px}}.priority-card b{{grid-row:span 2;color:var(--navy);font-size:28px}}.priority-card span{{color:var(--muted);font-size:12px}}.priority-card.p0{{border-left-color:var(--red);background:#fffafa}}.priority-card.p1{{border-left-color:#f59e0b;background:#fffdf7}}.priority-card.p2{{border-left-color:var(--blue)}}.priority{{display:inline-flex;min-width:34px;justify-content:center;padding:3px 8px;border-radius:6px;font-weight:800}}.priority.p0{{background:#fee2e2;color:#b91c1c}}.priority.p1{{background:#fef3c7;color:#a16207}}.priority.p2{{background:#dbeafe;color:#1d4ed8}}code{{padding:2px 5px;border-radius:5px;background:#f1f5f9;color:#19324d;font-family:Consolas,monospace;font-size:12px}}.methods{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 24px;margin:0;padding-left:22px}}.methods li{{color:#3e5871}}.advice{{padding:15px 17px;border-radius:12px;background:#f8fafc;border:1px solid var(--line)}}.import{{padding:16px 18px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#92400e;font-weight:650}}.empty{{padding:18px;text-align:center;color:#94a3b8}}details{{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:#fbfdff}}summary{{cursor:pointer;padding:10px 12px;color:#2454ad;font-weight:750}}.ai-detail{{margin:0;border:0;background:transparent}}.ai-detail summary{{padding:0 0 7px;font-size:12px}}.ai-grid{{display:grid;grid-template-columns:80px 1fr;gap:5px 10px;padding:0 12px 12px;color:var(--muted);font-size:12px}}.ai-grid b{{color:var(--ink)}}.ai-grid p{{margin:0;color:var(--ink)}}.technical pre{{max-height:360px;overflow:auto;padding:12px;background:#172033;color:#dbeafe;border-radius:8px;font-size:12px}}.footer{{margin-top:22px;color:#718096;font-size:12px}}@media(max-width:950px){{.page{{padding:20px 16px 40px}}.kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.priority-grid{{grid-template-columns:1fr}}.top{{display:block}}.status{{display:inline-flex;margin-top:12px}}}}@media(max-width:560px){{.kpis{{grid-template-columns:1fr 1fr;gap:8px}}.section{{padding:18px 15px}}h1{{font-size:24px}}table{{font-size:12px}}th,td{{padding:8px}}.methods{{grid-template-columns:1fr}}}}
 @media print{{body{{background:#fff}}.page{{max-width:none;padding:0}}.section,.top{{box-shadow:none;break-inside:avoid}}details{{display:none}}}}
 </style></head><body><main class='page'>
-<header class='top'><div><div class='eyebrow'>KKS QUALITY CONTROL</div><h1>KKS 编码质量审核报告</h1><p class='meta'>源文件：{html.escape(str(result['source_file']))}<br>主表：{html.escape(str(result['sheet']))} · 表头行：{result['header_row']} · 审核范围：{metrics['effective_kks']} 条有效 KKS</p></div><span class='status'>质量审核结论</span></header>
+<header class='top'><div><div class='eyebrow'>KKS QUALITY CONTROL</div><h1>KKS 编码质量审核报告</h1><p class='meta'>源文件：{html.escape(str(result['source_file']))}<br>主表：{html.escape(str(result['sheet']))} · 表头行：{result['header_row']} · 审核范围：{metrics['effective_kks']} 条有效 KKS<br>规则依据体系：{html.escape(str(result.get('standard_display') or STANDARD_FULL.get(standard, standard)))}（按输入内容自动识别）</p></div><span class='status'>质量审核结论</span></header>
 <section class='section'><h2>一、总体结论</h2><div class='conclusion'>{html.escape(report_import_conclusion(result))}</div></section>
 <section class='section'><h2>二、关键质量指标</h2><div class='kpis'><div class='kpi'><label>有效 KKS 数量</label><b>{metrics['effective_kks']}</b></div><div class='kpi'><label>设备级编码</label><b>{metrics['device_level_codes']}</b></div><div class='kpi'><label>重复编码</label><b>{metrics['duplicate_codes']}</b></div><div class='kpi'><label>父级错误</label><b>{metrics['parent_errors']}</b></div><div class='kpi'><label>高风险问题（P0）</label><b>{metrics['p0']}</b></div><div class='kpi'><label>待治理问题（P1）</label><b>{metrics['p1']}</b></div><div class='kpi'><label>历史迁移问题（P2）</label><b>{metrics['p2']}</b></div></div></section>
 <section class='section'><h2>三、KKS 八维审核结果</h2><table><thead><tr><th>维度</th><th>检查项</th><th>结果</th><th>说明</th></tr></thead><tbody>{dimension_rows}</tbody></table></section>
 <section class='section'><h2>四、P0/P1/P2 问题分析</h2><div class='priority-grid'>{priority_rows}</div></section>
 <section class='section'><h2>五、问题整改建议</h2><div class='advice'>优先处理 P0 阻断问题；再治理 P1 扩展编码；P2 历史迁移保留原始证据，不直接覆盖源 Excel。其余规则提示仍保留在详细问题清单，整改完成后应重新审核，并在目标库做导入前验证。</div><h3 style='margin-top:18px'>审核方法</h3><ol class='methods'>{methods_html}</ol></section>
 <section class='section'><h2>六、导入评估结论</h2><div class='import'>{html.escape(report_import_conclusion(result))}<br><span style='font-weight:400'>源 Excel 始终只读；本次未连接真实 DM8/LOCATIONS 做导入验证。</span></div>{comparison_html}</section>
-<section class='section'><h2>七、详细问题清单</h2><table><thead><tr><th>等级</th><th>规则</th><th>行号</th><th>KKS</th><th>问题定义</th><th>问题</th><th>整改建议</th></tr></thead><tbody>{rows_html}</tbody></table></section>
+<section class='section'><h2>七、详细问题清单</h2><table><thead><tr><th>等级</th><th>规则</th><th>行号</th><th>KKS</th><th>问题定义</th><th>规则依据</th><th>问题</th><th>整改建议</th></tr></thead><tbody>{rows_html}</tbody></table></section>
 <section class='section'><details class='technical'><summary>查看 AI 语义复核依据（技术人员）</summary><p class='meta'>{ai_meta} AI 仅对规则筛出的不确定项提供辅助判断，正式结论仍保留规则证据和人工确认入口。</p><table><thead><tr><th>等级</th><th>行号</th><th>KKS</th><th>AI 依据</th></tr></thead><tbody>{ai_rows}</tbody></table></details><details class='technical'><summary>查看结构扫描备注</summary><ul>{notes_html}</ul></details></section>
 <p class='footer'>本报告定位为 KKS 编码质量审核验收报告。源 Excel 未修改；AI 复核过程和详细证据已保留在折叠区域及问题 Excel 的“AI复核（技术）”隐藏页。</p></main></body></html>"""
     path.write_text(body, encoding="utf-8")

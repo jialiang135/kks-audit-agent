@@ -68,7 +68,10 @@ class ReportPresentationTests(unittest.TestCase):
         try:
             run_audit.write_issue_workbook_xlsx(path, self.make_result())
             workbook = load_workbook(path, read_only=False, data_only=True)
-            self.assertEqual(list(workbook["问题清单"].iter_rows(min_row=1, max_row=1, values_only=True))[0], ("等级", "规则", "Excel 行号", "KKS", "问题定义", "问题", "整改建议"))
+            self.assertEqual(list(workbook["问题清单"].iter_rows(min_row=1, max_row=1, values_only=True))[0], ("等级", "规则", "Excel 行号", "KKS", "问题定义", "规则依据", "问题", "整改建议"))
+            # 首条 issue 行（KKS-04b）：规则依据列按默认火电体系给出条款出处
+            first_row = list(workbook["问题清单"].iter_rows(min_row=2, max_row=2, values_only=True))[0]
+            self.assertEqual(first_row[5], run_audit.rule_source("KKS-04b", run_audit.STANDARD_DEFAULT))
             self.assertEqual(workbook["AI复核（技术）"].sheet_state, "hidden")
             self.assertEqual(workbook["概览"]["A1"].value, "KKS 编码质量审核报告")
         finally:

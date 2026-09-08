@@ -1922,22 +1922,7 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
     ai = result.get("ai_review", {})
     standard = result.get("standard", STANDARD_DEFAULT)
 
-    def source_text(item: dict[str, Any]) -> str:
-        return rule_source(str(item.get("rule_id", "")), standard)
-
-    rows_html = "".join(
-        f"<tr><td><span class='priority p{html.escape(str(item.get('priority', 'P2'))[-1])}'>{html.escape(str(item.get('priority', 'P2')))}</span></td>"
-        f"<td>{html.escape(str(item.get('rule_id', '')))}</td><td>{html.escape(str(item.get('excel_row', '')))}</td>"
-        f"<td><code>{html.escape(str(item.get('kks_code', '')))}</code></td>"
-        f"<td class='def-cell'>{html.escape(str(item.get('definition') or item.get('category') or ''))}</td>"
-        f"<td class='src-cell'>{html.escape(source_text(item))}</td>"
-        f"<td><b>{html.escape(action_label(item))}</b>：{html.escape(detail_text(item))}</td>"
-        f"<td>{html.escape(suggestion_text(item))}</td></tr>"
-        for item in rows
-    ) or '<tr><td colspan="8" class="empty">未发现需要列入清单的问题</td></tr>'
-
     tree_html = rule_tree_html(issue_rule_tree(result)) or "<p class='empty'>未发现需要列入清单的问题</p>"
-    tree_flat = f"<details class='technical'><summary>查看平铺问题清单（{len(rows)} 条，按 KKS/行号平铺对照）</summary><table><thead><tr><th>等级</th><th>规则</th><th>行号</th><th>KKS</th><th>问题定义</th><th>规则依据</th><th>问题</th><th>整改建议</th></tr></thead><tbody>{rows_html}</tbody></table></details>"
 
     dimension_rows = "".join(
         f"<tr><td><b>{html.escape(item['dimension'])}</b></td><td>{html.escape(item['check'])}</td>"
@@ -1989,7 +1974,7 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
 <section class='section'><h2>四、P0/P1/P2 问题分析</h2><div class='priority-grid'>{priority_rows}</div></section>
 <section class='section'><h2>五、问题整改建议</h2><div class='advice'>优先处理 P0 阻断问题；再治理 P1 扩展编码；P2 历史迁移保留原始证据，不直接覆盖源 Excel。其余规则提示仍保留在详细问题清单，整改完成后应重新审核，并在目标库做导入前验证。</div><h3 style='margin-top:18px'>审核方法</h3><ol class='methods'>{methods_html}</ol></section>
 <section class='section'><h2>六、导入评估结论</h2><div class='import'>{html.escape(report_import_conclusion(result))}<br><span style='font-weight:400'>源 Excel 始终只读；本次未连接真实 DM8/LOCATIONS 做导入验证。</span></div>{comparison_html}</section>
-<section class='section'><h2>七、详细问题清单（按规则分组）</h2><p class='meta'>按 规则 → KKS → 行号明细 组织：每条规则一行（含问题定义/处置建议/规则依据），展开后列出该规则涉及的 KKS 编码（每个编码只出现一次）；再点击编码展开该编码下的行号明细。</p><div class='issue-tree'>{tree_html}</div>{tree_flat}</section>
+<section class='section'><h2>七、详细问题清单（按规则分组）</h2><p class='meta'>按 规则 → KKS → 行号明细 组织：每条规则一行（含问题定义/处置建议/规则依据），展开后列出该规则涉及的 KKS 编码（每个编码只出现一次）；再点击编码展开该编码下的行号明细。</p><div class='issue-tree'>{tree_html}</div></section>
 <section class='section'><details class='technical'><summary>查看 AI 语义复核依据（技术人员）</summary><p class='meta'>{ai_meta} AI 仅对规则筛出的不确定项提供辅助判断，正式结论仍保留规则证据和人工确认入口。</p><table><thead><tr><th>等级</th><th>行号</th><th>KKS</th><th>AI 依据</th></tr></thead><tbody>{ai_rows}</tbody></table></details><details class='technical'><summary>查看结构扫描备注</summary><ul>{notes_html}</ul></details></section>
 <p class='footer'>本报告定位为 KKS 编码质量审核验收报告。源 Excel 未修改；AI 复核过程和详细证据已保留在折叠区域及问题 Excel 的“AI复核（技术）”隐藏页。</p></main></body></html>"""
     path.write_text(body, encoding="utf-8")

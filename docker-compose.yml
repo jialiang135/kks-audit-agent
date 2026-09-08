@@ -1,0 +1,18 @@
+services:
+  kks-audit:
+    build: .
+    image: kks-audit-agent:latest
+    container_name: kks-audit
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # 审核输出持久化(报告 HTML / 问题清单 Excel / 上传副本)
+      - ./runs:/app/runs
+    environment:
+      TZ: Asia/Shanghai
+      # AI 语义复核默认关闭;如需开启,取消下行注释并填好 .env
+      # AI_ENABLED: "true"
+    # 如需 AI 复核:把 .env 放在本目录并取消下面两行注释
+    # env_file:
+    #   - .env

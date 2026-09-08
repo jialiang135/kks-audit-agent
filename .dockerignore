@@ -1,0 +1,15 @@
+.git
+.venv
+__pycache__
+**/__pycache__
+runs
+logs
+_tests
+_tmp_extract
+_extracted
+_pages
+测试文件
+国标
+*.spec
+build_exe.ps1
+.env

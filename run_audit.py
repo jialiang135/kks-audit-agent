@@ -87,6 +87,187 @@ def _report_issues(result: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+# ---------------------------------------------------------------- 问题分组树
+# 明细问题文本复用函数（HTML/Excel/Web 展示统一）
+_ACTION_LABELS = {
+    "confirmed_issue": "需整改",
+    "needs_human": "需确认",
+    "likely_false_positive": "建议抽查",
+}
+
+
+def action_label(item: dict[str, Any]) -> str:
+    """按 AI 复核结论给出问题处置动作标签（需整改/需确认/建议抽查/待确认）。"""
+    return _ACTION_LABELS.get(str(item.get("final_decision", "")), "待确认")
+
+
+def detail_text(item: dict[str, Any]) -> str:
+    """问题的具体描述（AI 复核后优先采用最终结论文本）。"""
+    return str(item.get("final_summary") or item.get("message") or item.get("category") or "待核问题")
+
+
+def suggestion_text(item: dict[str, Any]) -> str:
+    """问题的整改建议。"""
+    return str(item.get("final_suggestion") or item.get("suggestion") or "请结合原始 Excel 和业务资料确认。")
+
+
+def _excel_row_num(item: dict[str, Any]) -> int:
+    v = str(item.get("excel_row", "") or "").strip()
+    return int(v) if v.lstrip("-").isdigit() else 0
+
+
+def issue_rule_tree(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """把问题按「规则 → KKS → 行号明细」组织成展示树（HTML/Web 通用）。
+
+    返回轻量可序列化节点列表：
+      kind: "rule" | "code"；level 0/1
+      rule 节点: title=规则号  sub=问题定义  action=处置标签(需整改/需确认/建议抽查)
+                source=规则依据(文件名+章节)  children=该规则涉及的 KKS（去重，每个只出现一次）
+      code 节点: title=KKS 编码  sub=设备名  issues=行号明细(行号/问题描述/整改建议)
+    p0/p1/p2/count 为子树聚合计数。规则级属性上提到规则节点，明细行不再重复。
+    """
+    standard = str(result.get("standard", STANDARD_DEFAULT))
+    priority_order = {"P0": 0, "P1": 1, "P2": 2}
+    issues = sorted(
+        _report_issues(result),
+        key=lambda it: (
+            priority_order.get(str(it.get("priority")), 9),
+            str(it.get("rule_id", "")),
+            str(it.get("kks_code", "")),
+            _excel_row_num(it),
+        ),
+    )
+
+    rules: list[dict[str, Any]] = []
+    rule_index: dict[str, dict[str, Any]] = {}
+
+    def bump(node: dict[str, Any], pr: str) -> None:
+        if pr == "P0":
+            node["p0"] += 1
+        elif pr == "P1":
+            node["p1"] += 1
+        else:
+            node["p2"] += 1
+
+    for item in issues:
+        rid = str(item.get("rule_id") or "未编号规则")
+        pr = str(item.get("priority", "P2"))
+        rule = rule_index.get(rid)
+        if rule is None:
+            rule = {
+                "kind": "rule", "level": 0,
+                "title": rid,
+                "sub": str(item.get("definition") or item.get("category") or ""),
+                "note": "",
+                "action": action_label(item),
+                "source": rule_source(rid, standard),
+                "priority": pr,
+                "p0": 0, "p1": 0, "p2": 0, "count": 0,
+                "issues": [], "children": [],
+            }
+            rules.append(rule)
+            rule_index[rid] = rule
+
+        code = str(item.get("kks_code") or "").strip()
+        node: dict[str, Any] | None = None
+        for child in rule["children"]:  # 同一规则下编码数量有限，线性查找即可
+            if child["title"] == code:
+                node = child
+                break
+        if node is None:
+            node = {
+                "kind": "code", "level": 1,
+                "title": code or "未挂接编码的问题",
+                "sub": str(item.get("name") or ""),
+                "note": "",
+                "action": "", "source": "",
+                "priority": pr,
+                "p0": 0, "p1": 0, "p2": 0, "count": 0,
+                "issues": [], "children": [],
+            }
+            rule["children"].append(node)
+
+        node["issues"].append({
+            "priority": pr,
+            "rule_id": rid,
+            "kks_code": code,
+            "name": str(item.get("name") or ""),
+            "excel_row": item.get("excel_row", ""),
+            "message": detail_text(item),
+            "suggestion": suggestion_text(item),
+            "status": item.get("status", ""),
+            "ai_decision": item.get("ai_decision", ""),
+        })
+        bump(rule, pr)
+        bump(node, pr)
+        rule["count"] += 1
+        node["count"] += 1
+
+    for rule in rules:
+        rule["note"] = f"{len(rule['children'])} 个编码 · {rule['count']} 条"
+        for node in rule["children"]:
+            node["note"] = f"{node['count']} 条"
+    return rules
+
+
+def rule_tree_html(nodes: list[dict[str, Any]]) -> str:
+    """把 issue_rule_tree 的分组树渲染为 <details> 折叠 HTML。
+
+    规则节点默认展开（呈现该规则涉及的 KKS 清单）；KKS 节点默认收起，
+    点击展开后才显示行号明细——默认页面短，且规则字段/KKS 不再重复出现。
+    """
+    parts = []
+    for node in nodes:
+        kind = node.get("kind")
+        title = html.escape(str(node.get("title") or ""))
+        sub = html.escape(str(node.get("sub") or ""))
+        note = html.escape(str(node.get("note") or ""))
+        badge = "".join(
+            f"<span class='tb tb-p{c}'>{node.get('p' + c, 0)}</span>"
+            for c in ("0", "1", "2") if node.get("p" + c, 0)
+        )
+        if kind == "code":
+            rows = node.get("issues") or []
+            summary = (
+                f"<span class='it-name'>{title or '未挂接编码的问题'}</span>"
+                + (f"<span class='it-title'>{sub}</span>" if sub else "")
+                + f"<span class='it-count'>{note}</span>{badge}"
+            )
+            inner = ""
+            if rows:
+                inner = "<div class='it-issues'>" + "".join(
+                    f"<div class='it-issue'><span class='it-row'>行号 {html.escape(str(row.get('excel_row', '') or '—'))}</span>"
+                    f"<span class='it-msg'>{html.escape(str(row.get('message') or '待核问题'))}</span>"
+                    f"<div class='it-suggest'>建议：{html.escape(str(row.get('suggestion') or ''))}</div></div>"
+                    for row in rows
+                ) + "</div>"
+            parts.append(f"<details class='it-node it-code'><summary>{summary}</summary>{inner}</details>")
+            continue
+
+        # 规则节点：P 徽标 + 规则号 + 问题定义 + 处置标签 + 计数；展开出 KKS 清单
+        p = node.get("priority", "P2")
+        act = html.escape(str(node.get("action") or "待确认"))
+        act_cls = {"需整改": "act-fix", "需确认": "act-hm"}.get(str(node.get("action")), "act-ck")
+        src = html.escape(str(node.get("source") or ""))
+        summary = (
+            f"<span class='priority p{str(p)[-1]}'>{html.escape(str(p))}</span>"
+            f"<span class='it-name tg-rid'>{title}</span>"
+            f"<span class='tg-def'>{sub}</span>"
+            f"<span class='tg-act {act_cls}'>{act}</span>"
+            f"<span class='it-count'>{note}</span>"
+        )
+        kids = rule_tree_html(node.get("children") or [])
+        src_html = f"<div class='tg-src'>规则依据：{src}</div>" if src else ""
+        parts.append(
+            f"<details class='it-node tg-rule' open><summary>{summary}</summary>{src_html}"
+            f"<div class='it-kids'>{kids}</div></details>"
+        )
+    return "".join(parts)
+
+
+
+
+
 def quality_metrics(result: dict[str, Any]) -> dict[str, int]:
     """Return business-facing quality metrics used by the report and UI.
 
@@ -1741,15 +1922,6 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
     ai = result.get("ai_review", {})
     standard = result.get("standard", STANDARD_DEFAULT)
 
-    def action_label(item: dict[str, Any]) -> str:
-        return {"confirmed_issue": "需整改", "needs_human": "需确认", "likely_false_positive": "建议抽查"}.get(str(item.get("final_decision", "")), "待确认")
-
-    def detail_text(item: dict[str, Any]) -> str:
-        return str(item.get("final_summary") or item.get("message") or item.get("category") or "待核问题")
-
-    def suggestion_text(item: dict[str, Any]) -> str:
-        return str(item.get("final_suggestion") or item.get("suggestion") or "请结合原始 Excel 和业务资料确认。")
-
     def source_text(item: dict[str, Any]) -> str:
         return rule_source(str(item.get("rule_id", "")), standard)
 
@@ -1763,6 +1935,9 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
         f"<td>{html.escape(suggestion_text(item))}</td></tr>"
         for item in rows
     ) or '<tr><td colspan="8" class="empty">未发现需要列入清单的问题</td></tr>'
+
+    tree_html = rule_tree_html(issue_rule_tree(result)) or "<p class='empty'>未发现需要列入清单的问题</p>"
+    tree_flat = f"<details class='technical'><summary>查看平铺问题清单（{len(rows)} 条，按 KKS/行号平铺对照）</summary><table><thead><tr><th>等级</th><th>规则</th><th>行号</th><th>KKS</th><th>问题定义</th><th>规则依据</th><th>问题</th><th>整改建议</th></tr></thead><tbody>{rows_html}</tbody></table></details>"
 
     dimension_rows = "".join(
         f"<tr><td><b>{html.escape(item['dimension'])}</b></td><td>{html.escape(item['check'])}</td>"
@@ -1804,8 +1979,8 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
     body = f"""<!doctype html><html lang='zh-CN'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>KKS 编码质量审核报告</title>
 <style>
 :root{{--blue:#1d4ed8;--navy:#102a43;--ink:#243b53;--muted:#627d98;--line:#d9e2ec;--soft:#f7faff;--green:#16845b;--amber:#b45309;--red:#c2413b}}
-*{{box-sizing:border-box}}body{{margin:0;background:#f5f8fc;color:var(--ink);font:14px/1.65 "Segoe UI","Microsoft YaHei",Arial,sans-serif}}.page{{max-width:1440px;margin:0 auto;padding:32px 38px 56px}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;padding:22px 26px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 24px rgba(16,42,67,.05)}}h1{{margin:0;color:var(--navy);font-size:30px;letter-spacing:-.5px}}.eyebrow{{margin-bottom:5px;color:#315dcc;font-size:11px;font-weight:800;letter-spacing:1.6px}}.meta{{margin:10px 0 0;color:var(--muted);font-size:13px}}.status{{padding:8px 13px;border:1px solid #bbf7d0;border-radius:999px;background:#f0fdf4;color:var(--green);font-weight:700;white-space:nowrap}}.section{{margin-top:22px;padding:24px 26px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 20px rgba(16,42,67,.04)}}h2{{margin:0 0 15px;color:var(--navy);font-size:20px;border-left:4px solid var(--blue);padding-left:11px}}h3{{margin:0 0 12px;color:var(--navy);font-size:16px}}.conclusion{{padding:16px 18px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff;font-size:15px;font-weight:650;color:#173f7a}}.kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.kpi{{min-height:94px;padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,#fff,#f8fbff)}}.kpi label{{display:block;color:var(--muted);font-size:12px;font-weight:650}}.kpi b{{display:block;margin-top:6px;color:var(--navy);font-size:27px;line-height:1.1}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:12px;font-size:13px}}th,td{{padding:10px 11px;text-align:left;vertical-align:top;border-bottom:1px solid #e8eef5}}th{{background:#eff6ff;color:#173f7a;font-weight:800}}tr:last-child td{{border-bottom:0}}tbody tr:hover{{background:#fbfdff}}.def-cell{{color:#5b7590;font-size:12.5px;line-height:1.55;min-width:180px;max-width:320px}}.src-cell{{color:#0e5a44;font-size:12.5px;line-height:1.55;min-width:150px;max-width:230px;white-space:normal}}.result-pill{{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:750}}.result-pill.ok{{background:#ecfdf5;color:#047857}}.result-pill.warn{{background:#fff7ed;color:#b45309}}.priority-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}.priority-card{{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:15px 16px;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:12px;background:#fbfdff}}.priority-card strong{{font-size:14px}}.priority-card b{{grid-row:span 2;color:var(--navy);font-size:28px}}.priority-card span{{color:var(--muted);font-size:12px}}.priority-card.p0{{border-left-color:var(--red);background:#fffafa}}.priority-card.p1{{border-left-color:#f59e0b;background:#fffdf7}}.priority-card.p2{{border-left-color:var(--blue)}}.priority{{display:inline-flex;min-width:34px;justify-content:center;padding:3px 8px;border-radius:6px;font-weight:800}}.priority.p0{{background:#fee2e2;color:#b91c1c}}.priority.p1{{background:#fef3c7;color:#a16207}}.priority.p2{{background:#dbeafe;color:#1d4ed8}}code{{padding:2px 5px;border-radius:5px;background:#f1f5f9;color:#19324d;font-family:Consolas,monospace;font-size:12px}}.methods{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 24px;margin:0;padding-left:22px}}.methods li{{color:#3e5871}}.advice{{padding:15px 17px;border-radius:12px;background:#f8fafc;border:1px solid var(--line)}}.import{{padding:16px 18px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#92400e;font-weight:650}}.empty{{padding:18px;text-align:center;color:#94a3b8}}details{{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:#fbfdff}}summary{{cursor:pointer;padding:10px 12px;color:#2454ad;font-weight:750}}.ai-detail{{margin:0;border:0;background:transparent}}.ai-detail summary{{padding:0 0 7px;font-size:12px}}.ai-grid{{display:grid;grid-template-columns:80px 1fr;gap:5px 10px;padding:0 12px 12px;color:var(--muted);font-size:12px}}.ai-grid b{{color:var(--ink)}}.ai-grid p{{margin:0;color:var(--ink)}}.technical pre{{max-height:360px;overflow:auto;padding:12px;background:#172033;color:#dbeafe;border-radius:8px;font-size:12px}}.footer{{margin-top:22px;color:#718096;font-size:12px}}@media(max-width:950px){{.page{{padding:20px 16px 40px}}.kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.priority-grid{{grid-template-columns:1fr}}.top{{display:block}}.status{{display:inline-flex;margin-top:12px}}}}@media(max-width:560px){{.kpis{{grid-template-columns:1fr 1fr;gap:8px}}.section{{padding:18px 15px}}h1{{font-size:24px}}table{{font-size:12px}}th,td{{padding:8px}}.methods{{grid-template-columns:1fr}}}}
-@media print{{body{{background:#fff}}.page{{max-width:none;padding:0}}.section,.top{{box-shadow:none;break-inside:avoid}}details{{display:none}}}}
+*{{box-sizing:border-box}}body{{margin:0;background:#f5f8fc;color:var(--ink);font:14px/1.65 "Segoe UI","Microsoft YaHei",Arial,sans-serif}}.page{{max-width:1440px;margin:0 auto;padding:32px 38px 56px}}.top{{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;padding:22px 26px;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 24px rgba(16,42,67,.05)}}h1{{margin:0;color:var(--navy);font-size:30px;letter-spacing:-.5px}}.eyebrow{{margin-bottom:5px;color:#315dcc;font-size:11px;font-weight:800;letter-spacing:1.6px}}.meta{{margin:10px 0 0;color:var(--muted);font-size:13px}}.status{{padding:8px 13px;border:1px solid #bbf7d0;border-radius:999px;background:#f0fdf4;color:var(--green);font-weight:700;white-space:nowrap}}.section{{margin-top:22px;padding:24px 26px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 6px 20px rgba(16,42,67,.04)}}h2{{margin:0 0 15px;color:var(--navy);font-size:20px;border-left:4px solid var(--blue);padding-left:11px}}h3{{margin:0 0 12px;color:var(--navy);font-size:16px}}.conclusion{{padding:16px 18px;border:1px solid #bfdbfe;border-radius:12px;background:#eff6ff;font-size:15px;font-weight:650;color:#173f7a}}.kpis{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.kpi{{min-height:94px;padding:15px 16px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(145deg,#fff,#f8fbff)}}.kpi label{{display:block;color:var(--muted);font-size:12px;font-weight:650}}.kpi b{{display:block;margin-top:6px;color:var(--navy);font-size:27px;line-height:1.1}}table{{width:100%;border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid var(--line);border-radius:12px;font-size:13px}}th,td{{padding:10px 11px;text-align:left;vertical-align:top;border-bottom:1px solid #e8eef5}}th{{background:#eff6ff;color:#173f7a;font-weight:800}}tr:last-child td{{border-bottom:0}}tbody tr:hover{{background:#fbfdff}}.def-cell{{color:#5b7590;font-size:12.5px;line-height:1.55;min-width:180px;max-width:320px}}.src-cell{{color:#0e5a44;font-size:12.5px;line-height:1.55;min-width:150px;max-width:230px;white-space:normal}}.issue-tree{{margin:6px 0 8px}}.it-node{{border:1px solid #dbe5ef;border-radius:9px;margin:5px 0;overflow:hidden}}.it-node>summary{{list-style:none;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 13px;cursor:pointer;font-weight:650;color:#173f7a;background:linear-gradient(180deg,#f2f7fd,#eaf2fa)}}.it-node>summary::-webkit-details-marker{{display:none}}.it-node>summary:before{{content:"▸";color:#8ba3bf;font-size:12px;width:14px}}.it-node[open]>summary:before{{content:"▾"}}.it-node[open]>summary{{background:#eaf2fa;border-bottom:1px solid #dbe5ef}}.it-name{{font-family:Consolas,Menlo,monospace;font-size:12.5px;color:#0b5394;font-weight:800}}.it-title{{color:#5b7590;font-size:12.5px;max-width:380px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.it-count{{color:#8aa0b8;font-size:12px;margin-left:auto}}.tb{{min-width:32px;padding:2px 7px;border-radius:999px;font-size:11.5px;font-weight:800;text-align:center}}.tb-p0{{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca}}.tb-p1{{background:#fffbeb;color:#b45309;border:1px solid #fde68a}}.tb-p2{{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}}.it-kids{{padding:2px 8px 8px 20px}}.it-issues{{padding:2px 14px 6px;background:#fff}}.it-issue{{display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap;padding:9px 2px 6px;border-top:1px dashed #e3ebf3;font-size:13px;line-height:1.55}}.it-issue .priority{{min-width:auto;padding:2px 7px}}.it-issue code{{margin-right:6px}}.it-issue .it-def{{color:#5b7590;font-size:12px}}.it-issue b{{margin-right:4px}}.it-suggest{{flex-basis:100%;color:#627d98;font-size:12px;padding-left:2px}}.it-leaf{{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:5px 13px;color:#627d98;font-size:12.5px}}.tg-rule{{border-left:3px solid #1d4ed8;background:#f3f7fc}}.tg-rule>summary{{background:linear-gradient(180deg,#edf4fc,#e0ebf7);font-size:13px;padding:8px 13px}}.tg-rule[open]>summary{{background:#e0ebf7}}.tg-rid{{font-size:13px;letter-spacing:.2px}}.tg-def{{color:#3e5871;font-size:12px;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}.tg-act{{display:inline-flex;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}}.tg-act.act-fix{{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca}}.tg-act.act-hm{{background:#fef3c7;color:#a16207;border:1px solid #fde68a}}.tg-act.act-ck{{background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe}}.tg-src{{padding:3px 14px 9px;color:#7a93ac;font-size:11.5px;background:#fff}}.it-code{{margin-left:3px;border-color:#e7eef6;background:#fff}}.it-code>summary{{background:#fff;border-bottom:1px dashed #e2e8f0;padding:5px 12px;font-size:12.5px;font-weight:700}}.it-code[open]>summary{{background:#f7fafd;border-bottom:1px solid #e2e8f0}}.it-row{{display:inline-flex;flex:0 0 auto;align-items:center;padding:1px 9px;border-radius:999px;background:#eef2f7;color:#40556b;font-size:11px;font-weight:800;white-space:nowrap}}.it-issue .it-msg{{flex:1 1 340px;color:#334155}}.result-pill{{display:inline-flex;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:750}}.result-pill.ok{{background:#ecfdf5;color:#047857}}.result-pill.warn{{background:#fff7ed;color:#b45309}}.priority-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}}.priority-card{{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:15px 16px;border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:12px;background:#fbfdff}}.priority-card strong{{font-size:14px}}.priority-card b{{grid-row:span 2;color:var(--navy);font-size:28px}}.priority-card span{{color:var(--muted);font-size:12px}}.priority-card.p0{{border-left-color:var(--red);background:#fffafa}}.priority-card.p1{{border-left-color:#f59e0b;background:#fffdf7}}.priority-card.p2{{border-left-color:var(--blue)}}.priority{{display:inline-flex;min-width:34px;justify-content:center;padding:3px 8px;border-radius:6px;font-weight:800}}.priority.p0{{background:#fee2e2;color:#b91c1c}}.priority.p1{{background:#fef3c7;color:#a16207}}.priority.p2{{background:#dbeafe;color:#1d4ed8}}code{{padding:2px 5px;border-radius:5px;background:#f1f5f9;color:#19324d;font-family:Consolas,monospace;font-size:12px}}.methods{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px 24px;margin:0;padding-left:22px}}.methods li{{color:#3e5871}}.advice{{padding:15px 17px;border-radius:12px;background:#f8fafc;border:1px solid var(--line)}}.import{{padding:16px 18px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#92400e;font-weight:650}}.empty{{padding:18px;text-align:center;color:#94a3b8}}details{{margin-top:12px;border:1px solid var(--line);border-radius:10px;background:#fbfdff}}summary{{cursor:pointer;padding:10px 12px;color:#2454ad;font-weight:750}}.ai-detail{{margin:0;border:0;background:transparent}}.ai-detail summary{{padding:0 0 7px;font-size:12px}}.ai-grid{{display:grid;grid-template-columns:80px 1fr;gap:5px 10px;padding:0 12px 12px;color:var(--muted);font-size:12px}}.ai-grid b{{color:var(--ink)}}.ai-grid p{{margin:0;color:var(--ink)}}.technical pre{{max-height:360px;overflow:auto;padding:12px;background:#172033;color:#dbeafe;border-radius:8px;font-size:12px}}.footer{{margin-top:22px;color:#718096;font-size:12px}}@media(max-width:950px){{.page{{padding:20px 16px 40px}}.kpis{{grid-template-columns:repeat(2,minmax(0,1fr))}}.priority-grid{{grid-template-columns:1fr}}.top{{display:block}}.status{{display:inline-flex;margin-top:12px}}}}@media(max-width:560px){{.kpis{{grid-template-columns:1fr 1fr;gap:8px}}.section{{padding:18px 15px}}h1{{font-size:24px}}table{{font-size:12px}}th,td{{padding:8px}}.methods{{grid-template-columns:1fr}}}}
+@media print{{body{{background:#fff}}.page{{max-width:none;padding:0}}.section,.top{{box-shadow:none;break-inside:avoid}}details:not(.it-node){{display:none}}details.it-node:not([open])>*{{display:block!important}}details.it-node{{display:block}}details.it-node>summary{{border-bottom:1px solid #dbe5ef}}details.it-node>summary:before{{content:none}}}}
 </style></head><body><main class='page'>
 <header class='top'><div><div class='eyebrow'>KKS QUALITY CONTROL</div><h1>KKS 编码质量审核报告</h1><p class='meta'>源文件：{html.escape(str(result['source_file']))}<br>主表：{html.escape(str(result['sheet']))} · 表头行：{result['header_row']} · 审核范围：{metrics['effective_kks']} 条有效 KKS<br>规则依据体系：{html.escape(str(result.get('standard_display') or STANDARD_FULL.get(standard, standard)))}（按输入内容自动识别）</p></div><span class='status'>质量审核结论</span></header>
 <section class='section'><h2>一、总体结论</h2><div class='conclusion'>{html.escape(report_import_conclusion(result))}</div></section>
@@ -1814,7 +1989,7 @@ def write_html(path: Path, result: dict[str, Any]) -> None:
 <section class='section'><h2>四、P0/P1/P2 问题分析</h2><div class='priority-grid'>{priority_rows}</div></section>
 <section class='section'><h2>五、问题整改建议</h2><div class='advice'>优先处理 P0 阻断问题；再治理 P1 扩展编码；P2 历史迁移保留原始证据，不直接覆盖源 Excel。其余规则提示仍保留在详细问题清单，整改完成后应重新审核，并在目标库做导入前验证。</div><h3 style='margin-top:18px'>审核方法</h3><ol class='methods'>{methods_html}</ol></section>
 <section class='section'><h2>六、导入评估结论</h2><div class='import'>{html.escape(report_import_conclusion(result))}<br><span style='font-weight:400'>源 Excel 始终只读；本次未连接真实 DM8/LOCATIONS 做导入验证。</span></div>{comparison_html}</section>
-<section class='section'><h2>七、详细问题清单</h2><table><thead><tr><th>等级</th><th>规则</th><th>行号</th><th>KKS</th><th>问题定义</th><th>规则依据</th><th>问题</th><th>整改建议</th></tr></thead><tbody>{rows_html}</tbody></table></section>
+<section class='section'><h2>七、详细问题清单（按规则分组）</h2><p class='meta'>按 规则 → KKS → 行号明细 组织：每条规则一行（含问题定义/处置建议/规则依据），展开后列出该规则涉及的 KKS 编码（每个编码只出现一次）；再点击编码展开该编码下的行号明细。</p><div class='issue-tree'>{tree_html}</div>{tree_flat}</section>
 <section class='section'><details class='technical'><summary>查看 AI 语义复核依据（技术人员）</summary><p class='meta'>{ai_meta} AI 仅对规则筛出的不确定项提供辅助判断，正式结论仍保留规则证据和人工确认入口。</p><table><thead><tr><th>等级</th><th>行号</th><th>KKS</th><th>AI 依据</th></tr></thead><tbody>{ai_rows}</tbody></table></details><details class='technical'><summary>查看结构扫描备注</summary><ul>{notes_html}</ul></details></section>
 <p class='footer'>本报告定位为 KKS 编码质量审核验收报告。源 Excel 未修改；AI 复核过程和详细证据已保留在折叠区域及问题 Excel 的“AI复核（技术）”隐藏页。</p></main></body></html>"""
     path.write_text(body, encoding="utf-8")

@@ -24,7 +24,7 @@ from typing import Any
 try:
     import openpyxl
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
     from openpyxl.utils import get_column_letter
 except Exception:  # pragma: no cover - 仅无 openpyxl 环境降级
@@ -823,16 +823,27 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
     today = date.today().isoformat()
 
     def header_style(ws, cell_range: str) -> None:
+        thin = Side(style="thin", color="9DB4D6")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
         for row in ws[cell_range]:
             for cell in row:
                 cell.fill = PatternFill("solid", fgColor=BLUE)
                 cell.font = Font(bold=True, color="FFFFFF")
                 cell.alignment = Alignment(vertical="center", wrap_text=True)
+                cell.border = border
 
     def body_style(ws, cell_range: str) -> None:
-        for row in ws[cell_range]:
+        # 细边框 + 隔行斑马纹，替代被移除的 Table 样式（普通边框/填充对 Excel 兼容性无风险）
+        thin = Side(style="thin", color="D8DEE7")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        zebra = PatternFill("solid", fgColor=GRAY)
+        start_row = int("".join(ch for ch in cell_range.split(":")[0] if ch.isdigit()))
+        for r_i, row in enumerate(ws[cell_range]):
             for cell in row:
                 cell.alignment = Alignment(vertical="top", wrap_text=True)
+                cell.border = border
+                if (start_row + r_i) % 2 == 0:
+                    cell.fill = zebra
 
     def autosize(ws, maximum: int = 46) -> None:
         for col_idx in range(1, ws.max_column + 1):

@@ -428,13 +428,12 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     for item in empty_name_items:
         item["status"] = "空/空格占位"
 
-    # AI 复核列：仅当 AI 实际复核过才注入，避免未启用时出现整列空白
+    # AI 复核列：仅当 AI 实际复核过才注入；"AI结论"前移至"编码"列后，打开即见，避免藏在最右侧
     if ai_active:
         for bucket in buckets:
-            bucket["columns"] = bucket["columns"] + [
-                {"k": "ai_decision_label", "t": "AI结论"},
-                {"k": "ai_final_summary", "t": "AI说明"},
-            ]
+            cols = bucket["columns"]
+            head, rest = cols[:2], cols[2:]
+            bucket["columns"] = head + [{"k": "ai_decision_label", "t": "AI结论"}] + rest + [{"k": "ai_final_summary", "t": "AI说明"}]
         for bucket in buckets:
             for item in bucket["items"]:
                 decision = str(item.get("final_decision", "") or "")
@@ -824,7 +823,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
   <ul class="tight">{abc_html}</ul>
 </div>"""
 
-    foot = f'<div class="foot">本报告由 WorkBuddy · kks-audit 八维框架自动生成 ｜ 审计基线 {today} ｜ 数字可回溯至审计 JSON</div>'
+    foot = f'<div class="foot">审计基线 {today}</div>'
 
     return f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">

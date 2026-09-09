@@ -186,6 +186,18 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     scope = result.get("scope_validation", {}) or {}
     incremental = bool(scope.get("incremental_batch"))
 
+    # ---- AI 复核结果（未启用时 candidate/reviewed 均为 0，展示层据此隐藏 AI 列）
+    ai = result.get("ai_review", {}) if isinstance(result.get("ai_review"), dict) else {}
+    ai_reviewed = int(ai.get("reviewed_count", 0) or 0)
+    ai_candidate = int(ai.get("candidate_count", 0) or 0)
+    ai_model_name = str(ai.get("model", "") or "")
+    ai_active = ai_reviewed > 0
+    _AI_DECISION_LABELS = {
+        "confirmed_issue": "确认为问题",
+        "likely_false_positive": "疑似误报",
+        "needs_human": "需人工确认",
+    }
+
     # ---- 各规则问题行（按行去重优先给最贴合的业务桶）
     unit_text_items: list[dict[str, Any]] = []
     empty_name_items: list[dict[str, Any]] = []
@@ -317,6 +329,8 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
         {"label": "重复码/非法字符/O-I/超12位", "value": f"{zero_clean:,}", "tone": "ok" if zero_clean == 0 else "bad"},
         {"label": "机组文本三方不一致(P1)", "value": f"{len(unit_text_items):,}", "tone": "warn" if unit_text_items else "ok"},
         {"label": "名称卫生+空名(P2/P1)", "value": f"{hygiene_n + empty_n:,}", "tone": "warn" if hygiene_n + empty_n else "ok"},
+        {"label": "AI 已复核" + (f"（候选{ai_candidate}）" if ai_candidate else ""),
+         "value": f"{ai_reviewed:,}", "tone": "ok" if ai_reviewed else "warn"},
     ]
 
     # ---- 八维卡片（六张，行内计数可回溯）
@@ -414,6 +428,19 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     for item in empty_name_items:
         item["status"] = "空/空格占位"
 
+    # AI 复核列：仅当 AI 实际复核过才注入，避免未启用时出现整列空白
+    if ai_active:
+        for bucket in buckets:
+            bucket["columns"] = bucket["columns"] + [
+                {"k": "ai_decision_label", "t": "AI结论"},
+                {"k": "ai_final_summary", "t": "AI说明"},
+            ]
+        for bucket in buckets:
+            for item in bucket["items"]:
+                decision = str(item.get("final_decision", "") or "")
+                item["ai_decision_label"] = _AI_DECISION_LABELS.get(decision, "需人工确认" if decision or item.get("ai_decision") else "")
+                item["ai_final_summary"] = str(item.get("final_summary", "") or "")
+
     # ---- 结构说明与范围
     structure_rows: list[tuple[str, str]] = []
     structure_rows.append(("文件性质", "增量新增批次，非全厂汇总" if incremental else "全量文件"))
@@ -451,6 +478,12 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
                         "text": "KKS 名称本身不唯一定位设备，聚簇仅作人工抽检线索并按簇计 1 条，不按簇内编码数放大。"})
     honesty.append({"tag": "列头健壮", "bold": "按表头名动态定位列",
                     "text": "同名/偏移列（如两列“设备名称（修编前）*”、父级列错位）按表头语义定位，不按固定索引。"})
+    if ai_active:
+        honesty.append({"tag": "AI复核", "bold": f"AI 已复核 {ai_reviewed}/{ai_candidate} 条候选",
+                        "text": f"模型 {ai_model_name or '—'}；结论分“确认为问题/疑似误报/需人工确认”，见各明细表“AI结论”“AI说明”列。AI 不会删除规则命中，仅辅助判断真假阳性。"})
+    else:
+        honesty.append({"tag": "AI复核", "bold": "AI 语义复核未启用或未产生复核结果",
+                        "text": "本报告仅含确定性规则结论；启用方式见工作台 AI 管理员配置。"})
 
     # ---- A/B/C 建议
     abc: list[tuple[str, str, str]] = []
@@ -500,6 +533,10 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
         "priority_counts": result.get("priority_counts", {}) or {},
         "standard_display": result.get("standard_display", ""),
         "kpis": kpis,
+        "ai_active": ai_active,
+        "ai_reviewed": ai_reviewed,
+        "ai_candidate": ai_candidate,
+        "ai_model": ai_model_name,
         "cards": cards,
         "must_handle": must_handle,
         "clean_flags": {
@@ -884,6 +921,8 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
     rows_out.extend([
         ("汇总", "主表已编码行", ov["data_rows"], "OK", "主表有效数据行"),
         ("汇总", "缺码非空行", ov["missing_rows"], "P1" if ov["missing_rows"] else "OK", "非空行缺 KKS 码"),
+        ("汇总", "AI 语义复核", ov["ai_reviewed"], "OK",
+         (f"候选 {ov['ai_candidate']} 条；模型 {ov['ai_model'] or '—'}" if ov["ai_active"] else "未启用，仅规则审计（可在 AI 管理员配置中开启）")),
     ])
     rows_out = list(dict.fromkeys(rows_out))
     ws.append([])

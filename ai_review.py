@@ -997,3 +997,75 @@ def test_ai_connection() -> dict[str, Any]:
         {"test": "kks-audit-connection"},
     )
     return {"ok": True, "status": "connected", "model": model, "model_source": source, "response": payload}
+
+
+def summarize_audit(result: dict[str, Any], progress_callback: ProgressCallback | None = None) -> dict[str, Any]:
+    """让模型对整份审核结果做总体总结（区别于逐条候选复核）。
+
+    AI 未启用或调用失败时返回 {}，展示层据此省略"AI 总体总结"节。
+    """
+    config = load_config()
+    if not (config.enabled and config.api_key):
+        return {}
+    try:
+        client = OpenAICompatibleClient(config)
+        model, _ = client.choose_model()
+        issues = [i for i in (result.get("issues") or []) if isinstance(i, dict)]
+        priority_counts: dict[str, int] = {}
+        rule_counts: dict[str, int] = {}
+        for issue in issues:
+            pr = str(issue.get("priority", ""))
+            if pr:
+                priority_counts[pr] = priority_counts.get(pr, 0) + 1
+            rid = str(issue.get("rule_id", ""))
+            if rid:
+                rule_counts[rid] = rule_counts.get(rid, 0) + 1
+        scope = result.get("scope_validation", {}) or {}
+        metrics = result.get("metrics", {}) or {}
+        ai_review = result.get("ai_review", {}) or {}
+        payload = {
+            "file": Path(str(result.get("source_file", ""))).name,
+            "conclusion": result.get("conclusion", ""),
+            "data_rows": result.get("data_rows"),
+            "issue_count": result.get("issue_count"),
+            "priority_counts": priority_counts,
+            "rule_top_counts": dict(sorted(rule_counts.items(), key=lambda kv: -kv[1])[:15]),
+            "metrics": {k: metrics.get(k) for k in (
+                "orphan_rows", "prefix_mismatch_rows", "converged_to_master_rows",
+                "self_ref_rows", "parent_longer_rows", "duplicate_groups",
+            ) if metrics.get(k) is not None},
+            "incremental_batch": bool(scope.get("incremental_batch")),
+            "external_parent_rows": scope.get("external_parent_rows", 0),
+            "ai_review": {
+                "candidate_count": ai_review.get("candidate_count", 0),
+                "reviewed_count": ai_review.get("reviewed_count", 0),
+            },
+        }
+        _emit_progress(progress_callback, {"phase": "ai", "stage": "summary_running", "status": "running", "percent": 93, "message": "AI 正在生成总体总结", "hint": f"模型：{model}"})
+        messages = [
+            {"role": "system", "content": (
+                "你是资深电厂 KKS 编码审核专家。基于程序化审核结果，撰写面向编码管理负责人的总体总结："
+                "overall 为 3-6 句中文总结（整体质量、主要风险、数据口径要点）；"
+                "points 为 3-5 条中文要点建议，每条一句话。只返回 JSON："
+                '{"overall":"...","points":["...","..."]}'
+            )},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        ]
+        req = {"model": model, "messages": messages, "temperature": 0.2, "response_format": {"type": "json_object"}}
+        try:
+            response = client._request_json("chat/completions", req)
+        except AIReviewError as exc:
+            if "response_format" not in str(exc).lower() and "json_object" not in str(exc).lower():
+                raise
+            req.pop("response_format", None)
+            response = client._request_json("chat/completions", req)
+        content = str(((response.get("choices") or [{}])[0].get("message") or {}).get("content", ""))
+        decoded = json.loads(content)
+        if not isinstance(decoded, dict) or not str(decoded.get("overall", "")).strip():
+            raise AIReviewError("AI 总体总结返回格式异常")
+        points = [str(pt).strip() for pt in (decoded.get("points") or []) if str(pt).strip()]
+        LOGGER.info("ai_summary_done model=%s points=%s", model, len(points))
+        return {"overall": str(decoded["overall"]).strip(), "points": points, "model": model, "status": "completed"}
+    except Exception as exc:
+        LOGGER.error("ai_summary_failed error=%s", exc)
+        return {"status": "failed", "error": str(exc)[:200]}

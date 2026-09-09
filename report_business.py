@@ -86,6 +86,12 @@ table.data td{padding:6px 10px;border:1px solid var(--line);vertical-align:top}
 .tag{display:inline-block;background:var(--blue2);color:#1e40af;border-radius:5px;padding:1px 7px;font-size:12px;margin:0 3px}
 ul.tight{margin:8px 0;padding-left:22px}ul.tight li{margin:4px 0}
 .foot{color:var(--mut);font-size:12px;text-align:center;margin-top:30px}
+details.sec{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 24px;margin:18px 0}
+details.sec>summary{cursor:pointer;list-style:none;margin:8px 0 0}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary h2::before{content:"▾ ";color:var(--mut);font-size:14px}
+details.sec:not([open])>summary h2::before{content:"▸ ";color:var(--mut);font-size:14px}
+details.sec[open]>summary{border-bottom:1px dashed var(--line);margin-bottom:12px;padding-bottom:8px}
 details.ai-item{border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:6px 0;background:var(--bg)}
 details.ai-item summary{cursor:pointer;font-size:13px;color:var(--ink)}
 details.ai-item .ai-body{margin-top:6px;font-size:13px;line-height:1.6}
@@ -199,6 +205,8 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     ai_candidate = int(ai.get("candidate_count", 0) or 0)
     ai_model_name = str(ai.get("model", "") or "")
     ai_active = ai_reviewed > 0
+    ai_summary = result.get("ai_summary", {}) if isinstance(result.get("ai_summary"), dict) else {}
+    ai_summary_ok = str(ai_summary.get("status", "")) == "completed" and str(ai_summary.get("overall", "")).strip()
     _AI_DECISION_LABELS = {
         "confirmed_issue": "确认为问题",
         "likely_false_positive": "疑似误报",
@@ -567,6 +575,7 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
         "ai_reviewed": ai_reviewed,
         "ai_candidate": ai_candidate,
         "ai_model": ai_model_name,
+        "ai_summary": ai_summary if ai_summary_ok else {},
         "ai_suggestions": ai_suggestions,
         "cards": cards,
         "must_handle": must_handle,
@@ -610,6 +619,14 @@ def _fmt_big(value: Any) -> str:
 
 def _sev_chip(sev: str, text: str) -> str:
     return f'<span class="sev {_esc(sev)}">{_esc(text)}</span>'
+
+
+def _fold_section(sec_html: str) -> str:
+    """把 <div class="sec"><h2>标题</h2>…</div> 转为可折叠的 <details class="sec" open>。"""
+    m = re.match(r'<div class="sec">\s*<h2>(.+?)</h2>(.*)</div>\s*$', sec_html, re.S)
+    if not m:
+        return sec_html
+    return f'<details class="sec" open><summary><h2>{m.group(1)}</h2></summary>{m.group(2)}</details>'
 
 
 def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
@@ -855,30 +872,22 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
   <ul class="tight">{abc_html}</ul>
 </div>"""
 
-    # 九、AI 复核建议（每条可折叠；仅 AI 启用且产生复核结果时出现）
+    # 九、AI 总体总结（模型对整份审核结果的归纳；未生成时省略本节）
     sec9 = ""
-    if ov.get("ai_active") and ov.get("ai_suggestions"):
-        sug9 = ov["ai_suggestions"]
-        dist9: dict[str, int] = {}
-        for s in sug9:
-            dist9[s["decision"]] = dist9.get(s["decision"], 0) + 1
-        dist_txt = " / ".join(f"{k} {v}" for k, v in dist9.items())
-        items9 = ""
-        for s in sug9[:80]:
-            cls9 = {"确认为问题": "confirmed", "疑似误报": "falsepos"}.get(s["decision"], "human")
-            body9 = f"<div class='ai-body'><span class='ai-tag {cls9}'>{esc(s['decision'])}</span>{esc(s['summary'])}"
-            if s["suggestion"]:
-                body9 += f"<br><b>建议：</b>{esc(s['suggestion'])}"
-            body9 += f"<br><span style='color:var(--mut);font-size:12px'>来源：{esc(s['bucket_title'])} · 行 {esc(s['excel_row'])}</span></div>"
-            items9 += (f"<details class='ai-item'><summary>行 {esc(s['excel_row'])} · {esc(s['kks_code'] or '—')}"
-                       f" · {esc(s['name'] or '—')}</summary>{body9}</details>")
-        more9 = (f"<div style='color:var(--mut);font-size:12px;margin-top:8px'>…其余 {len(sug9) - 80} 条见 Excel「AI复核建议」sheet</div>"
-                 if len(sug9) > 80 else "")
+    if ov.get("ai_summary"):
+        sumry = ov["ai_summary"]
+        points9 = "".join(f"<li>{esc(pt)}</li>" for pt in (sumry.get("points") or []))
         sec9 = f"""<div class="sec">
-  <h2>九、AI 复核建议（{len(sug9)} 条：{esc(dist_txt)}）</h2>
-  <div class="sub">模型 {esc(ov['ai_model'] or '—')}；点击每条展开 AI 判定理由与整改建议。</div>
-  {items9}{more9}
+  <h2>九、AI 总体总结</h2>
+  <div class="sub">模型 {esc(sumry.get('model') or '—')}；由 AI 归纳整份审核结果，仅供参考，不替代规则结论。</div>
+  <p style="margin:6px 0 10px">{esc(sumry['overall'])}</p>
+  <ul class="tight">{points9}</ul>
 </div>"""
+
+    # 一至九节全部转为可折叠章节（默认展开，点击标题收起/展开）
+    sec1, sec2, sec3, sec4, sec5, sec6, sec7, sec8, sec9 = (
+        _fold_section(s) for s in (sec1, sec2, sec3, sec4, sec5, sec6, sec7, sec8, sec9)
+    )
 
     foot = f'<div class="foot">审计基线 {today}</div>'
 

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import openpyxl
-from ai_review import review_issue_candidates
+from ai_review import review_issue_candidates, summarize_audit
 from app_runtime import APP_ROOT, configure_logging
 from report_business import build_overview, render_html, render_xlsx
 from openpyxl import Workbook
@@ -1239,6 +1239,7 @@ def apply_ai_review_stage(
 ) -> dict[str, Any]:
     """Run the optional semantic stage and update the audit conclusion."""
     result["ai_review"] = review_issue_candidates(result, progress_callback=progress_callback)
+    result["ai_summary"] = summarize_audit(result, progress_callback=progress_callback)
     result["final_decision_counts"] = final_decision_counts(result)
     final_counts = result["final_decision_counts"]
     final_actionable = final_counts.get("confirmed_issue", 0) + final_counts.get("needs_human", 0)

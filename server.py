@@ -34,6 +34,7 @@ from app_runtime import (
     tail_log,
 )
 from run_audit import issue_rule_tree, output_artifact_names, quality_metrics, rule_source
+from report_business import build_overview as business_overview
 
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -136,6 +137,7 @@ def _run_audit_job(
             scope_comparison=result.get("scope_comparison"),
             agent=result.get("agent_runtime", {}),
             issue_preview=_light_tree(result),
+            business_overview=business_overview(result),
             files=files,
         )
         LOGGER.info("audit_http_done run_id=%s ai_status=%s", run_id, result.get("ai_review", {}).get("status", "disabled"))
@@ -280,6 +282,58 @@ document.getElementById('skillUpload').addEventListener('change',e=>{const file=
 document.getElementById('saveSkill').onclick=async()=>{const path=document.getElementById('skillFile').value,content=document.getElementById('skill').value,box=document.getElementById('skillStatus'),button=document.getElementById('saveSkill');if(!path){setSkillStatus('请先选择 Skill 文件','error');return}button.disabled=true;button.classList.add('is-loading');button.textContent='保存中…';setSkillStatus('正在保存 Skill，请稍候……','pending');try{const d=await jsonFetch('/api/skill',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path,content})});const doc=skillDocuments.find(x=>x.path===path);if(doc)doc.content=content;skillOriginalContent=content;updateSkillEditorState();setSkillStatus(d.message||'Skill 文件已保存','success')}catch(err){setSkillStatus('保存失败：'+err.message,'error')}finally{button.disabled=false;button.classList.remove('is-loading');button.textContent='保存当前文件'}};
 document.getElementById('uploadSkill').onclick=async()=>{const input=document.getElementById('skillUpload'),box=document.getElementById('skillStatus'),button=document.getElementById('uploadSkill'),file=input.files[0];if(!file){setSkillStatus('请先选择 .md、.py 或 .zip 文件','error');return}button.disabled=true;button.classList.add('is-loading');button.textContent='上传中…';setSkillStatus('正在上传 Skill，请稍候……','pending');try{const formData=new FormData();formData.append('file',file);formData.append('target',document.getElementById('skillFile').value||'');const d=await jsonFetch('/api/skill/upload',{method:'POST',body:formData});input.value='';document.getElementById('skillUploadName').textContent='未选择文件';await loadSkill();setSkillStatus(d.message||'Skill 文件已上传','success')}catch(err){setSkillStatus('上传失败：'+err.message,'error')}finally{button.disabled=false;button.classList.remove('is-loading');button.textContent='上传 Skill 文件 / 包'}};
 async function loadLogs(){const box=document.getElementById('logs'),button=document.getElementById('refreshLogs'),meta=document.getElementById('logMeta');setButtonBusy(button,true,'刷新中…','刷新日志');box.className='log-box';box.textContent='正在读取日志……';meta.textContent='正在刷新';try{const d=await jsonFetch('/api/logs?limit=300'),lines=Array.isArray(d.lines)?d.lines:[];box.textContent=lines.join('\\n')||'暂无运行日志';box.className=lines.length?'log-box':'log-box empty-state';meta.textContent='最近刷新：'+new Date().toLocaleTimeString()}catch(err){box.textContent='读取日志失败：'+err.message;box.className='log-box empty-state';meta.textContent='刷新失败'}finally{setButtonBusy(button,false,'刷新中…','刷新日志')}}document.getElementById('refreshLogs').onclick=loadLogs;loadState();loadConfig();loadSkill();loadLogs();
+</script><style>
+.biz-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:4px 0 12px}
+.biz-kpi{border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;background:#fff}
+.biz-kpi b{display:block;font-size:20px;color:#2563eb}.biz-kpi.warn b{color:#d97706}.biz-kpi.bad b{color:#dc2626}.biz-kpi.ok b{color:#059669}
+.biz-kpi span{display:block;margin-top:2px;color:#6b7a8d;font-size:11px}
+.biz-chips{display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 10px}
+.biz-chip{border:1px solid #dbeafe;background:#eff6ff;color:#1d4ed8;border-radius:999px;padding:4px 11px;font-size:12px;cursor:pointer;font-weight:600}
+.biz-chip b{margin-left:4px}
+.biz-chip.p0{border-color:#fecdd3;background:#fff1f2;color:#be123c}.biz-chip.p1{border-color:#fde0b2;background:#fffbeb;color:#b45309}
+.biz-chip.active{outline:2px solid #2563eb;background:#dbeafe}
+.biz-panel{margin-top:2px}
+.biz-table-wrap{overflow:auto;max-height:360px;border:1px solid #eef2f7;border-radius:10px}
+.biz-table{border-collapse:collapse;width:100%;font-size:12px;background:#fff}
+.biz-table th{position:sticky;top:0;background:#eef2f7;text-align:left;padding:6px 8px;border-bottom:1px solid #e2e8f0;color:#334155;white-space:nowrap;z-index:1}
+.biz-table td{padding:5px 8px;border-bottom:1px solid #eef2f7;vertical-align:top;word-break:break-all}
+.biz-more{color:#94a3b8;text-align:right;font-size:12px}
+@media(max-width:700px){.biz-kpis{grid-template-columns:repeat(2,1fr)}}
+</style><script>
+function _bizEsc(s){s=(s===null||s===undefined)?'':String(s);var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function renderBusinessOverview(ov){
+  var host=document.getElementById('issuePreview');if(!host)return;
+  var buckets=Array.isArray(ov&&ov.buckets)?ov.buckets.filter(function(b){return b.items&&b.items.length}):[];
+  var head=document.querySelector('.issue-preview-card .section-row h3');if(head)head.textContent='问题预览（业务分组）';
+  var act=document.querySelector('.issue-preview-card .section-row .text-action');if(act)act.textContent='点击分组查看明细，完整清单见 Excel';
+  if(!ov||!buckets.length){host.innerHTML='<div class="empty-preview">本次没有需要列入问题清单的问题</div>';return;}
+  var kpi='<div class="biz-kpis">'+(ov.kpis||[]).map(function(k){return '<div class="biz-kpi '+k.tone+'"><b>'+_bizEsc(k.value)+'</b><span>'+_bizEsc(k.label)+'</span></div>'}).join('')+'</div>';
+  var chips=buckets.map(function(b,i){return '<button type="button" class="biz-chip '+b.level.toLowerCase()+' biz-chip-'+i+'">'+_bizEsc(b.level)+'·'+_bizEsc(b.title)+' <b>'+b.count+'</b></button>'}).join('');
+  host.innerHTML=kpi+'<div class="biz-chips">'+chips+'</div><div class="biz-panel"></div>';
+  function renderTable(i){
+    var bkt=buckets[i],cols=bkt.columns||[],items=bkt.items||[];
+    var show=items.slice(0,80);
+    var th=cols.map(function(c){return '<th>'+_bizEsc(c.t)+'</th>'}).join('');
+    var tr=show.map(function(r){return '<tr>'+cols.map(function(c){return '<td>'+_bizEsc(r[c.k])+'</td>'}).join('')+'</tr>'}).join('');
+    if(items.length>show.length)tr+='<tr><td colspan="'+cols.length+'" class="biz-more">…共 '+items.length+' 条，完整清单见 Excel 下载</td></tr>';
+    var panel=host.querySelector('.biz-panel');if(!panel)return;
+    panel.innerHTML='<div class="biz-table-wrap"><table class="biz-table"><thead><tr>'+th+'</tr></thead><tbody>'+tr+'</tbody></table></div>';
+    var chipEls=host.querySelectorAll('.biz-chip');for(var j=0;j<chipEls.length;j++){chipEls[j].classList.toggle('active',j===i)}
+  }
+  var els=host.querySelectorAll('.biz-chip');for(var j=0;j<els.length;j++){(function(i){els[i].addEventListener('click',function(){renderTable(i)})})(j)}
+  renderTable(0);
+}
+function renderCompletedResult(d){
+  var counts=d.priority_counts||{};
+  document.getElementById('result').hidden=true;document.getElementById('progressPanel').hidden=true;document.getElementById('resultDashboard').hidden=false;
+  setText('uploadState','审核完成');
+  renderQualityMetrics(d.quality_metrics||{});
+  renderDistribution(counts,d.issue_count);
+  renderBusinessOverview(d.business_overview||null);
+  var links=document.getElementById('links');links.innerHTML='';
+  for(var key in (d.files||{})){var url=d.files[key];var a=document.createElement('a');a.className='download-card';a.href=url;a.download='';var icon=document.createElement('span');icon.className='download-icon';icon.textContent=key.indexOf('HTML')>=0?'</>':'XLSX';var copy=document.createElement('span');copy.className='download-copy';var title=document.createElement('strong');title.textContent=key;var desc=document.createElement('span');desc.textContent=key.indexOf('HTML')>=0?'八维业务化审核报告（总体结论/八维总表/分组明细）':'业务分组问题清单（概览+各类明细）';copy.append(title,desc);var action=document.createElement('span');action.className='download-action';action.textContent='下载';a.append(icon,copy,action);links.appendChild(a);}
+  links.hidden=!Object.keys(d.files||{}).length;
+}
 </script></body></html>"""
 UPLOAD_PAGE = UPLOAD_PAGE.replace("</head>", RESULT_UI_STYLE + AUDIT_REDESIGN_STYLE + DASHBOARD_UI_STYLE + "</head>")
 

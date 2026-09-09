@@ -26,7 +26,7 @@ try:
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
-    from openpyxl.worksheet.table import Table, TableStyleInfo
+    from openpyxl.utils import get_column_letter
 except Exception:  # pragma: no cover - 仅无 openpyxl 环境降级
     openpyxl = None
 
@@ -122,8 +122,12 @@ def _records(result: dict[str, Any]) -> list[dict[str, Any]]:
     return [r for r in recs if isinstance(r, dict)] if isinstance(recs, list) else []
 
 
+_XML_CTRL = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+
+
 def _esc(value: Any) -> str:
-    return _html.escape("" if value is None else str(value))
+    # 控制字符会让 HTML/XML 解析器告警，先剔除（保留 \t\n\r）
+    return _html.escape(_XML_CTRL.sub("", "" if value is None else str(value)))
 
 
 # ------------------------------------------------------------------ 辅助源表读取
@@ -930,16 +934,8 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
         ws2.freeze_panes = f"A{hrow + 1}"
         ws2.auto_filter.ref = f"A{hrow}:{get_column_letter(len(headers))}{max(hrow, ws2.max_row)}"
         autosize(ws2, 60)
-        # 表格样式
-        table_name = re.sub(r"\W", "", name)[:20] + str(ws2.max_row)
-        if len(data) > 1:
-            try:
-                ref = f"A{hrow}:{get_column_letter(len(headers))}{ws2.max_row}"
-                table = Table(displayName=table_name, ref=ref)
-                table.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
-                ws2.add_table(table)
-            except Exception:
-                pass
+        # 说明：不使用 openpyxl Table（table*.xml）。Table 部件 + auto_filter 叠加在部分 Excel
+        # 版本会触发"内容有问题，是否尝试恢复"；筛选/冻结/底色已覆盖表格观感，故仅保留 auto_filter。
 
     for name, bucket in sheet_specs:
         headers = [c["t"] for c in bucket["columns"]]
@@ -982,6 +978,11 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
 
     for ws_ in wb.worksheets:
         ws_.sheet_view.showGridLines = False
+        # 写盘前统一清除单元格文本中的 XML 非法控制字符（Excel 打开易报"内容有问题"）
+        for row_ in ws_.iter_rows():
+            for cell_ in row_:
+                if isinstance(cell_.value, str) and _XML_CTRL.search(cell_.value):
+                    cell_.value = _XML_CTRL.sub("", cell_.value)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(path)

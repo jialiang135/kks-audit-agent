@@ -86,6 +86,13 @@ table.data td{padding:6px 10px;border:1px solid var(--line);vertical-align:top}
 .tag{display:inline-block;background:var(--blue2);color:#1e40af;border-radius:5px;padding:1px 7px;font-size:12px;margin:0 3px}
 ul.tight{margin:8px 0;padding-left:22px}ul.tight li{margin:4px 0}
 .foot{color:var(--mut);font-size:12px;text-align:center;margin-top:30px}
+details.ai-item{border:1px solid var(--line);border-radius:8px;padding:6px 10px;margin:6px 0;background:var(--bg)}
+details.ai-item summary{cursor:pointer;font-size:13px;color:var(--ink)}
+details.ai-item .ai-body{margin-top:6px;font-size:13px;line-height:1.6}
+.ai-tag{display:inline-block;border-radius:999px;padding:0 8px;font-size:12px;margin-right:6px;font-weight:500}
+.ai-tag.confirmed{background:var(--p0b);color:var(--p0)}
+.ai-tag.falsepos{background:var(--okb);color:var(--ok)}
+.ai-tag.human{background:var(--p1b);color:var(--p1)}
 @media(max-width:820px){.kpis,.dims{grid-template-columns:1fr}}
 """
 
@@ -428,17 +435,41 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     for item in empty_name_items:
         item["status"] = "空/空格占位"
 
-    # AI 复核列：仅当 AI 实际复核过才注入；"AI结论"前移至"编码"列后，打开即见，避免藏在最右侧
+    # AI 复核列：仅当 AI 实际复核过才注入；置于明细表末尾，避免挤占业务列
     if ai_active:
         for bucket in buckets:
-            cols = bucket["columns"]
-            head, rest = cols[:2], cols[2:]
-            bucket["columns"] = head + [{"k": "ai_decision_label", "t": "AI结论"}] + rest + [{"k": "ai_final_summary", "t": "AI说明"}]
+            bucket["columns"] = bucket["columns"] + [
+                {"k": "ai_decision_label", "t": "AI结论"},
+                {"k": "ai_final_summary", "t": "AI说明"},
+            ]
         for bucket in buckets:
             for item in bucket["items"]:
                 decision = str(item.get("final_decision", "") or "")
                 item["ai_decision_label"] = _AI_DECISION_LABELS.get(decision, "需人工确认" if decision or item.get("ai_decision") else "")
                 item["ai_final_summary"] = str(item.get("final_summary", "") or "")
+
+    # ---- AI 复核建议（第九节 / Excel 独立 sheet 数据源）
+    ai_suggestions: list[dict[str, str]] = []
+    seen_ai_rows: set[tuple[str, str]] = set()
+    if ai_active:
+        for bucket in buckets:
+            for item in bucket["items"]:
+                summary = str(item.get("final_summary", "") or "")
+                if not summary:
+                    continue
+                key = (str(item.get("excel_row", "")), str(item.get("kks_code", "")))
+                if key in seen_ai_rows:
+                    continue
+                seen_ai_rows.add(key)
+                ai_suggestions.append({
+                    "excel_row": key[0],
+                    "kks_code": key[1],
+                    "name": str(item.get("name", "") or ""),
+                    "bucket_title": str(bucket["title"]),
+                    "decision": _AI_DECISION_LABELS.get(str(item.get("final_decision", "") or ""), "需人工确认"),
+                    "summary": summary,
+                    "suggestion": str(item.get("final_suggestion", "") or ""),
+                })
 
     # ---- 结构说明与范围
     structure_rows: list[tuple[str, str]] = []
@@ -536,6 +567,7 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
         "ai_reviewed": ai_reviewed,
         "ai_candidate": ai_candidate,
         "ai_model": ai_model_name,
+        "ai_suggestions": ai_suggestions,
         "cards": cards,
         "must_handle": must_handle,
         "clean_flags": {
@@ -823,6 +855,31 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
   <ul class="tight">{abc_html}</ul>
 </div>"""
 
+    # 九、AI 复核建议（每条可折叠；仅 AI 启用且产生复核结果时出现）
+    sec9 = ""
+    if ov.get("ai_active") and ov.get("ai_suggestions"):
+        sug9 = ov["ai_suggestions"]
+        dist9: dict[str, int] = {}
+        for s in sug9:
+            dist9[s["decision"]] = dist9.get(s["decision"], 0) + 1
+        dist_txt = " / ".join(f"{k} {v}" for k, v in dist9.items())
+        items9 = ""
+        for s in sug9[:80]:
+            cls9 = {"确认为问题": "confirmed", "疑似误报": "falsepos"}.get(s["decision"], "human")
+            body9 = f"<div class='ai-body'><span class='ai-tag {cls9}'>{esc(s['decision'])}</span>{esc(s['summary'])}"
+            if s["suggestion"]:
+                body9 += f"<br><b>建议：</b>{esc(s['suggestion'])}"
+            body9 += f"<br><span style='color:var(--mut);font-size:12px'>来源：{esc(s['bucket_title'])} · 行 {esc(s['excel_row'])}</span></div>"
+            items9 += (f"<details class='ai-item'><summary>行 {esc(s['excel_row'])} · {esc(s['kks_code'] or '—')}"
+                       f" · {esc(s['name'] or '—')}</summary>{body9}</details>")
+        more9 = (f"<div style='color:var(--mut);font-size:12px;margin-top:8px'>…其余 {len(sug9) - 80} 条见 Excel「AI复核建议」sheet</div>"
+                 if len(sug9) > 80 else "")
+        sec9 = f"""<div class="sec">
+  <h2>九、AI 复核建议（{len(sug9)} 条：{esc(dist_txt)}）</h2>
+  <div class="sub">模型 {esc(ov['ai_model'] or '—')}；点击每条展开 AI 判定理由与整改建议。</div>
+  {items9}{more9}
+</div>"""
+
     foot = f'<div class="foot">审计基线 {today}</div>'
 
     return f"""<!DOCTYPE html>
@@ -841,6 +898,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
 {sec6}
 {sec7}
 {sec8}
+{sec9}
 {foot}
 </div></body></html>"""
 
@@ -1008,6 +1066,17 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
         write_sheet("P2_重码待处理", f"重码待处理未编码（{len(aux['rows'])}条）",
                     ["设备名称", "专业", "状态"],
                     [[r["name"], r["profession"], r["status"]] for r in aux["rows"]], set())
+
+    # AI 复核建议（独立 sheet；AI 未启用时跳过）
+    if ov.get("ai_active") and ov.get("ai_suggestions"):
+        write_sheet(
+            "AI复核建议",
+            f"AI 复核建议（{len(ov['ai_suggestions'])}条 · 模型 {ov['ai_model'] or '—'}）",
+            ["行", "编码", "设备名称", "来源分类", "AI结论", "AI说明", "AI建议"],
+            [[s["excel_row"], s["kks_code"], s["name"], s["bucket_title"], s["decision"], s["summary"], s["suggestion"]]
+             for s in ov["ai_suggestions"]],
+            {1},
+        )
 
     # 结构说明与范围
     ws3 = wb.create_sheet("结构说明与范围")

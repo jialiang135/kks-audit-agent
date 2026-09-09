@@ -336,12 +336,16 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     self_ref = _rule_count(result, {"KKS-10"})
     parent_longer = _rule_count(result, {"KKS-11"})
     orphan_rows = int(metrics.get("orphan_rows", 0) or 0)
+    # 数量列只放数字：增量批次孤儿已转为"主库闭合"范围验证，不产生缺陷计数，文字只进说明列
+    orphan_value = 0 if incremental else orphan_rows
+    orphan_hint = ("增量批次：父级不在本文件，已转主库闭合范围校验，不计缺陷（详见范围验证）"
+                   if incremental else "父级不在文件内（KKS-08）")
     hier_rows = [
         ("子码前缀违反", prefix_mismatch, "p0", "子码不以父码开头（KKS-09）"),
         ("自引用/环", self_ref, "p0", "父级环（KKS-10）"),
         ("父级比子码更长", parent_longer, "p0", "父级长度异常（KKS-11）"),
         ("跨机组断链", 0, "ok", "前缀机组与父级机组不一致"),
-        ("父级孤儿(范围验证)", ("主库闭合" if incremental else orphan_rows), "p2", "增量批次转主库闭合校验" if incremental else "父级不在文件内（KKS-08）"),
+        ("父级孤儿(范围验证)", orphan_value, "p2", orphan_hint),
     ]
     legacy_codes = _rule_count(result, {"KKS-16", "KKS-13", "KKS-18"})
     letter_realloc = _rule_count(result, {"KKS-14"})
@@ -850,11 +854,12 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
     ws["A3"].alignment = Alignment(wrap_text=True)
 
     def sev_chip(value: Any, level: str) -> str:
+        """等级列只输出 OK/P0/P1/P2；非数值占位（如范围验证行）按给定等级显示，杜绝文本串入。"""
         try:
             n = int(value)
             return "OK" if n == 0 else level
         except (TypeError, ValueError):
-            return str(value)
+            return level
 
     rows_out: list[tuple[str, str, Any, str, str]] = []
     for card in ov["cards"]:

@@ -1,20 +1,26 @@
 """审计台账：每次审核自动追加单次记录，并维护跨文件的累计汇总报告。
 
 - ledger（audit_ledger.json）：追加式 JSON 数组，每次 write_outputs=True 的审核记一条；
+- 趋势总结（audit_trend.json）：跨文件 AI 趋势总结的缓存，随台账更新而刷新；
 - 汇总报告（KKS审核台账汇总.html）：随每次审核自动重渲染，含累计 KPI、
-  逐文件明细表、以及“本次文件 vs 历史平均水平”的对比小节。
+  逐文件明细表、AI 跨文件趋势总结、以及“本次文件 vs 历史平均水平”的对比小节。
 - 台账落在 output_dir 的上一级（服务器为 runs/ 根，随卷持久化）。
 """
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from ai_review import summarize_ledger
 from report_business import CSS, _esc
 
+LOGGER = logging.getLogger("kks-audit.history")
+
 LEDGER_NAME = "audit_ledger.json"
+TREND_NAME = "audit_trend.json"
 HISTORY_NAME = "KKS审核台账汇总.html"
 
 _HIST_CSS = """
@@ -23,12 +29,40 @@ _HIST_CSS = """
 .hrow td.num{text-align:right;font-variant-numeric:tabular-nums}
 .hrow tr.hl td{background:#fffbe6}
 .hbad{color:var(--p0);font-weight:500}.hgood{color:var(--ok);font-weight:500}
+.trend{margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:#f7faff}
+.trend-h{font-weight:600;color:var(--ink);margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.trend-m{font-weight:400;font-size:12px;color:var(--muted)}
+.trend p{margin:0 0 6px;line-height:1.7}
+.trend ul{margin:0;padding-left:20px;line-height:1.8}
 """
 
 
 def ledger_path(output_dir: Path) -> Path:
     """台账与汇总报告位于 output_dir 的上一级（runs/ 根）。"""
     return output_dir.parent / LEDGER_NAME
+
+
+def trend_path(ledger_dir: Path) -> Path:
+    """趋势缓存与台账同目录（服务器为 runs 根）；参数是台账所在目录。"""
+    return ledger_dir / TREND_NAME
+
+
+def load_trend(ledger_dir: Path) -> dict[str, Any]:
+    """读取最近一次成功的跨文件 AI 趋势总结（无则返回 {}）。"""
+    path = trend_path(ledger_dir)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_trend(ledger_dir: Path, trend: dict[str, Any]) -> None:
+    path = trend_path(ledger_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(trend, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
 def history_path(output_dir: Path) -> Path:
@@ -81,8 +115,8 @@ def _rate(issues: int, rows: int) -> str:
     return f"{issues / rows * 100:.1f}%"
 
 
-def render_history_html(path: Path, ledger: list[dict[str, Any]]) -> None:
-    """渲染跨文件汇总报告：累计 KPI + 逐文件明细 + 本次 vs 历史对比。"""
+def render_history_html(path: Path, ledger: list[dict[str, Any]], ai_trend: dict[str, Any] | None = None) -> None:
+    """渲染跨文件汇总报告：累计 KPI + 本次对比 + AI 趋势总结 + 逐文件明细。"""
     path.parent.mkdir(parents=True, exist_ok=True)
     if not ledger:
         path.write_text("<!DOCTYPE html><html lang=zh-CN><meta charset=utf-8><body>暂无审核记录</body></html>", encoding="utf-8")
@@ -127,6 +161,21 @@ def render_history_html(path: Path, ledger: list[dict[str, Any]]) -> None:
             f"<span class='{cls}'>{'高' if diff > 0 else '低'} {abs(diff):.1f} 个百分点</span>。"
         )
 
+    trend_html = ""
+    if isinstance(ai_trend, dict) and str(ai_trend.get("overall", "")).strip():
+        pts = "".join(f"<li>{_esc(p)}</li>" for p in (ai_trend.get("points") or []) if str(p).strip())
+        meta = (
+            f"模型 {_esc(ai_trend.get('model', ''))} ｜ 基于 {int(ai_trend.get('file_count', len(ledger)) or len(ledger))} 次审核"
+            f" ｜ {_esc(ai_trend.get('ts', ''))}"
+        )
+        trend_html = (
+            '<div class="sec"><h2>AI 跨文件趋势总结</h2>'
+            f'<div class="trend"><div class="trend-h">趋势与改进建议<span class="trend-m">{meta}</span></div>'
+            f"<p>{_esc(ai_trend['overall'])}</p>"
+            + (f"<ul>{pts}</ul>" if pts else "")
+            + "</div></div>"
+        )
+
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -147,7 +196,7 @@ def render_history_html(path: Path, ledger: list[dict[str, Any]]) -> None:
 <div class="sec"><h2>本次审核 vs 历史平均</h2>
 <div class="sub">最新一次：<b>{_esc(latest.get('file', ''))}</b>（{_esc(latest.get('ts', ''))}）｜{_esc(latest.get('conclusion', ''))}</div>
 <p>{cmp_html}</p></div>
-
+{trend_html}
 <div class="sec"><h2>审核历史明细（新→旧）</h2>
 <table class="hrow" style="width:100%;border-collapse:collapse">
 <tr><th>时间</th><th>文件</th><th>数据行</th><th>问题</th><th>问题率</th><th>P0</th><th>P1</th><th>P2</th><th>AI复核</th><th>口径</th></tr>
@@ -161,9 +210,27 @@ def render_history_html(path: Path, ledger: list[dict[str, Any]]) -> None:
     path.write_text(html, encoding="utf-8")
 
 
-def record_and_render(input_path: Path, output_dir: Path, result: dict[str, Any]) -> Path:
-    """审核完成后的统一入口：追加台账 + 重渲染汇总报告，返回汇总报告路径。"""
+def record_and_render(
+    input_path: Path,
+    output_dir: Path,
+    result: dict[str, Any],
+    *,
+    progress_callback: Any = None,
+) -> Path:
+    """审核完成后的统一入口：追加台账 + 刷新 AI 趋势总结 + 重渲染汇总报告。"""
     ledger = append_ledger(input_path, output_dir, result)
     summary = history_path(output_dir)
-    render_history_html(summary, ledger)
+    ledger_dir = output_dir.parent
+    trend: dict[str, Any] = {}
+    if len(ledger) >= 2:  # 仅 1 条记录时不存在"跨文件"趋势
+        try:
+            trend = summarize_ledger(ledger, progress_callback=progress_callback) or {}
+        except Exception as exc:  # 趋势失败不阻断台账
+            LOGGER.warning("ai_trend_failed_unexpected error=%s", exc)
+            trend = {}
+        if str(trend.get("overall", "")).strip():
+            save_trend(ledger_dir, trend)
+        else:
+            trend = load_trend(ledger_dir)  # 本次未产出则沿用上次成功结果
+    render_history_html(summary, ledger, ai_trend=trend)
     return summary

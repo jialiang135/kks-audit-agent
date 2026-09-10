@@ -367,7 +367,12 @@ function loadHistory(){
       h+='<tr'+(idx===0?' style="background:#fffbe6"':'')+'><td>'+esc(e.ts)+'</td><td>'+esc(e.file)+'</td><td>'+(+e.rows||0).toLocaleString()+'</td><td>'+(+e.issues||0).toLocaleString()+'</td><td>'+rate(+e.issues||0,+e.rows||0)+'</td><td>'+((e.priority&&e.priority.P0)||0)+'</td><td>'+((e.priority&&e.priority.P1)||0)+'</td><td>'+((e.priority&&e.priority.P2)||0)+'</td><td>'+esc(ai)+'</td><td>'+(e.incremental?'增量':'全量')+'</td></tr>';
     });
     h+='</tbody></table></div>';
-    host.innerHTML=kpis+h+'<div class="muted" style="margin-top:8px;font-size:12px">跨文件汇总报告：服务端 runs 目录「KKS审核台账汇总.html」（含本次 vs 历史平均问题率对比）。</div>';
+    var trend='',t=d&&d.trend;
+    if(t&&t.overall){
+      var tpts=(t.points||[]).map(function(p){return '<li>'+esc(p)+'</li>'}).join('');
+      trend='<div class="biz-aisum" style="margin:12px 0"><div class="biz-aisum-h">AI 跨文件趋势总结<span class="biz-aisum-m">'+esc(t.model||'')+' ｜ 基于 '+(t.file_count||entries.length)+' 次审核 ｜ '+esc(t.ts||'')+'</span></div><p>'+esc(t.overall)+'</p>'+(tpts?'<ul>'+tpts+'</ul>':'')+'</div>';
+    }
+    host.innerHTML=kpis+trend+h+'<div class="muted" style="margin-top:8px;font-size:12px">跨文件汇总报告：服务端 runs 目录「KKS审核台账汇总.html」（含 AI 趋势总结与本次 vs 历史平均对比）。</div>';
   }).catch(function(err){host.innerHTML='<div class="muted">读取台账失败：'+esc(err&&err.message)+'</div>'});
 }
 document.getElementById('refreshHistory').onclick=loadHistory;
@@ -598,8 +603,11 @@ class AuditHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": str(exc)}, 400)
             return
         if path == "/api/history":
-            from audit_history import LEDGER_NAME, load_ledger
-            self.send_json({"entries": load_ledger(self.runs_dir / LEDGER_NAME)})
+            from audit_history import LEDGER_NAME, load_ledger, load_trend
+            self.send_json({
+                "entries": load_ledger(self.runs_dir / LEDGER_NAME),
+                "trend": load_trend(self.runs_dir),
+            })
             return
         if path == "/api/logs":
             query = parse_qs(parsed.query)

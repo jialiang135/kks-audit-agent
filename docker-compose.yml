@@ -14,5 +14,6 @@ services:
       # AI 语义复核默认关闭;如需开启,取消下行注释并填好 .env
       # AI_ENABLED: "true"
     # 如需 AI 复核:把 .env 放在本目录并取消下面两行注释
+    # 可用开关(见 .env.example):AI_REVIEW_MAX_CANDIDATES / AI_SUMMARY_ENABLED / AI_TREND_SUMMARY_ENABLED
     # env_file:
     #   - .env

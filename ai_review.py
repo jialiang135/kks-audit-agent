@@ -19,6 +19,7 @@ import urllib.request
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
@@ -69,6 +70,8 @@ class AIConfig:
     timeout_seconds: int
     enabled: bool
     max_candidates: int = 0
+    summary_enabled: bool = True   # 单文件总体总结（AI_SUMMARY_ENABLED）
+    trend_enabled: bool = True     # 台账跨文件趋势总结（AI_TREND_SUMMARY_ENABLED）
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -141,6 +144,8 @@ def load_config() -> AIConfig:
         timeout_seconds=_parse_int(environment_value("AI_TIMEOUT_SECONDS", ai.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)), DEFAULT_TIMEOUT_SECONDS, 10, 300),
         enabled=enabled,
         max_candidates=_parse_int(environment_value("AI_REVIEW_MAX_CANDIDATES", ai.get("max_candidates", 0)), 0, 0, 2000),
+        summary_enabled=_parse_bool(environment_value("AI_SUMMARY_ENABLED", ai.get("summary_enabled", "")), True),
+        trend_enabled=_parse_bool(environment_value("AI_TREND_SUMMARY_ENABLED", ai.get("trend_enabled", "")), True),
     )
 
 
@@ -1017,6 +1022,9 @@ def summarize_audit(result: dict[str, Any], progress_callback: ProgressCallback 
     config = load_config()
     if not (config.enabled and config.api_key):
         return {}
+    if not config.summary_enabled:
+        LOGGER.info("ai_summary_skipped reason=AI_SUMMARY_ENABLED=false")
+        return {"status": "disabled", "reason": "AI_SUMMARY_ENABLED=false"}
     try:
         client = OpenAICompatibleClient(config)
         model, _ = client.choose_model()
@@ -1078,4 +1086,90 @@ def summarize_audit(result: dict[str, Any], progress_callback: ProgressCallback 
         return {"overall": str(decoded["overall"]).strip(), "points": points, "model": model, "status": "completed"}
     except Exception as exc:
         LOGGER.error("ai_summary_failed error=%s", exc)
+        return {"status": "failed", "error": str(exc)[:200]}
+
+
+def summarize_ledger(ledger: list[dict[str, Any]], progress_callback: ProgressCallback | None = None) -> dict[str, Any]:
+    """跨文件趋势总结：基于审计台账（历次审核记录）归纳质量趋势与改进建议。
+
+    与 summarize_audit（单文件总体总结）互补——单文件总结回答"这一份怎么样"，
+    趋势总结回答"多份之间在往哪个方向走"。记录不足 2 条、AI 未启用或
+    AI_TREND_SUMMARY_ENABLED=false 时返回 {}，展示层据此省略该节。
+    """
+    entries = [e for e in (ledger or []) if isinstance(e, dict)]
+    if len(entries) < 2:
+        return {}
+    config = load_config()
+    if not (config.enabled and config.api_key):
+        return {}
+    if not config.trend_enabled:
+        LOGGER.info("ai_trend_skipped reason=AI_TREND_SUMMARY_ENABLED=false")
+        return {"status": "disabled", "reason": "AI_TREND_SUMMARY_ENABLED=false"}
+    try:
+        client = OpenAICompatibleClient(config)
+        model, _ = client.choose_model()
+        total_rows = sum(int(e.get("rows", 0) or 0) for e in entries)
+        total_issues = sum(int(e.get("issues", 0) or 0) for e in entries)
+        total_p0 = sum(int((e.get("priority") or {}).get("P0", 0) or 0) for e in entries)
+        total_p1 = sum(int((e.get("priority") or {}).get("P1", 0) or 0) for e in entries)
+        series = []
+        for e in entries[-30:]:  # 仅送最近 30 次，控制 token
+            rows = int(e.get("rows", 0) or 0)
+            issues = int(e.get("issues", 0) or 0)
+            series.append({
+                "ts": str(e.get("ts", "")),
+                "file": str(e.get("file", "")),
+                "rows": rows,
+                "issues": issues,
+                "rate": round(issues / rows * 100, 1) if rows else None,
+                "p0": int((e.get("priority") or {}).get("P0", 0) or 0),
+                "p1": int((e.get("priority") or {}).get("P1", 0) or 0),
+                "p2": int((e.get("priority") or {}).get("P2", 0) or 0),
+                "incremental": bool(e.get("incremental")),
+                "conclusion": str(e.get("conclusion", ""))[:120],
+            })
+        payload = {
+            "file_count": len(entries),
+            "total_rows": total_rows,
+            "total_issues": total_issues,
+            "avg_rate": round(total_issues / total_rows * 100, 2) if total_rows else None,
+            "total_p0": total_p0,
+            "total_p1": total_p1,
+            "series": series,
+        }
+        _emit_progress(progress_callback, {"phase": "ai", "stage": "trend_running", "status": "running", "percent": 96, "message": "AI 正在生成跨文件趋势总结", "hint": f"模型：{model}；累计 {len(entries)} 次审核"})
+        messages = [
+            {"role": "system", "content": (
+                "你是资深电厂 KKS 编码质量负责人。以下是多个批次/文件的 KKS 编码审核台账，"
+                "请做跨文件趋势总结，供编码管理负责人决策："
+                "overall 为 3-6 句中文（整体质量趋势、批次间变化、反复出现的系统性问题）；"
+                "points 为 3-5 条中文改进建议，每条一句话，指向管理动作而非具体某一行数据。"
+                "只返回 JSON：{\"overall\":\"...\",\"points\":[\"...\",\"...\"]}"
+            )},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+        ]
+        req = {"model": model, "messages": messages, "temperature": 0.2, "response_format": {"type": "json_object"}}
+        try:
+            response = client._request_json("chat/completions", req)
+        except AIReviewError as exc:
+            if "response_format" not in str(exc).lower() and "json_object" not in str(exc).lower():
+                raise
+            req.pop("response_format", None)
+            response = client._request_json("chat/completions", req)
+        content = str(((response.get("choices") or [{}])[0].get("message") or {}).get("content", ""))
+        decoded = json.loads(content)
+        if not isinstance(decoded, dict) or not str(decoded.get("overall", "")).strip():
+            raise AIReviewError("AI 趋势总结返回格式异常")
+        points = [str(pt).strip() for pt in (decoded.get("points") or []) if str(pt).strip()]
+        LOGGER.info("ai_trend_done model=%s files=%s points=%s", model, len(entries), len(points))
+        return {
+            "overall": str(decoded["overall"]).strip(),
+            "points": points,
+            "model": model,
+            "status": "completed",
+            "ts": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "file_count": len(entries),
+        }
+    except Exception as exc:
+        LOGGER.error("ai_trend_failed error=%s", exc)
         return {"status": "failed", "error": str(exc)[:200]}

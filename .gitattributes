@@ -1,0 +1,2 @@
+# 保证 shell 脚本在任何平台 checkout 后都是 LF，避免服务器上 bash 报 ^M 错误
+*.sh text eol=lf

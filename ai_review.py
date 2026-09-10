@@ -68,6 +68,7 @@ class AIConfig:
     model: str
     timeout_seconds: int
     enabled: bool
+    max_candidates: int = 0
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -139,6 +140,7 @@ def load_config() -> AIConfig:
         model=environment_value("AI_MODEL", ai.get("model", "")).strip(),
         timeout_seconds=_parse_int(environment_value("AI_TIMEOUT_SECONDS", ai.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)), DEFAULT_TIMEOUT_SECONDS, 10, 300),
         enabled=enabled,
+        max_candidates=_parse_int(environment_value("AI_REVIEW_MAX_CANDIDATES", ai.get("max_candidates", 0)), 0, 0, 2000),
     )
 
 
@@ -865,6 +867,14 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
         return base
 
     indexed = [(idx, issue) for idx, issue in enumerate(issues) if isinstance(issue, dict) and _is_candidate(issue)]
+    # 送审上限：AI_REVIEW_MAX_CANDIDATES>0 时按优先级(P0>P1>P2)截断，0=不限制
+    max_candidates = int(getattr(config, "max_candidates", 0) or 0)
+    if max_candidates and len(indexed) > max_candidates:
+        pr_rank = {"P0": 0, "P1": 1, "P2": 2}
+        indexed.sort(key=lambda pair: pr_rank.get(str(pair[1].get("priority", "P2")), 2))
+        base["candidate_total"] = len(indexed)
+        LOGGER.info("ai_candidates_truncated total=%s kept=%s", len(indexed), max_candidates)
+        indexed = indexed[:max_candidates]
     base["candidate_count"] = len(indexed)
     if not indexed:
         base["status"] = "completed"

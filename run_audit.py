@@ -19,6 +19,7 @@ from typing import Any, Callable
 
 import openpyxl
 from ai_review import review_issue_candidates, summarize_audit
+from audit_history import record_and_render
 from app_runtime import APP_ROOT, configure_logging
 from report_business import build_overview, render_html, render_xlsx
 from openpyxl import Workbook
@@ -1270,6 +1271,12 @@ def write_audit_artifacts(
     overview = build_overview(result)
     write_html(output_dir / html_name, result, overview)
     write_issue_workbook_xlsx(output_dir / xlsx_name, result, overview)
+    # 审计台账：追加本次记录并更新跨文件汇总报告（与产物同级目录的上一级）
+    try:
+        summary_path = record_and_render(input_path, output_dir, result)
+        result["history_summary"] = str(summary_path)
+    except Exception as exc:  # 台账失败不阻断主流程
+        LOGGER.warning("audit_history_record_failed error=%s", exc)
     LOGGER.info(
         "audit_done file=%s rows=%s issues=%s ai_status=%s ai_reviewed=%s",
         input_path.name,

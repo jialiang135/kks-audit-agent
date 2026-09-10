@@ -334,6 +334,48 @@ function renderCompletedResult(d){
   for(var key in (d.files||{})){var url=d.files[key];var a=document.createElement('a');a.className='download-card';a.href=url;a.download='';var icon=document.createElement('span');icon.className='download-icon';icon.textContent=key.indexOf('HTML')>=0?'</>':'XLSX';var copy=document.createElement('span');copy.className='download-copy';var title=document.createElement('strong');title.textContent=key;var desc=document.createElement('span');desc.textContent=key.indexOf('HTML')>=0?'八维业务化审核报告（总体结论/八维总表/分组明细）':'业务分组问题清单（概览+各类明细）';copy.append(title,desc);var action=document.createElement('span');action.className='download-action';action.textContent='下载';a.append(icon,copy,action);links.appendChild(a);}
   links.hidden=!Object.keys(d.files||{}).length;
 }
+</script><script>
+if(!window.__kksHistoryInjected){
+window.__kksHistoryInjected=true;
+(function(){
+function esc(s){s=(s===null||s===undefined)?'':String(s);var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function rate(i,r){return r>0?(i/r*100).toFixed(1)+'%':'—'}
+fetch('/api/history').then(function(r){return r.json()}).then(function(d){
+  var entries=(d&&d.entries)||[];
+  var host=document.createElement('div');
+  host.style.cssText='max-width:1100px;margin:26px auto 40px;padding:0 22px';
+  var det=document.createElement('details');
+  det.style.cssText='background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 20px';
+  var sum=document.createElement('summary');
+  sum.style.cssText='cursor:pointer;font-weight:600;color:#1d4ed8;font-size:15px';
+  var tr=0,ti=0,ta=0,tp0=0;
+  entries.forEach(function(e){tr+=+e.rows||0;ti+=+e.issues||0;ta+=+e.ai_reviewed||0;tp0+=+(e.priority&&e.priority.P0)||0});
+  sum.textContent='审计台账（累计 '+entries.length+' 次审核 · '+(ti).toLocaleString()+' 个问题）';
+  det.appendChild(sum);
+  if(!entries.length){
+    var p=document.createElement('p');p.style.cssText='color:#6b7a8d;font-size:13px';p.textContent='暂无审核记录，完成一次上传审核后自动生成。';det.appendChild(p);
+  }else{
+    var k=document.createElement('div');k.className='biz-kpis';
+    k.innerHTML='<div class="biz-kpi"><b>'+entries.length+'</b><span>累计审核文件</span></div>'
+      +'<div class="biz-kpi"><b>'+tr.toLocaleString()+'</b><span>累计数据行</span></div>'
+      +'<div class="biz-kpi '+(tp0?'bad':'ok')+'"><b>'+ti.toLocaleString()+'</b><span>累计问题（P0 '+tp0+'）</span></div>'
+      +'<div class="biz-kpi"><b>'+(tr?(ti/tr*100).toFixed(1)+'%':'—')+'</b><span>平均问题率</span></div>'
+      +'<div class="biz-kpi"><b>'+ta.toLocaleString()+'</b><span>累计 AI 复核</span></div>';
+    det.appendChild(k);
+    var tw=document.createElement('div');tw.className='biz-table-wrap';
+    var h='<table class="biz-table"><thead><tr><th>时间</th><th>文件</th><th>数据行</th><th>问题</th><th>问题率</th><th>P0</th><th>P1</th><th>P2</th><th>AI复核</th><th>口径</th></tr></thead><tbody>';
+    entries.slice().reverse().forEach(function(e,idx){
+      var ai=e.ai_reviewed?(e.ai_reviewed+'/'+e.ai_candidate):(e.ai_status==='completed'?e.ai_reviewed:'未启用');
+      h+='<tr'+(idx===0?' style="background:#fffbe6"':'')+'><td>'+esc(e.ts)+'</td><td>'+esc(e.file)+'</td><td>'+(+e.rows||0).toLocaleString()+'</td><td>'+(+e.issues||0).toLocaleString()+'</td><td>'+rate(+e.issues||0,+e.rows||0)+'</td><td>'+((e.priority&&e.priority.P0)||0)+'</td><td>'+((e.priority&&e.priority.P1)||0)+'</td><td>'+((e.priority&&e.priority.P2)||0)+'</td><td>'+esc(ai)+'</td><td>'+(e.incremental?'增量':'全量')+'</td></tr>';
+    });
+    h+='</tbody></table>';
+    tw.innerHTML=h;det.appendChild(tw);
+    var note=document.createElement('div');note.style.cssText='color:#94a3b8;font-size:12px;margin-top:6px';note.textContent='跨文件汇总报告见 runs 目录「KKS审核台账汇总.html」；点击标题可折叠。';det.appendChild(note);
+  }
+  host.appendChild(det);document.body.appendChild(host);
+}).catch(function(){});
+})();
+}
 </script></body></html>"""
 UPLOAD_PAGE = UPLOAD_PAGE.replace("</head>", RESULT_UI_STYLE + AUDIT_REDESIGN_STYLE + DASHBOARD_UI_STYLE + "</head>")
 
@@ -558,6 +600,10 @@ class AuditHandler(BaseHTTPRequestHandler):
                 self.handle_skill_get()
             except Exception as exc:
                 self.send_json({"error": str(exc)}, 400)
+            return
+        if path == "/api/history":
+            from audit_history import LEDGER_NAME, load_ledger
+            self.send_json({"entries": load_ledger(self.runs_dir / LEDGER_NAME)})
             return
         if path == "/api/logs":
             query = parse_qs(parsed.query)

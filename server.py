@@ -298,6 +298,11 @@ async function loadLogs(){const box=document.getElementById('logs'),button=docum
 .biz-table th{position:sticky;top:0;background:#eef2f7;text-align:left;padding:6px 8px;border-bottom:1px solid #e2e8f0;color:#334155;white-space:nowrap;z-index:1}
 .biz-table td{padding:5px 8px;border-bottom:1px solid #eef2f7;vertical-align:top;word-break:break-all}
 .biz-more{color:#94a3b8;text-align:right;font-size:12px}
+.biz-aisum{border:1px solid #dbeafe;background:#f8fbff;border-radius:10px;padding:12px 14px;margin:2px 0 12px}
+.biz-aisum-h{font-weight:600;color:#1d4ed8;font-size:14px;margin-bottom:6px}
+.biz-aisum-h .biz-aisum-m{float:right;font-weight:400;color:#94a3b8;font-size:12px}
+.biz-aisum p{margin:0 0 6px;font-size:13px;line-height:1.7;color:#334155}
+.biz-aisum ul{margin:0;padding-left:20px;font-size:13px;line-height:1.7;color:#334155}
 @media(max-width:700px){.biz-kpis{grid-template-columns:repeat(2,1fr)}}
 </style><script>
 function _bizEsc(s){s=(s===null||s===undefined)?'':String(s);var d=document.createElement('div');d.textContent=s;return d.innerHTML}
@@ -309,7 +314,12 @@ function renderBusinessOverview(ov){
   if(!ov||!buckets.length){host.innerHTML='<div class="empty-preview">本次没有需要列入问题清单的问题</div>';return;}
   var kpi='<div class="biz-kpis">'+(ov.kpis||[]).map(function(k){return '<div class="biz-kpi '+k.tone+'"><b>'+_bizEsc(k.value)+'</b><span>'+_bizEsc(k.label)+'</span></div>'}).join('')+'</div>';
   var chips=buckets.map(function(b,i){return '<button type="button" class="biz-chip '+b.level.toLowerCase()+' biz-chip-'+i+'">'+_bizEsc(b.level)+'·'+_bizEsc(b.title)+' <b>'+b.count+'</b></button>'}).join('');
-  host.innerHTML=kpi+'<div class="biz-chips">'+chips+'</div><div class="biz-panel"></div>';
+  var aiSum='';
+  if(ov&&ov.ai_summary&&ov.ai_summary.overall){
+    var pts=(ov.ai_summary.points||[]).map(function(p){return '<li>'+_bizEsc(p)+'</li>'}).join('');
+    aiSum='<div class="biz-aisum"><div class="biz-aisum-h">AI 总体总结<span class="biz-aisum-m">'+_bizEsc(ov.ai_summary.model||'')+'</span></div><p>'+_bizEsc(ov.ai_summary.overall)+'</p>'+(pts?'<ul>'+pts+'</ul>':'')+'</div>';
+  }
+  host.innerHTML=kpi+aiSum+'<div class="biz-chips">'+chips+'</div><div class="biz-panel"></div>';
   function renderTable(i){
     var bkt=buckets[i],cols=bkt.columns||[],items=bkt.items||[];
     var show=items.slice(0,80);

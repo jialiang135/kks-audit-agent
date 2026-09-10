@@ -1007,6 +1007,30 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
     ws.column_dimensions["B"].width = 34
     ws.column_dimensions["E"].width = 60
 
+    # 概览表下方追加「AI 总体总结」（模型归纳整份审核结果；未生成时写说明）
+    ai_sum = ov.get("ai_summary") or {}
+    ws.append([])
+    title_row = ws.max_row + 1
+    ws.merge_cells(f"A{title_row}:E{title_row}")
+    cell_t = ws.cell(row=title_row, column=1, value="AI 总体总结")
+    cell_t.fill = PatternFill("solid", fgColor=BLUE)
+    cell_t.font = Font(bold=True, color="FFFFFF", size=12)
+    cell_t.alignment = Alignment(horizontal="left", vertical="center")
+    body_row = title_row + 1
+    if ai_sum.get("overall"):
+        text = str(ai_sum["overall"])
+        points = [str(p) for p in (ai_sum.get("points") or []) if str(p).strip()]
+        if points:
+            text += "\n\n要点建议：\n" + "\n".join(f"{i}. {p}" for i, p in enumerate(points, 1))
+        text += f"\n\n（模型 {ai_sum.get('model') or '—'}，AI 归纳仅供参考，不替代规则结论）"
+    else:
+        text = "本次未生成 AI 总体总结（AI 未启用或生成失败）；规则审计结论不受影响。"
+    ws.merge_cells(f"A{body_row}:E{body_row}")
+    cell_b = ws.cell(row=body_row, column=1, value=text)
+    cell_b.alignment = Alignment(wrap_text=True, vertical="top")
+    cell_b.font = Font(size=11)
+    ws.row_dimensions[body_row].height = max(60, 16 * (text.count("\n") + 3))
+
     # ---------------- 分类 sheet
     sheet_specs: list[tuple[str, dict[str, Any]]] = []
     for bucket in ov["buckets"]:

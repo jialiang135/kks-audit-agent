@@ -11,9 +11,15 @@ services:
       - ./runs:/app/runs
     environment:
       TZ: Asia/Shanghai
-      # AI 语义复核默认关闭;如需开启,取消下行注释并填好 .env
-      # AI_ENABLED: "true"
-    # 如需 AI 复核:把 .env 放在本目录并取消下面两行注释
-    # 可用开关(见 .env.example):AI_REVIEW_MAX_CANDIDATES / AI_SUMMARY_ENABLED / AI_TREND_SUMMARY_ENABLED
-    # env_file:
-    #   - .env
+      # AI 语义复核配置：docker compose 会自动读取同目录下的 .env 做变量插值。
+      # 这里逐项透传，缺项时注入空串——app_runtime 会把空值视为"未设置"，
+      # 自动回退到 Web「AI 配置」页保存的 config/app_config.json。
+      # 因此：.env 是隐藏文件，重新部署解压不会丢；app_config.json 由 deploy.sh 保留。
+      AI_ENABLED: ${AI_ENABLED:-}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-}
+      AI_REVIEW_MAX_CANDIDATES: ${AI_REVIEW_MAX_CANDIDATES:-}
+      AI_SUMMARY_ENABLED: ${AI_SUMMARY_ENABLED:-}
+      AI_TREND_SUMMARY_ENABLED: ${AI_TREND_SUMMARY_ENABLED:-}

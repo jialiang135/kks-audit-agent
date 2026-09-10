@@ -269,9 +269,15 @@ def _read_local_env() -> dict[str, str]:
 
 
 def environment_value(name: str, config_value: Any = "") -> str:
-    """Process environment > app_config.json > .env.local."""
-    if name in os.environ:
-        return os.environ[name]
+    """Process environment > app_config.json > .env.local.
+
+    空字符串/纯空白的环境变量视为"未设置"：容器编排(如 docker compose 的
+    ${VAR:-})在 .env 缺项时会注入空串，若无条件采信会覆盖 app_config.json
+    里已经配好的 AI 配置。
+    """
+    raw = os.environ.get(name)
+    if raw is not None and raw.strip():
+        return raw
     config_names = {
         "AI_ENABLED": ("enabled",),
         "AI_BASE_URL": ("base_url",),

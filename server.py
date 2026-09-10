@@ -367,7 +367,8 @@ function loadHistory(){
     var h='<div class="biz-table-wrap"><table class="biz-table"><thead><tr><th>时间</th><th>文件</th><th>数据行</th><th>问题</th><th>问题率</th><th>P0</th><th>P1</th><th>P2</th><th>AI复核</th><th>口径</th></tr></thead><tbody>';
     entries.slice().reverse().forEach(function(e,idx){
       var ai=e.ai_reviewed?(e.ai_reviewed+'/'+e.ai_candidate):(e.ai_status==='completed'?e.ai_reviewed:'未启用');
-      h+='<tr'+(idx===0?' style="background:#fffbe6"':'')+'><td>'+esc(e.ts)+'</td><td>'+esc(e.file)+'</td><td>'+(+e.rows||0).toLocaleString()+'</td><td>'+(+e.issues||0).toLocaleString()+'</td><td>'+rate(+e.issues||0,+e.rows||0)+'</td><td>'+((e.priority&&e.priority.P0)||0)+'</td><td>'+((e.priority&&e.priority.P1)||0)+'</td><td>'+((e.priority&&e.priority.P2)||0)+'</td><td>'+esc(ai)+'</td><td>'+(e.incremental?'增量':'全量')+'</td></tr>';
+      var dup=(+e.repeats||1)>1?(' <span style="display:inline-block;margin-left:6px;padding:0 6px;border-radius:9px;background:#e8f0fe;color:#1a56b8;font-size:11px;font-weight:500" title="重复审核 '+(+e.repeats)+' 次，首次 '+esc(e.first_ts||'')+'">×'+(+e.repeats)+'</span>'):'';
+      h+='<tr'+(idx===0?' style="background:#fffbe6"':'')+'><td>'+esc(e.ts)+'</td><td>'+esc(e.file)+dup+'</td><td>'+(+e.rows||0).toLocaleString()+'</td><td>'+(+e.issues||0).toLocaleString()+'</td><td>'+rate(+e.issues||0,+e.rows||0)+'</td><td>'+((e.priority&&e.priority.P0)||0)+'</td><td>'+((e.priority&&e.priority.P1)||0)+'</td><td>'+((e.priority&&e.priority.P2)||0)+'</td><td>'+esc(ai)+'</td><td>'+(e.incremental?'增量':'全量')+'</td></tr>';
     });
     h+='</tbody></table></div>';
     var trend='',t=d&&d.trend;

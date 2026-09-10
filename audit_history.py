@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import datetime
@@ -29,6 +30,7 @@ _HIST_CSS = """
 .hrow td.num{text-align:right;font-variant-numeric:tabular-nums}
 .hrow tr.hl td{background:#fffbe6}
 .hbad{color:var(--p0);font-weight:500}.hgood{color:var(--ok);font-weight:500}
+.dup{display:inline-block;margin-left:6px;padding:0 6px;border-radius:9px;background:#e8f0fe;color:#1a56b8;font-size:11px;font-weight:500;cursor:help}
 .trend{margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:8px;background:#f7faff}
 .trend-h{font-weight:600;color:var(--ink);margin-bottom:6px;display:flex;align-items:center;gap:8px}
 .trend-m{font-weight:400;font-size:12px;color:var(--muted)}
@@ -79,6 +81,18 @@ def load_ledger(path: Path) -> list[dict[str, Any]]:
     return [entry for entry in data if isinstance(entry, dict)]
 
 
+def _file_digest(path: Path) -> str:
+    """文件内容 SHA256 前 16 位；不可读时返回空串（此时退化为不去重）。"""
+    try:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()[:16]
+    except OSError:
+        return ""
+
+
 def _entry(input_path: Path, result: dict[str, Any]) -> dict[str, Any]:
     priority = result.get("priority_counts", {}) or {}
     ai = result.get("ai_review", {}) or {}
@@ -86,6 +100,8 @@ def _entry(input_path: Path, result: dict[str, Any]) -> dict[str, Any]:
     return {
         "ts": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "file": input_path.name,
+        "hash": _file_digest(input_path),
+        "repeats": 1,
         "sheet": str(result.get("sheet", "") or ""),
         "rows": int(result.get("data_rows", 0) or 0),
         "issues": int(result.get("issue_count", 0) or 0),
@@ -100,10 +116,26 @@ def _entry(input_path: Path, result: dict[str, Any]) -> dict[str, Any]:
 
 
 def append_ledger(input_path: Path, output_dir: Path, result: dict[str, Any]) -> list[dict[str, Any]]:
-    """追加本次审核记录并返回完整台账（供随后的汇总渲染使用）。"""
+    """记录本次审核并返回完整台账（供随后的汇总渲染使用）。
+
+    去重口径：以**文件内容哈希**为准。
+    - 同一文件重复上传（内容未变）：不新增记录，把原记录移到末尾（保证 ledger[-1]
+      恒为"本次"）、用最新结果覆盖并刷新时间戳，同时累加 repeats；
+    - 文件内容发生变化（如更新为增量版）：视为新的一次审核，正常追加。
+    哈希不可得（文件不可读）时退化为每次都追加，不会误合并。
+    """
     path = ledger_path(output_dir)
     ledger = load_ledger(path)
-    ledger.append(_entry(input_path, result))
+    entry = _entry(input_path, result)
+    digest = entry.get("hash", "")
+    index = next((i for i, e in enumerate(ledger) if digest and e.get("hash") == digest), None)
+    if index is None:
+        entry["first_ts"] = entry["ts"]
+    else:
+        previous = ledger.pop(index)  # 移到末尾，保证 ledger[-1] 恒为本次
+        entry["first_ts"] = str(previous.get("first_ts") or previous.get("ts") or entry["ts"])
+        entry["repeats"] = int(previous.get("repeats", 1) or 1) + 1
+    ledger.append(entry)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(ledger, ensure_ascii=False, indent=1), encoding="utf-8")
     return ledger
@@ -113,6 +145,15 @@ def _rate(issues: int, rows: int) -> str:
     if rows <= 0:
         return "—"
     return f"{issues / rows * 100:.1f}%"
+
+
+def _dup_badge(entry: dict[str, Any]) -> str:
+    """同一文件被重复审核时，在文件名后标注 ×N（悬停显示首次时间）。"""
+    repeats = int(entry.get("repeats", 1) or 1)
+    if repeats <= 1:
+        return ""
+    first = _esc(entry.get("first_ts", "") or "")
+    return f' <span class="dup" title="重复审核 {repeats} 次，首次 {first}">×{repeats}</span>'
 
 
 def render_history_html(path: Path, ledger: list[dict[str, Any]], ai_trend: dict[str, Any] | None = None) -> None:
@@ -135,7 +176,7 @@ def render_history_html(path: Path, ledger: list[dict[str, Any]], ai_trend: dict
         ai_txt = f"{entry.get('ai_reviewed', 0)}/{entry.get('ai_candidate', 0)}" if entry.get("ai_reviewed", 0) else ("未启用" if entry.get("ai_status") in ("", "disabled") else str(entry.get("ai_reviewed", 0)))
         rows_html += (
             f"<tr{hl}><td>{_esc(entry.get('ts', ''))}</td>"
-            f"<td>{_esc(entry.get('file', ''))}</td>"
+            f"<td>{_esc(entry.get('file', ''))}{_dup_badge(entry)}</td>"
             f"<td class='num'>{int(entry.get('rows', 0) or 0):,}</td>"
             f"<td class='num'>{int(entry.get('issues', 0) or 0):,}</td>"
             f"<td class='num'>{_rate(int(entry.get('issues', 0) or 0), int(entry.get('rows', 0) or 0))}</td>"
@@ -202,7 +243,7 @@ def render_history_html(path: Path, ledger: list[dict[str, Any]], ai_trend: dict
 <tr><th>时间</th><th>文件</th><th>数据行</th><th>问题</th><th>问题率</th><th>P0</th><th>P1</th><th>P2</th><th>AI复核</th><th>口径</th></tr>
 {rows_html}
 </table>
-<div class="sub" style="margin-top:10px">单次明细见各次审核报告（HTML/Excel）；台账数据 audit_ledger.json 可回溯。</div>
+<div class="sub" style="margin-top:10px">同一文件重复上传按内容哈希去重：仅保留最新结果并标注 ×N 次数，文件内容变化则记为一次新审核。单次明细见各次审核报告（HTML/Excel）；台账数据 audit_ledger.json 可回溯。</div>
 </div>
 
 <div class="foot">审计台账自动维护，每次审核后更新 ｜ {datetime.now().strftime('%Y-%m-%d')}</div>

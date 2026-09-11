@@ -11,6 +11,9 @@ services:
       - ./runs:/app/runs
     environment:
       TZ: Asia/Shanghai
+      # 管理接口令牌：保护 配置读写 / Skill 读写上传 / 日志 / AI 测试。
+      # 未设置时这些接口返回 403（fail-closed），必须在 .env 里配置。
+      KKS_ADMIN_TOKEN: ${KKS_ADMIN_TOKEN:-}
       # AI 语义复核配置：docker compose 会自动读取同目录下的 .env 做变量插值。
       # 这里逐项透传，缺项时注入空串——app_runtime 会把空值视为"未设置"，
       # 自动回退到 Web「AI 配置」页保存的 config/app_config.json。

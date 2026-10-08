@@ -11,7 +11,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime
+import os
+import re
+import shutil
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +26,14 @@ LOGGER = logging.getLogger("kks-audit.history")
 LEDGER_NAME = "audit_ledger.json"
 TREND_NAME = "audit_trend.json"
 HISTORY_NAME = "KKS审核台账汇总.html"
+
+# 产物索引：台账只记 run_id，报告与问题清单本身留在 runs/<run_id>/ 下，
+# 由保留策略按天清理；清理后把台账对应记录标记为已归档。
+RUN_ID_RE = re.compile(r"^[0-9]{8}T[0-9]{6}_[0-9a-f]{8}$")
+ARTIFACT_AVAILABLE = "available"
+ARTIFACT_ARCHIVED = "archived"
+RETENTION_ENV = "KKS_ARTIFACT_RETENTION_DAYS"
+DEFAULT_RETENTION_DAYS = 90
 
 _HIST_CSS = """
 .hrow td,.hrow th{padding:6px 10px;border-top:1px solid var(--line);font-size:13px}
@@ -93,13 +104,23 @@ def _file_digest(path: Path) -> str:
         return ""
 
 
-def _entry(input_path: Path, result: dict[str, Any]) -> dict[str, Any]:
+def _run_id_of(output_dir: Path) -> str:
+    """产物目录名即 run_id（服务器流程写作 runs/<run_id>/）；CLI 自定义目录返回空串。"""
+    name = output_dir.name
+    return name if RUN_ID_RE.fullmatch(name) else ""
+
+
+def _entry(input_path: Path, result: dict[str, Any], run_id: str) -> dict[str, Any]:
     priority = result.get("priority_counts", {}) or {}
     ai = result.get("ai_review", {}) or {}
     final_counts = result.get("final_decision_counts", {}) or {}
     return {
         "ts": datetime.now().strftime("%Y-%m-%d %H:%M"),
         "file": input_path.name,
+        # 产物索引：run_id 指向 runs/<run_id>/，artifacts 记录产物是否还在。
+        # run_id 为空表示本次不是服务器运行（CLI 自定义输出目录），无法在线导出。
+        "run_id": run_id,
+        "artifacts": ARTIFACT_AVAILABLE if run_id else "",
         "hash": _file_digest(input_path),
         "repeats": 1,
         "sheet": str(result.get("sheet", "") or ""),
@@ -126,7 +147,7 @@ def append_ledger(input_path: Path, output_dir: Path, result: dict[str, Any]) ->
     """
     path = ledger_path(output_dir)
     ledger = load_ledger(path)
-    entry = _entry(input_path, result)
+    entry = _entry(input_path, result, _run_id_of(output_dir))
     digest = entry.get("hash", "")
     index = next((i for i, e in enumerate(ledger) if digest and e.get("hash") == digest), None)
     if index is None:
@@ -139,6 +160,109 @@ def append_ledger(input_path: Path, output_dir: Path, result: dict[str, Any]) ->
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(ledger, ensure_ascii=False, indent=1), encoding="utf-8")
     return ledger
+
+
+def _parse_run_start(run_id: str) -> datetime | None:
+    """从 run_id 的 YYYYmmddTHHMMSS 前缀解析运行开始时间。"""
+    try:
+        return datetime.strptime(run_id.split("_", 1)[0], "%Y%m%dT%H%M%S")
+    except ValueError:
+        return None
+
+
+def backfill_run_ids(ledger_dir: Path) -> int:
+    """给缺 run_id 的历史台账记录补上产物索引（按输入文件内容哈希精确匹配）。
+
+    台账的 hash 是"上传文件内容的 SHA256 前 16 位"，而 runs/<run_id>/input/ 下正是
+    那次上传的原始副本，因此用哈希匹配是精确的、不依赖时间戳。同一文件多次运行时取
+    最新一次（目录名按时间递增，后写覆盖）。幂等：已带 run_id 的记录不动。
+    """
+    path = ledger_dir / LEDGER_NAME
+    ledger = load_ledger(path)
+    pending = [e for e in ledger if not e.get("run_id") and e.get("hash")]
+    if not pending or not ledger_dir.is_dir():
+        return 0
+
+    latest: dict[str, str] = {}
+    for child in sorted(ledger_dir.iterdir()):
+        if not child.is_dir() or not RUN_ID_RE.fullmatch(child.name):
+            continue
+        input_dir = child / "input"
+        if not input_dir.is_dir():
+            continue
+        for source in sorted(input_dir.glob("*.xlsx")):
+            digest = _file_digest(source)
+            if digest:
+                latest[digest] = child.name
+
+    filled = 0
+    for entry in ledger:
+        if entry.get("run_id"):
+            continue
+        run_id = latest.get(str(entry.get("hash", "")))
+        if run_id:
+            entry["run_id"] = run_id
+            entry["artifacts"] = ARTIFACT_AVAILABLE
+            filled += 1
+    if filled:
+        path.write_text(json.dumps(ledger, ensure_ascii=False, indent=1), encoding="utf-8")
+        LOGGER.info("ledger_backfill filled=%s candidates=%s", filled, len(latest))
+    else:
+        LOGGER.info("ledger_backfill filled=0 pending=%s candidates=%s", len(pending), len(latest))
+    return filled
+
+
+def retention_days() -> int:
+    """产物保留天数；未配置用默认 90，配置 0（或非法值）表示不自动清理。"""
+    raw = (os.environ.get(RETENTION_ENV) or "").strip()
+    if not raw:
+        return DEFAULT_RETENTION_DAYS
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return DEFAULT_RETENTION_DAYS
+
+
+def purge_expired_artifacts(
+    ledger_dir: Path,
+    *,
+    days: int | None = None,
+    now: datetime | None = None,
+) -> list[str]:
+    """按保留策略清理过期产物目录，并把台账对应记录标记为已归档。
+
+    安全约束：只处理名字严格符合 run_id 格式的目录，绝不触碰 runs/ 下的其他目录
+    （回归样本、手工目录等）。days<=0 时直接跳过，不做任何删除。
+    """
+    if days is None:
+        days = retention_days()
+    if days <= 0 or not ledger_dir.is_dir():
+        return []
+    cutoff = (now or datetime.now()) - timedelta(days=days)
+
+    purged: list[str] = []
+    for child in sorted(ledger_dir.iterdir()):
+        if not child.is_dir() or not RUN_ID_RE.fullmatch(child.name):
+            continue
+        started = _parse_run_start(child.name)
+        if started is None or started >= cutoff:
+            continue
+        shutil.rmtree(child, ignore_errors=True)
+        purged.append(child.name)
+    if not purged:
+        return []
+
+    path = ledger_dir / LEDGER_NAME
+    ledger = load_ledger(path)
+    changed = False
+    for entry in ledger:
+        if entry.get("run_id") in purged:
+            entry["artifacts"] = ARTIFACT_ARCHIVED
+            changed = True
+    if changed:
+        path.write_text(json.dumps(ledger, ensure_ascii=False, indent=1), encoding="utf-8")
+    LOGGER.info("artifacts_purged days=%s count=%s", days, len(purged))
+    return purged
 
 
 def _rate(issues: int, rows: int) -> str:
@@ -258,10 +382,13 @@ def record_and_render(
     *,
     progress_callback: Any = None,
 ) -> Path:
-    """审核完成后的统一入口：追加台账 + 刷新 AI 趋势总结 + 重渲染汇总报告。"""
+    """审核完成后的统一入口：追加台账 + 清理过期产物 + 刷新 AI 趋势总结 + 重渲染汇总报告。"""
     ledger = append_ledger(input_path, output_dir, result)
     summary = history_path(output_dir)
     ledger_dir = output_dir.parent
+    # 先按保留策略清理，再渲染：汇总里的"已归档"状态才是本轮的实际结果
+    if purge_expired_artifacts(ledger_dir):
+        ledger = load_ledger(ledger_dir / LEDGER_NAME)
     trend: dict[str, Any] = {}
     if len(ledger) >= 2:  # 仅 1 条记录时不存在"跨文件"趋势
         try:

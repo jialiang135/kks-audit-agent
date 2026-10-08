@@ -35,6 +35,9 @@ python .\server.py --host 127.0.0.1 --port 8080 --runs-dir .\runs
 - `GET /api/logs`：运行日志；
 - `POST /api/ai/test`：AI 连接测试；
 - `GET /api/history`、`GET /api/history/download`：审计台账与汇总报告/JSON 下载。响应含原始文件名、内容哈希、审核时间和 P0/P1/P2 统计，属审核记录，因此同样纳入鉴权，不因页面展示需要而公开。
+- `GET /api/history/artifact?run_id=<id>&kind=html|xlsx`：按台账记录下载该次审核生成的报告 HTML 或问题清单 Excel。台账页「报告」列用的就是这个接口；`run_id` 解析后必须仍在 runs 根目录内，产物已被保留策略清理时返回 404（`artifact_missing`）。
+
+> 注意区分：业务人员拿到的报告直链 `GET /api/audits/{run_id}/{文件名}` 仍是**公开**的（面向电厂业务人员，不要求令牌），本次改动没有锁住它。台账页的导出走上面这个带令牌的接口。
 
 ## 统一依赖环境（uv）
 
@@ -74,6 +77,15 @@ AI 地址、模型和密钥由管理员预先写入 `config/app_config.json`，�
 普通使用者只需要上传 Excel、查看报告和日志。管理接口（配置读写、Skill 读写上传、运行日志、AI 连接测试、审计台账与下载）统一由 `KKS_ADMIN_TOKEN` 保护：未配置该变量时这些接口一律返回 403（fail-closed），令牌缺失或不匹配返回 401，比较使用常量时间避免时序侧信道。令牌可用 `openssl rand -hex 24` 生成，写入 `.env` 后重启服务；浏览器端在「AI 配置」页填入同一令牌即可（保存在 localStorage，页面自动携带）。
 
 服务默认只监听回环地址，不发布到所有宿主网卡；需要局域网访问时显式设置绑定地址（Docker 用 `KKS_BIND_ADDR`），并保证管理令牌已配置。API 密钥不要写入 Skill、Excel、报告或 Git。
+
+## 审核产物的保留策略
+
+每次审核会在 `runs/<run_id>/` 留下三份东西：上传副本、报告 HTML、问题清单 Excel，并在台账里记下 `run_id` 作为索引。
+
+- 保留天数由 `KKS_ARTIFACT_RETENTION_DAYS` 控制，默认 **90 天**，设 `0` 表示不自动清理。
+- 每次审核结束后按 `run_id` 里的开始时间判断，超期目录整目录删除，并把台账对应记录标记为 `archived`——**台账记录本身不会被删**，只是台账页「报告」列显示「已归档」，不能再在线下载。
+- 只处理名字严格符合 `run_id` 格式（`YYYYmmddTHHMMSS_xxxxxxxx`）的目录，`runs/` 下的其他目录（回归样本、手工目录、日志）一律不碰。
+- 升级到带 `run_id` 的版本后，服务启动时会按**输入文件内容哈希**给老记录回填一次 `run_id`（精确匹配、幂等）；匹配不上的老记录显示「—」，需要时请用 `runs/` 里的其他副本对照。
 
 ## 配置、Skill 和日志
 

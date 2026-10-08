@@ -62,7 +62,14 @@ class ProtectedRouteTests(unittest.TestCase):
     def test_admin_get_endpoints_are_protected(self):
         self.assertEqual(
             server.PROTECTED_GET,
-            {"/api/config", "/api/skill", "/api/logs", "/api/history", "/api/history/download"},
+            {
+                "/api/config",
+                "/api/skill",
+                "/api/logs",
+                "/api/history",
+                "/api/history/download",
+                "/api/history/artifact",
+            },
         )
 
     def test_admin_post_endpoints_are_protected(self):

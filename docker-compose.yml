@@ -28,3 +28,6 @@ services:
       AI_REVIEW_MAX_CANDIDATES: ${AI_REVIEW_MAX_CANDIDATES:-}
       AI_SUMMARY_ENABLED: ${AI_SUMMARY_ENABLED:-}
       AI_TREND_SUMMARY_ENABLED: ${AI_TREND_SUMMARY_ENABLED:-}
+      # 审核产物（报告 HTML / 问题清单 Excel）保留天数：默认 90，设 0 = 不自动清理。
+      # 超期目录会被删除，台账对应记录标记为「已归档」。
+      KKS_ARTIFACT_RETENTION_DAYS: ${KKS_ARTIFACT_RETENTION_DAYS:-}

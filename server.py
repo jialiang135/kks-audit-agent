@@ -55,6 +55,7 @@ PROTECTED_GET = {
     "/api/logs",
     "/api/history",
     "/api/history/download",
+    "/api/history/artifact",
 }
 PROTECTED_POST = {"/api/config", "/api/skill", "/api/skill/upload", "/api/ai/test"}
 
@@ -393,6 +394,13 @@ function loadHistory(){
   host.innerHTML='<div class="muted" style="padding:10px 0">正在读取台账……</div>';
   function esc(s){s=(s===null||s===undefined)?'':String(s);var d=document.createElement('div');d.textContent=s;return d.innerHTML}
   function rate(i,r){return r>0?(i/r*100).toFixed(1)+'%':'—'}
+  function artCell(e){
+    if(!e.run_id)return '<span class="muted" title="该记录不是服务器运行产生的，没有在线产物">—</span>';
+    if(e.artifacts==='archived')return '<span class="muted" title="已按保留策略清理，报告与问题清单已不在服务器上">已归档</span>';
+    var r=esc(e.run_id);
+    return '<button class="btn btn-secondary" style="padding:2px 8px;font-size:12px;margin-right:4px" data-run="'+r+'" data-kind="html" type="button">报告</button>'
+      +'<button class="btn btn-secondary" style="padding:2px 8px;font-size:12px" data-run="'+r+'" data-kind="xlsx" type="button">Excel</button>';
+  }
   jsonFetch('/api/history').then(function(d){
     var entries=(d&&d.entries)||[];
     var dlS=document.getElementById('dlSummary'),dlL=document.getElementById('dlLedger');
@@ -407,11 +415,11 @@ function loadHistory(){
       +'<div class="biz-kpi '+(tp0?'bad':'ok')+'"><b>'+ti.toLocaleString()+'</b><span>累计问题（P0 '+tp0+'）</span></div>'
       +'<div class="biz-kpi"><b>'+(tr?(ti/tr*100).toFixed(1)+'%':'—')+'</b><span>平均问题率</span></div>'
       +'<div class="biz-kpi"><b>'+ta.toLocaleString()+'</b><span>累计 AI 复核</span></div></div>';
-    var h='<div class="biz-table-wrap"><table class="biz-table"><thead><tr><th>时间</th><th>文件</th><th>数据行</th><th>问题</th><th>问题率</th><th>P0</th><th>P1</th><th>P2</th><th>AI复核</th><th>口径</th></tr></thead><tbody>';
+    var h='<div class="biz-table-wrap"><table class="biz-table"><thead><tr><th>时间</th><th>文件</th><th>数据行</th><th>问题</th><th>问题率</th><th>P0</th><th>P1</th><th>P2</th><th>AI复核</th><th>口径</th><th>报告</th></tr></thead><tbody>';
     entries.slice().reverse().forEach(function(e,idx){
       var ai=e.ai_reviewed?(e.ai_reviewed+'/'+e.ai_candidate):(e.ai_status==='completed'?e.ai_reviewed:'未启用');
       var dup=(+e.repeats||1)>1?(' <span style="display:inline-block;margin-left:6px;padding:0 6px;border-radius:9px;background:#e8f0fe;color:#1a56b8;font-size:11px;font-weight:500" title="重复审核 '+(+e.repeats)+' 次，首次 '+esc(e.first_ts||'')+'">×'+(+e.repeats)+'</span>'):'';
-      h+='<tr'+(idx===0?' style="background:#fffbe6"':'')+'><td>'+esc(e.ts)+'</td><td>'+esc(e.file)+dup+'</td><td>'+(+e.rows||0).toLocaleString()+'</td><td>'+(+e.issues||0).toLocaleString()+'</td><td>'+rate(+e.issues||0,+e.rows||0)+'</td><td>'+((e.priority&&e.priority.P0)||0)+'</td><td>'+((e.priority&&e.priority.P1)||0)+'</td><td>'+((e.priority&&e.priority.P2)||0)+'</td><td>'+esc(ai)+'</td><td>'+(e.incremental?'增量':'全量')+'</td></tr>';
+      h+='<tr'+(idx===0?' style="background:#fffbe6"':'')+'><td>'+esc(e.ts)+'</td><td>'+esc(e.file)+dup+'</td><td>'+(+e.rows||0).toLocaleString()+'</td><td>'+(+e.issues||0).toLocaleString()+'</td><td>'+rate(+e.issues||0,+e.rows||0)+'</td><td>'+((e.priority&&e.priority.P0)||0)+'</td><td>'+((e.priority&&e.priority.P1)||0)+'</td><td>'+((e.priority&&e.priority.P2)||0)+'</td><td>'+esc(ai)+'</td><td>'+(e.incremental?'增量':'全量')+'</td><td>'+artCell(e)+'</td></tr>';
     });
     h+='</tbody></table></div>';
     var trend='',t=d&&d.trend;
@@ -419,7 +427,7 @@ function loadHistory(){
       var tpts=(t.points||[]).map(function(p){return '<li>'+esc(p)+'</li>'}).join('');
       trend='<div class="biz-aisum" style="margin:12px 0"><div class="biz-aisum-h">AI 跨文件趋势总结<span class="biz-aisum-m">'+esc(t.model||'')+' ｜ 基于 '+(t.file_count||entries.length)+' 次审核 ｜ '+esc(t.ts||'')+'</span></div><p>'+esc(t.overall)+'</p>'+(tpts?'<ul>'+tpts+'</ul>':'')+'</div>';
     }
-    host.innerHTML=kpis+trend+h+'<div class="muted" style="margin-top:8px;font-size:12px">点右上角「下载汇总报告」可导出完整汇总页（含 AI 趋势总结与本次 vs 历史平均对比）；服务端路径 runs/KKS审核台账汇总.html，台账原始数据 runs/audit_ledger.json。</div>';
+    host.innerHTML=kpis+trend+h+'<div class="muted" style="margin-top:8px;font-size:12px">「报告」列可直接下载该次审核生成的 HTML 报告与问题清单 Excel；产物按保留策略清理，超期后显示「已归档」。点右上角「下载汇总报告」可导出完整汇总页（含 AI 趋势总结与本次 vs 历史平均对比）；服务端路径 runs/KKS审核台账汇总.html，台账原始数据 runs/audit_ledger.json。</div>';
   }).catch(function(err){host.innerHTML='<div class="muted">'+esc(isAuthErr(err)?('台账需管理令牌：'+authHint(err)):('读取台账失败：'+(err&&err.message)))+'</div>'});
 }
 function downloadLedger(kind){
@@ -434,7 +442,21 @@ function downloadLedger(kind){
     setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000);
   }).catch(function(err){alert(isAuthErr(err)?('下载需管理令牌：'+authHint(err)):('下载失败：'+(err&&err.message)))});
 }
+function downloadArtifact(runId,kind){
+  var tk=adminTokenValue();
+  var url='/api/history/artifact?run_id='+encodeURIComponent(runId)+'&kind='+encodeURIComponent(kind);
+  fetch(url,{headers:tk?{Authorization:'Bearer '+tk}:{}}).then(function(r){
+    if(!r.ok){return r.json().catch(function(){return {}}).then(function(d){var e=new Error(d.error||('下载失败 HTTP '+r.status));e.code=d.code;throw e})}
+    return r.blob();
+  }).then(function(b){
+    var a=document.createElement('a');a.href=URL.createObjectURL(b);
+    a.download=runId+(kind==='xlsx'?'_问题清单.xlsx':'_审核报告.html');
+    document.body.appendChild(a);a.click();
+    setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000);
+  }).catch(function(err){alert(isAuthErr(err)?('下载需管理令牌：'+authHint(err)):('下载失败：'+(err&&err.message)))});
+}
 (function(){var s=document.getElementById('dlSummary'),l=document.getElementById('dlLedger');if(s)s.onclick=function(){downloadLedger('summary')};if(l)l.onclick=function(){downloadLedger('ledger')}})();
+(function(){var host=document.getElementById('historyHost');if(!host||!host.addEventListener)return;host.addEventListener('click',function(ev){var t=ev.target;while(t&&t!==host){if(t.getAttribute&&t.getAttribute('data-run')){downloadArtifact(t.getAttribute('data-run'),t.getAttribute('data-kind'));return}t=t.parentNode}})})();
 document.getElementById('refreshHistory').onclick=loadHistory;
 loadHistory();
 </script></body></html>"""
@@ -658,6 +680,48 @@ class AuditHandler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def handle_history_artifact(self, run_id: str, kind: str) -> None:
+        """下载某条台账记录的历史产物（报告 HTML / 问题清单 Excel）。
+
+        run_id 必须格式合法、且解析后仍在 runs 根目录内，避免变成任意文件读取。
+        报告对业务人员的直链仍走公开的 /api/audits/{run_id}/{文件名}，本接口只是
+        给受令牌保护的台账页使用，改动它不影响已发出去的链接。
+        """
+        if kind not in ("html", "xlsx"):
+            self.send_json({"error": "不支持的报告类型"}, 400)
+            return
+        if not RUN_ID_RE.fullmatch(run_id):
+            self.send_json({"error": "无效的审核编号"}, 400)
+            return
+        runs_root = self.runs_dir.resolve()
+        run_root = (runs_root / run_id).resolve()
+        if runs_root not in run_root.parents:
+            self.send_json({"error": "无效的审核编号"}, 400)
+            return
+        if not run_root.is_dir():
+            self.send_json({"error": "产物已归档或不存在", "code": "artifact_missing"}, 404)
+            return
+        input_candidates = sorted(
+            path for path in (run_root / "input").glob("*.xlsx")
+            if not path.name.startswith("compare_")
+        )
+        if not input_candidates:
+            self.send_json({"error": "产物已归档或不存在", "code": "artifact_missing"}, 404)
+            return
+        html_name, xlsx_name = output_artifact_names(input_candidates[0])
+        if kind == "xlsx":
+            target_name = xlsx_name
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        else:
+            target_name = html_name
+            content_type = "text/html; charset=utf-8"
+        target = (run_root / target_name).resolve()
+        if run_root not in target.parents or not target.is_file():
+            self.send_json({"error": "产物已归档或不存在", "code": "artifact_missing"}, 404)
+            return
+        LOGGER.info("history_artifact run_id=%s kind=%s bytes=%s", run_id, kind, target.stat().st_size)
+        self.send_bytes(target.read_bytes(), content_type, download_name=target_name)
+
     def handle_ai_test(self) -> None:
         LOGGER.info("ai_connection_test_start")
         result = test_ai_connection()
@@ -705,6 +769,13 @@ class AuditHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "台账文件尚未生成，请先完成一次审核"}, 404)
                 return
             self.send_bytes(target.read_bytes(), content_type, download_name=name)
+            return
+        if path == "/api/history/artifact":
+            query = parse_qs(parsed.query)
+            self.handle_history_artifact(
+                (query.get("run_id", [""])[0] or "").strip(),
+                (query.get("kind", ["html"])[0] or "html").strip(),
+            )
             return
         if path == "/api/logs":
             query = parse_qs(parsed.query)
@@ -862,6 +933,15 @@ def main() -> int:
         runs_dir = APP_ROOT / runs_dir
     max_upload_mb = args.max_upload_mb or int(audit_config.get("max_upload_mb", 50))
     runs_dir.mkdir(parents=True, exist_ok=True)
+    # 启动时一次性给历史台账补产物索引：老记录没有 run_id，靠输入文件内容哈希精确回填。
+    # 幂等且自带早退（无缺失记录时不扫描磁盘），失败不阻断服务启动。
+    try:
+        from audit_history import backfill_run_ids
+        filled = backfill_run_ids(runs_dir)
+        if filled:
+            print(f"ledger backfill: filled {filled} legacy record(s) with run_id")
+    except Exception:
+        LOGGER.exception("ledger_backfill_failed")
     server = ThreadingHTTPServer((args.host, args.port), AuditHandler)
     server.runs_dir = runs_dir.resolve()  # type: ignore[attr-defined]
     server.max_upload_bytes = max_upload_mb * 1024 * 1024  # type: ignore[attr-defined]

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import openpyxl
-from ai_review import review_issue_candidates, summarize_audit
+from ai_review import review_issue_candidates, suggest_correct_codes, summarize_audit
 from audit_history import record_and_render
 from app_runtime import APP_ROOT, configure_logging
 from report_business import build_overview, render_html, render_xlsx
@@ -423,6 +423,7 @@ RULE_DEFINITIONS: dict[str, str] = {
     "KKS-33": "设备分类码合法性：第 8-9 位（A1A2）应为 GB/T 50549-2020 附录B 收录的两位字母码；含禁用字母 I/O 为硬错误。",
     "KKS-34": "禁用字母 I/O：GB/T 50549-2020 4.2.1 注规定 KKS 字母表禁用 I、O（防与数字 1、0 混淆），附录B 中 I 为“禁止使用”。",
     "KKS-35": "阀门/管道编号段语义：QM（截止阀）、WP（管道）的设备编号按功能分段——001-299 通用、301-399 测量、401-499 疏水排气、601-699 取样；编号段与名称功能词矛盾即提示。",
+    "KKS-36": "标准间分类码分歧披露：同一分类码在 GB/T 50549-2020 与火电导则中含义不同（如 GP 国标=泵、企标=照明检修配电箱）时披露双方定义，提示按项目所采用的标准确认；只披露、不判错。",
     "KKS-A": "名称语义与设备字母一致：名称含泵/阀等词应对应泵类/阀类字母，不符即名实疑点。",
     "KKS-C": "命名风格归一：1号机/1#机/#1机/一号机 等风格混用，提示统一风格。",
     "KKS-D": "空/缺名称：名称列为空、-、无、None 等，设为必填字段时按 P0 阻断。",
@@ -476,6 +477,11 @@ _ZM_FILE = STANDARD_FILES["zhongmei"]
 _ST_CODE_SYS = (f"{_GB_FILE} 4.4.2 系统分类码按附录A选用（附录A 系统分类索引）",) * 3
 _ST_CODE_DEV = (f"{_GB_FILE} 4.4.3 设备分类码按附录B选用；4.2.1 注 禁用 I、O（附录B 表B.0.2 I=禁止使用）",) * 3
 _ST_VALVE = (f"{_GB_FILE} 表5.1.4 阀门设备分类码；表5.1.5 QM/WP 设备编号分段（{_ZM_FILE} 8.1.5、8.1.6）",) * 3
+_ST_DIVERGE = (
+    f"{_GB_FILE} 4.4.3 附录B（GP=泵、GQ=风机、FL=安全阀、QM=截止阀、WP=管道）"
+    f" 与 {STANDARD_FILES['huodian']} 5.2.2.1 / 6.2 设备索引（G=电气设备、AA=阀门、AP=泵组、AN=风机、BR=管道）"
+    f" 分类码体系不同；同码不同义时不判错，按项目所采用的标准确认",
+) * 3
 
 RULE_SOURCES: dict[str, dict[str, str]] = {}
 for _rid, _vals in {
@@ -487,7 +493,7 @@ for _rid, _vals in {
     "KKS-28": _ST_G, "KKS-29": _ST_STRUCT,
     "KKS-A": _ST_DEV, "KKS-G": _ST_COMBO,
     "KKS-32": _ST_CODE_SYS, "KKS-33": _ST_CODE_DEV, "KKS-34": _ST_CODE_DEV,
-    "KKS-35": _ST_VALVE,
+    "KKS-35": _ST_VALVE, "KKS-36": _ST_DIVERGE,
 }.items():
     RULE_SOURCES[_rid] = dict(zip(("huodian", "wind", "solar"), _vals))
 # 出处列展示为"完整文件名 + 条款"，把元组中的短名前缀替换成 STANDARD_FILES 全名
@@ -1089,6 +1095,20 @@ def _apply_template_skill_rules(
             message=reason, suggestion=suggestion, status="needs_review",
         )
     diagnostics["executed_rules"].append("KKS-35")
+
+    # ---- 标准间分类码分歧披露（GB/T 50549-2020 vs Q/WL 火电导则）----
+    # 两套标准的分类码体系不同（阀门：国标 QM / 企标 AA；泵：国标 GP / 企标 AP…）。
+    # 这类码两边都不算错，但必须让审核人员知道，否则会照着另一套标准改错码。
+    # 因此只披露、不判错，等级固定 P2，按码聚合。分歧清单由 build_code_index.py 生成。
+    for item in rules.standard_divergence_check(template_cols, template_rows):
+        _append_skill_issue(
+            issues, seen, records_by_index, rule_id="KKS-36", priority=item["severity"],
+            category="标准间分类码分歧", index=item["index"],
+            message=f'{item["message"]}（本表 {item["count"]} 处，示例 {"、".join(item["rows"][:3])}）',
+            suggestion=item["suggestion"], status="needs_review",
+            evidence=f'分类码={item["segment"]}; 出现 {item["count"]} 次; 分歧清单=config/kks_code_index.json#cross_standard_divergences',
+        )
+    diagnostics["executed_rules"].append("KKS-36")
     return diagnostics
 
 
@@ -1296,6 +1316,17 @@ def apply_ai_review_stage(
     """Run the optional semantic stage and update the audit conclusion."""
     result["ai_review"] = review_issue_candidates(result, progress_callback=progress_callback)
     result["ai_summary"] = summarize_audit(result, progress_callback=progress_callback)
+    # 问题行的「AI 建议编码」：只对有问题的行生成，条款原文随 prompt 送入，
+    # 生成结果再由本地复核（骨架/字母表/分类码字典），不合规的标为不可用。
+    try:
+        result["code_suggestions"] = suggest_correct_codes(
+            result,
+            progress_callback=progress_callback,
+            rule_source_lookup=lambda rid, std: rule_source(rid, std),
+        )
+    except Exception as exc:  # 建议编码失败不影响主审核结论
+        LOGGER.warning("ai_code_suggest_stage_failed error=%s", exc)
+        result["code_suggestions"] = {"status": "failed", "error": str(exc)[:200], "suggestions": {}}
     result["final_decision_counts"] = final_decision_counts(result)
     final_counts = result["final_decision_counts"]
     final_actionable = final_counts.get("confirmed_issue", 0) + final_counts.get("needs_human", 0)

@@ -98,6 +98,38 @@ AI 地址、模型和密钥由管理员预先写入 `config/app_config.json`，�
 
 AI 配置可通过管理员页面维护，也可直接编辑 `config/app_config.json`；日志保存在 `logs/kks-audit.log`，审核运行产物保存在 `runs/`。
 
+AI 的三个附加能力用环境变量（或 `config/app_config.json` 的 `ai` 段）单独控制，默认都开启：
+
+| 变量 | 作用 | 关闭时 |
+|---|---|---|
+| `AI_SUMMARY_ENABLED` | 单文件「AI 总体总结」 | 报告第九节不生成 |
+| `AI_TREND_SUMMARY_ENABLED` | 台账「AI 跨文件趋势总结」 | 汇总报告不出趋势节 |
+| `AI_CODE_SUGGEST_ENABLED` | **问题行的「AI 建议编码」** | 不生成，报告不出现该列 |
+| `AI_CODE_SUGGEST_MAX` | 送生成的行数上限（`0` = 不限制） | 超限时按 P0>P1>P2 截断 |
+
+「AI 建议编码」只对**判定为有问题的行**生成，命中规则的**标准条款原文**会随 prompt 一起送入，
+生成结果再由本地复核（12 位骨架 / 禁用 `I`、`O` / 分类码必须落在两套标准字典内），
+不通过的不写进报告。报告第十节与 Excel 的「AI建议编码」sheet 是它的落点，仅供参考，不替代规则结论。
+
+## 规则一致性核查
+
+项目的编码规则来自三份标准（GB/T 50549-2020、Q/WL 火电导则、中煤细则），落地到 `config/kks_rules.json`、
+`run_audit.py`、`kks-audit/scripts/audit_template.py`、`SKILL.md` 和 `config/kks_code_index.json` 五个地方。
+**改任何规则之后，先跑一次核查**：
+
+```bash
+python -B tools/check_rule_conflicts.py      # 退出码 0 = 无冲突；1 = 有 ERROR
+python -B -m pytest tests/test_rule_conflicts.py -q
+```
+
+它检查四类问题：规则号在「定义 / 出处 / 代码 / SKILL」四处是否对齐、配置常量与代码常量是否一致、
+两套标准的同码异义是否已登记、同一行是否被两条规则以不同等级判定。
+
+⚠️ 已知且已登记的跨标准分歧（详见 `config/kks_rules.json` 的 `standard_divergences`）：
+国标与火电导则的**分类码体系不同**——阀门 国标 `QM` / 企标 `AA`，泵 国标 `GP` / 企标 `AP`，
+管道 国标 `WP` / 企标 `BR`，设备主组 `G` 国标是"触发流动"、企标是"电气设备"。
+因此分类码合法性**取两套标准的并集判定**，同码异义时由 KKS-36 披露、**不判错**。
+
 Skill 管理页支持编辑/上传 `SKILL.md`、`references/*.md` 和 `scripts/audit_template.py`，也支持上传只包含这些文件的 `.zip` 包。每次保存前会备份到 `skill_backups/`；修改 `audit_template.py` 后需要重启服务，修改 Markdown 后会在后续 AI 复核中使用。
 
 ## 打包为 Windows EXE

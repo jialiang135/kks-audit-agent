@@ -38,6 +38,8 @@ GRAY = "F1F5F9"
 PALE_RED = "FEF2F2"
 PALE_AMBER = "FFFBEB"
 PALE_GREEN = "F0FDF4"
+# 明细表里用等宽字体展示的列（编码类），HTML 与 Excel 共用同一口径
+_MONO_KINDS = ("kks_code", "parent_code", "old_code", "ai_suggested_code")
 # HTML/CSS 与广元模板同款
 CSS = """
 :root{--bg:#f5f7fa;--card:#fff;--ink:#1f2d3d;--mut:#6b7a8d;--line:#e3e8ef;
@@ -456,6 +458,51 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
                 item["ai_decision_label"] = _AI_DECISION_LABELS.get(decision, "需人工确认" if decision or item.get("ai_decision") else "")
                 item["ai_final_summary"] = str(item.get("final_summary", "") or "")
 
+    # ---- AI 建议编码（第十节 / Excel 独立 sheet 数据源）
+    # 只对「判定为有问题的行」生成；本地复核未通过的标为不可用，不写进建议值。
+    code_suggest = result.get("code_suggestions") if isinstance(result.get("code_suggestions"), dict) else {}
+    suggest_map: dict[str, dict[str, Any]] = code_suggest.get("suggestions") or {}
+    suggest_rows: list[dict[str, Any]] = []
+    for key in sorted(suggest_map, key=lambda x: (int(x) if str(x).isdigit() else 0)):
+        item = suggest_map[key]
+        if not isinstance(item, dict):
+            continue
+        code = str(item.get("suggested_code", "") or "").strip()
+        suggest_rows.append({
+            "excel_row": key,
+            "kks_code": "",
+            "name": "",
+            "suggested_code": code if item.get("valid") else "",
+            "changed": str(item.get("changed", "") or ""),
+            "basis": "；".join(item.get("basis") or []),
+            "reason": str(item.get("reason", "") or ""),
+            "valid": bool(item.get("valid")),
+            "invalid_reason": str(item.get("invalid_reason", "") or ""),
+            "confidence": item.get("confidence", 0),
+        })
+    if suggest_rows:
+        # 补齐行号对应的原编码/名称，便于在独立 sheet 里直接对照
+        by_row = {row_key(it): it for it in issues}
+        for item in suggest_rows:
+            src = by_row.get(int(item["excel_row"]) if str(item["excel_row"]).isdigit() else 0)
+            if src:
+                item["kks_code"] = str(src.get("kks_code", "") or "")
+                item["name"] = str(src.get("name", "") or "")
+        suggest_by_row = {str(it["excel_row"]): it for it in suggest_rows}
+        for bucket in buckets:
+            for item in bucket["items"]:
+                found = suggest_by_row.get(str(row_key(item)))
+                if not found or not found["suggested_code"]:
+                    continue
+                item["ai_suggested_code"] = found["suggested_code"]
+            # 列位置：紧跟「编码」之后，方便左右对照原码与建议码；没有编码列则放最右
+            new_cols = [{"k": "ai_suggested_code", "t": "AI建议编码"}]
+            insert_at = next((i for i, c in enumerate(bucket["columns"]) if c["k"] == "kks_code"), None)
+            if insert_at is None:
+                bucket["columns"] = bucket["columns"] + new_cols
+            else:
+                bucket["columns"] = bucket["columns"][:insert_at + 1] + new_cols + bucket["columns"][insert_at + 1:]
+
     # ---- AI 复核建议（第九节 / Excel 独立 sheet 数据源）
     ai_suggestions: list[dict[str, str]] = []
     seen_ai_rows: set[tuple[str, str]] = set()
@@ -577,6 +624,14 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
         "ai_model": ai_model_name,
         "ai_summary": ai_summary if ai_summary_ok else {},
         "ai_suggestions": ai_suggestions,
+        "ai_code_suggestions": suggest_rows,
+        "ai_code_suggest_meta": {
+            "model": str(code_suggest.get("model", "") or ""),
+            "status": str(code_suggest.get("status", "") or ""),
+            "requested": int(code_suggest.get("requested", 0) or 0),
+            "validated": int(code_suggest.get("validated", 0) or 0),
+            "rejected": int(code_suggest.get("rejected", 0) or 0),
+        },
         "cards": cards,
         "must_handle": must_handle,
         "clean_flags": {
@@ -775,7 +830,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
         p1_no += 1
         headers = [c["t"] for c in bucket["columns"]]
         rows = bucket_rows(bucket)
-        mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in ("kks_code", "parent_code", "old_code")}
+        mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in _MONO_KINDS}
         note = bucket["note"]
         if key == "p1_unit_text" and ov["unit_direction"]:
             note += " " + direction_text(ov["unit_direction"])
@@ -796,7 +851,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
         p2_no += 1
         headers = [c["t"] for c in bucket["columns"]]
         rows = bucket_rows(bucket)
-        mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in ("kks_code", "parent_code", "old_code")}
+        mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in _MONO_KINDS}
         p2_sections += f"""<h3 style="font-size:15px;margin:18px 0 4px">5.{p2_no} {esc(bucket['title'])}（{bucket['count']:,} 条）</h3>
 <div class="callout p2">{esc(bucket['note']) or '提示项，人工抽检核对。'}</div>{data_table(headers, rows, mono_cols, limit=20)}"""
     # 原KKS一对多（按组）
@@ -822,7 +877,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
         bucket = ov["buckets"][0]
         headers = [c["t"] for c in bucket["columns"]]
         rows = bucket_rows(bucket)
-        mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in ("kks_code", "parent_code")}
+        mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in _MONO_KINDS}
         p0_html = (f"<h3 style='font-size:15px;margin:14px 0 4px'>{esc(bucket['title'])}（{bucket['count']} 条）</h3>"
                    f'<div class="callout p0">阻断性问题必须修改并复核后才能导入。</div>{data_table(headers, rows, mono_cols, limit=20)}')
         p2_sections = p0_html + p2_sections
@@ -884,9 +939,43 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
   <ul class="tight">{points9}</ul>
 </div>"""
 
-    # 一至九节全部转为可折叠章节（默认展开，点击标题收起/展开）
-    sec1, sec2, sec3, sec4, sec5, sec6, sec7, sec8, sec9 = (
-        _fold_section(s) for s in (sec1, sec2, sec3, sec4, sec5, sec6, sec7, sec8, sec9)
+    # 十、AI 建议编码（只对判定为问题的行生成；未生成时省略本节）
+    sec10 = ""
+    sug_rows = ov.get("ai_code_suggestions") or []
+    if sug_rows:
+        meta = ov.get("ai_code_suggest_meta") or {}
+        usable = [s for s in sug_rows if s.get("suggested_code")]
+        body10: list[str] = []
+        for s in (usable or sug_rows)[:24]:
+            body10.append(
+                "<tr><td class=\"num\">{}</td><td class=\"mono\">{}</td><td>{}</td>"
+                "<td class=\"mono\">{}</td><td>{}</td><td>{}</td></tr>".format(
+                    esc(s.get("excel_row", "")),
+                    esc(s.get("kks_code", "")),
+                    esc(str(s.get("name", ""))[:40]),
+                    esc(s.get("suggested_code", "") or "—"),
+                    esc(s.get("basis", "") or "—"),
+                    esc(str(s.get("reason", ""))[:120]),
+                )
+            )
+        more10 = (f'<tr><td colspan="6" class="num" style="color:var(--mut)">'
+                  f'…（共 {len(sug_rows):,} 条，详见 Excel「AI建议编码」sheet）</td></tr>'
+                  if len(sug_rows) > 24 else "")
+        sec10 = f"""<div class="sec">
+  <h2>十、AI 建议编码（仅问题行）</h2>
+  <div class="sub">模型 {esc(meta.get('model') or '—')}；对 {meta.get('requested', 0)} 个有问题行生成建议，
+  其中 {meta.get('validated', 0)} 条通过本地复核（骨架/字母表/分类码字典），
+  {meta.get('rejected', 0)} 条因不合规被丢弃。建议仅供参考，改码前请对照规则依据人工确认。</div>
+  <div class="callout p2">每条建议都必须在本地复核里同时满足：<b>12 位骨架</b>（G|F0|F1F2F3|F4F5|A1A2|AN1AN2AN3）、
+  <b>不含 I/O</b>、<b>系统分类码与设备分类码在两套标准字典内</b>。不满足的不会出现在下表，
+  也不会写进 Excel。表中留「—」表示模型认为证据不足，未给出建议。</div>
+  <table class="data"><tr><th>行</th><th>原编码</th><th>设备名称</th><th>AI建议编码</th><th>依据</th><th>理由</th></tr>
+  {"".join(body10)}{more10}</table>
+</div>"""
+
+    # 一至十节全部转为可折叠章节（默认展开，点击标题收起/展开）
+    sec1, sec2, sec3, sec4, sec5, sec6, sec7, sec8, sec9, sec10 = (
+        _fold_section(s) for s in (sec1, sec2, sec3, sec4, sec5, sec6, sec7, sec8, sec9, sec10)
     )
 
     foot = f'<div class="foot">审计基线 {today}</div>'
@@ -908,6 +997,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
 {sec7}
 {sec8}
 {sec9}
+{sec10}
 {foot}
 </div></body></html>"""
 
@@ -1079,7 +1169,7 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
 
     for name, bucket in sheet_specs:
         headers = [c["t"] for c in bucket["columns"]]
-        mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in ("kks_code", "parent_code", "old_code")}
+        mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in _MONO_KINDS}
         data = []
         for item in bucket["items"]:
             data.append([item.get(c["k"], "") for c in bucket["columns"]])
@@ -1109,6 +1199,21 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
             [[s["excel_row"], s["kks_code"], s["name"], s["bucket_title"], s["decision"], s["summary"], s["suggestion"]]
              for s in ov["ai_suggestions"]],
             {1},
+        )
+
+    # AI 建议编码（独立 sheet；未生成时跳过）
+    if ov.get("ai_code_suggestions"):
+        rows10 = ov["ai_code_suggestions"]
+        meta10 = ov.get("ai_code_suggest_meta") or {}
+        write_sheet(
+            "AI建议编码",
+            f"AI 建议编码（{len(rows10)} 条 · 通过复核 {meta10.get('validated', 0)} · 模型 {meta10.get('model') or '—'}）",
+            ["行", "原编码", "设备名称", "AI建议编码", "改动段", "规则依据", "理由", "是否通过本地复核", "置信度"],
+            [[s["excel_row"], s["kks_code"], s["name"], s["suggested_code"] or "—",
+              s["changed"], s["basis"], s["reason"],
+              "通过" if s["valid"] else f'未通过：{s["invalid_reason"] or "模型未给出建议"}',
+              s["confidence"]] for s in rows10],
+            {1, 3},
         )
 
     # 结构说明与范围

@@ -72,6 +72,8 @@ class AIConfig:
     max_candidates: int = 0
     summary_enabled: bool = True   # 单文件总体总结（AI_SUMMARY_ENABLED）
     trend_enabled: bool = True     # 台账跨文件趋势总结（AI_TREND_SUMMARY_ENABLED）
+    code_suggest_enabled: bool = True   # 问题行「AI 建议编码」（AI_CODE_SUGGEST_ENABLED）
+    code_suggest_max: int = 0           # 送生成的行数上限，0=不限制（AI_CODE_SUGGEST_MAX）
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -146,6 +148,8 @@ def load_config() -> AIConfig:
         max_candidates=_parse_int(environment_value("AI_REVIEW_MAX_CANDIDATES", ai.get("max_candidates", 0)), 0, 0, 2000),
         summary_enabled=_parse_bool(environment_value("AI_SUMMARY_ENABLED", ai.get("summary_enabled", "")), True),
         trend_enabled=_parse_bool(environment_value("AI_TREND_SUMMARY_ENABLED", ai.get("trend_enabled", "")), True),
+        code_suggest_enabled=_parse_bool(environment_value("AI_CODE_SUGGEST_ENABLED", ai.get("code_suggest_enabled", "")), True),
+        code_suggest_max=_parse_int(environment_value("AI_CODE_SUGGEST_MAX", ai.get("code_suggest_max", 0)), 0, 0, 2000),
     )
 
 
@@ -1087,6 +1091,393 @@ def summarize_audit(result: dict[str, Any], progress_callback: ProgressCallback 
     except Exception as exc:
         LOGGER.error("ai_summary_failed error=%s", exc)
         return {"status": "failed", "error": str(exc)[:200]}
+
+
+# ============================================================ 问题行「AI 建议编码」
+#
+# 需求（2026-10-08）：报告和问题清单里，对**判定为有问题的行**再给一列"规范编码应该是什么"。
+# 三条硬要求：
+#   1. 只对有问题的行生成（有问题才有 P0/P1/P2，不是全表都生成）；
+#   2. 规则依据必须准确——把命中的标准**条款原文**塞进 prompt，不让模型凭印象编；
+#   3. 生成结果必须过本地复核（骨架/字母表/字典），不合规的标为不可用，不写进建议列。
+#
+# 与 review_issue_candidates 的区别：复核阶段判"这条到底是不是问题"，本阶段回答"该怎么改"。
+SUGGEST_BATCH_SIZE = 8
+SUGGEST_PROMPT = """你是电厂 KKS 编码整改工程师。任务：给**已被规则判定为有问题**的行，给出一个符合标准的规范编码。
+
+硬性约束（违反任何一条即为无效答案，会被程序丢弃）：
+1. 编码必须恰好 12 位，骨架为 G|F0|F1F2F3|F4F5|A1A2|AN1AN2AN3：
+   G 字母、F0 数字、F1F2F3 字母、F4F5 数字、A1A2 字母、AN1AN2AN3 三位数字。
+2. 只允许大写英文字母与阿拉伯数字，**禁用字母 I 和 O**。
+3. 系统分类码 F1F2F3、设备分类码 A1A2 必须从"候选分类码"里选，不得自己发明字母组合。
+4. 最小改动：只改导致问题的那一段；机组前缀 G、系统编号 F4F5、设备编号 AN 在没有问题时必须保持原值。
+5. 证据不足时，suggested_code 返回空字符串并在 reason 里说明缺什么证据——宁可留空，不要猜。
+6. 不要改变设备名称，不要编造标准条款号；basis 只能引用"规则依据"里给过的条款。
+
+只返回 JSON 对象，格式为：
+{"suggestions":[{"row":行号整数,"suggested_code":"12位编码或空串","changed":"被修改的段名，如 A1A2","basis":["引用的条款号"],"reason":"中文理由","confidence":0.0}]}
+confidence 为 0~1 的数字。每个 row 最多返回一次。"""
+
+
+_CODE_INDEX_CACHE: dict[str, Any] | None = None
+
+
+def _code_index() -> dict[str, Any]:
+    """读取分类码索引（与 audit_template 同一份文件，独立缓存避免交叉依赖）。"""
+    global _CODE_INDEX_CACHE
+    if _CODE_INDEX_CACHE is None:
+        from pathlib import Path as _Path
+        path = _Path(__file__).resolve().parent / "config" / "kks_code_index.json"
+        try:
+            _CODE_INDEX_CACHE = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _CODE_INDEX_CACHE = {}
+    return _CODE_INDEX_CACHE
+
+
+def _suggest_dicts() -> tuple[dict[str, str], dict[str, str]]:
+    """返回（系统码字典, 设备码字典）——两套标准取并集，与 KKS-32/33 的判定口径一致。
+
+    ⚠️ 同码在两套标准里含义不同的（如 GP：国标=泵、企标=照明检修配电箱）**两个名称都保留**，
+    并在候选里分别标注「国标」「企标」。它们只用于给模型提供候选与释义；
+    真正决定"这条建议是否有效"的是 _validate_suggested 里的成员资格与骨架校验。
+    """
+    idx = _code_index()
+
+    def merge(gb_key: str, hd_key: str) -> dict[str, str]:
+        gb = dict(idx.get(gb_key) or {})
+        hd = dict(idx.get(hd_key) or {})
+        merged: dict[str, str] = {}
+        for code in sorted(set(gb) | set(hd)):
+            parts = []
+            if code in gb and gb[code]:
+                parts.append(f"国标：{gb[code]}")
+            if code in hd and hd[code]:
+                parts.append(f"企标：{hd[code]}")
+            merged[code] = " ｜ ".join(parts)
+        return merged
+
+    return merge("system_codes", "system_codes_huodian"), merge("device_codes", "device_codes_huodian")
+
+
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+# 高频虚词/通用字，参与单字匹配只会带来噪声
+_STOP_CHARS = set("的与和及或用系是及在为对从至到上下内外个种设备装置系统回路流程")
+
+
+def _shingles(text: str, size: int = 2) -> set[str]:
+    return {text[i:i + size] for i in range(max(0, len(text) - size + 1))}
+
+
+def _candidate_codes(name: str, codes: dict[str, str], limit: int = 8) -> list[dict[str, str]]:
+    """按设备/系统名称与字典条目的字面重合度挑候选码。
+
+    为什么要给候选：模型直接发明字母组合是最大风险源。这里先从标准字典里按名称相似度
+    选出少量候选，让模型在候选内选择，把"编造"的概率压到最低。
+
+    打分口径（用真实名称校准过）：字典条目的名称形如「定义 / 举例」，定义部分匹配权重更高；
+    中文里"泵""阀"这类单字才是关键信息（"给水泵"和字典里的"提升泵、清洗泵"只有单字重合），
+    所以 2 字重合之外还要算单字重合，否则会出现"给水泵匹配不到任何候选"。
+    """
+    target = str(name or "").strip()
+    if not target:
+        return []
+    grams = _shingles(target)
+    target_chars = {ch for ch in target if _CJK_RE.match(ch)} - _STOP_CHARS
+    if not grams and not target_chars:
+        return []
+    scored: list[tuple[int, str, str]] = []
+    for code, label in codes.items():
+        label_text = str(label or "")
+        if not _CJK_RE.search(label_text):
+            continue
+        head, _, tail = label_text.partition(" / ")
+        tail = tail[:160]
+        head_chars = {ch for ch in head if _CJK_RE.match(ch)} - _STOP_CHARS
+        tail_chars = {ch for ch in tail if _CJK_RE.match(ch)} - _STOP_CHARS
+        score = (
+            4 * len(grams & _shingles(head))
+            + 2 * len(grams & _shingles(tail))
+            + 2 * len(target_chars & head_chars)
+            + 1 * len(target_chars & tail_chars)
+        )
+        if score:
+            scored.append((score, code, label_text))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    return [{"code": c, "name": n[:150]} for _, c, n in scored[:limit]]
+
+
+def _rule_clause_payload(rule_ids: set[str], lookup: Callable[[str, str], str] | None) -> list[dict[str, str]]:
+    """把命中规则的**标准条款原文**取出来。
+
+    条款原文优先取 config/kks_rules.json 的 rule_sources（含 standard/clause/text），
+    取不到时回退到调用方传入的 rule_source()（那是报告"规则依据"列用的同一条出处）。
+    """
+    from pathlib import Path as _Path
+    out: list[dict[str, str]] = []
+    try:
+        cfg = json.loads((_Path(__file__).resolve().parent / "config" / "kks_rules.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cfg = {}
+    sources = cfg.get("rule_sources") or {}
+    for rid in sorted(rule_ids):
+        for item in (sources.get(rid) or {}).get("sources") or []:
+            out.append({
+                "rule_id": rid,
+                "clause": f'{item.get("standard", "")} {item.get("clause", "")}'.strip(),
+                "text": str(item.get("text", ""))[:400],
+            })
+        if not (sources.get(rid) or {}).get("sources") and lookup:
+            out.append({"rule_id": rid, "clause": lookup(rid, "huodian")[:200], "text": ""})
+    return out
+
+
+def _suggest_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
+    """按行聚合问题：只有被规则命中的行才进候选。"""
+    records = {str(rec.get("excel_row")): rec for rec in _context_records(result)}
+    rows: dict[str, dict[str, Any]] = {}
+    for issue in result.get("issues", []):
+        if not isinstance(issue, dict) or issue.get("status") == "resolved":
+            continue
+        key = str(issue.get("excel_row") or "")
+        if not key or key == "None":
+            continue
+        code = str(issue.get("kks_code") or "").strip()
+        if not code:
+            continue          # 无码行由 KKS-00 处理，生成"正确编码"没有意义
+        rec = records.get(key, {})
+        row = rows.setdefault(key, {
+            "row": key,
+            "kks_code": code,
+            "name": str(issue.get("name") or rec.get("name") or ""),
+            "parent_code": str(issue.get("parent_code") or rec.get("parent_code") or ""),
+            "profession": str(issue.get("profession") or rec.get("profession") or ""),
+            "system": str(issue.get("system") or rec.get("system") or ""),
+            "unit": str(issue.get("unit") or rec.get("unit") or ""),
+            "rules": [],
+        })
+        row["rules"].append({
+            "rule_id": str(issue.get("rule_id", "")),
+            "priority": str(issue.get("priority", "")),
+            "category": str(issue.get("category", "")),
+            "message": str(issue.get("message", ""))[:220],
+        })
+    return list(rows.values())
+
+
+def _suggest_payload_row(row: dict[str, Any], sys_codes: dict[str, str], dev_codes: dict[str, str]) -> dict[str, Any]:
+    code = row["kks_code"]
+    names: dict[str, str] = {}
+    if len(code) >= 5:
+        names["F1F2F3(系统分类码)"] = sys_codes.get(code[2:5], "（两套标准都未收录）")
+    if len(code) >= 9:
+        names["A1A2(设备分类码)"] = dev_codes.get(code[7:9], "（两套标准都未收录）")
+    return {
+        "row": int(row["row"]) if str(row["row"]).isdigit() else row["row"],
+        "当前编码": code,
+        "设备名称": row["name"],
+        "父级": row["parent_code"],
+        "专业": row["profession"],
+        "系统": row["system"],
+        "当前分类码含义": names,
+        "命中规则": row["rules"],
+        "系统分类码候选": _candidate_codes(row["name"], sys_codes, 6),
+        "设备分类码候选": _candidate_codes(row["name"], dev_codes, 8),
+    }
+
+
+def _clean_code(value: Any) -> str:
+    return re.sub(r"[^A-Za-z0-9\-]", "", str(value or "")).strip().upper()
+
+
+# 12 位骨架的分段位置：与 config/kks_rules.json 的 code_grammar.segments_positions、
+# kks-audit/scripts/audit_template.py 的 SEG_12 三处必须一致（由 check_rule_conflicts 断言）。
+_FALLBACK_SEGMENTS = [
+    (1, 1, "ALNUM", "全厂码G"),
+    (2, 2, "DIGIT", "系统前缀号F0"),
+    (3, 5, "ALPHA", "系统分类码F1F2F3"),
+    (6, 7, "DIGIT", "系统编号FN"),
+    (8, 9, "ALPHA", "设备分类码A1A2"),
+    (10, 12, "DIGIT", "设备编号AN"),
+]
+
+
+def _segment_positions() -> list[tuple[int, int, str, str]]:
+    from pathlib import Path as _Path
+    try:
+        cfg = json.loads((_Path(__file__).resolve().parent / "config" / "kks_rules.json").read_text(encoding="utf-8"))
+        raw = (cfg.get("code_grammar") or {}).get("segments_positions")
+        if raw:
+            return [(int(a), int(b), str(kind), str(label)) for a, b, kind, label in raw]
+    except (OSError, ValueError, TypeError):
+        pass
+    return list(_FALLBACK_SEGMENTS)
+
+
+def _validate_suggested(code: str, sys_codes: dict[str, str], dev_codes: dict[str, str]) -> tuple[bool, str]:
+    """本地复核：模型给的编码必须自己先过一遍标准，不合规的直接丢弃并写明原因。"""
+    if not code:
+        return False, ""
+    if len(code) != 12:
+        return False, f"长度 {len(code)} 位，不是 12 位"
+    if not re.fullmatch(r"[A-Z0-9]{12}", code):
+        return False, "含非大写字母/数字字符"
+    bad = [c for c in code if c in ("I", "O")]
+    if bad:
+        return False, f"含禁用字母 {'、'.join(sorted(set(bad)))}"
+    for start, end, kind, label in _segment_positions():
+        seg = code[start - 1:end]
+        if kind == "DIGIT" and not seg.isdigit():
+            return False, f'{label}（第{start}-{end}位）"{seg}" 含非数字'
+        if kind == "ALPHA" and not seg.isalpha():
+            return False, f'{label}（第{start}-{end}位）"{seg}" 含非字母'
+        if kind == "ALNUM" and not seg.isalnum():
+            return False, f'{label}（第{start}-{end}位）"{seg}" 含非字母数字'
+    if code[2:5] not in sys_codes:
+        return False, f'系统分类码 "{code[2:5]}" 不在两套标准字典内'
+    if code[7:9] not in dev_codes:
+        return False, f'设备分类码 "{code[7:9]}" 不在两套标准字典内'
+    return True, ""
+
+
+def _safe_suggestion(item: Any, allowed_rows: set[str]) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    row = str(item.get("row", "")).strip()
+    if row not in allowed_rows:
+        return None
+    try:
+        confidence = float(item.get("confidence", 0) or 0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    basis = item.get("basis")
+    if isinstance(basis, str):
+        basis = [basis]
+    return {
+        "row": row,
+        "suggested_code": _clean_code(item.get("suggested_code", "")),
+        "changed": str(item.get("changed", ""))[:40],
+        "basis": [str(b)[:60] for b in (basis or []) if str(b).strip()][:6],
+        "reason": str(item.get("reason", ""))[:600],
+        "confidence": max(0.0, min(confidence, 1.0)),
+    }
+
+
+def suggest_correct_codes(
+    result: dict[str, Any],
+    *,
+    progress_callback: ProgressCallback | None = None,
+    rule_source_lookup: Callable[[str, str], str] | None = None,
+) -> dict[str, Any]:
+    """对问题行生成规范编码建议（只对有问题的行）。
+
+    返回结构：
+      status: disabled | completed | error；suggestions: {excel_row(str): {...}}
+      每条含 suggested_code / valid / invalid_reason / basis / reason / confidence / model
+    """
+    config = load_config()
+    base: dict[str, Any] = {
+        "enabled": bool(config.enabled and config.api_key and config.code_suggest_enabled),
+        "status": "disabled",
+        "model": config.model or None,
+        "requested": 0,
+        "returned": 0,
+        "validated": 0,
+        "rejected": 0,
+        "no_change": 0,
+        "suggestions": {},
+        "errors": [],
+    }
+    if not config.code_suggest_enabled:
+        base["reason"] = "AI_CODE_SUGGEST_ENABLED=false"
+        return base
+    if not config.enabled:
+        base["reason"] = "AI_ENABLED=false"
+        return base
+    if not config.api_key:
+        base["reason"] = "未配置 AI_API_KEY"
+        return base
+
+    rows = _suggest_rows(result)
+    if not rows:
+        base["status"] = "completed"
+        base["reason"] = "没有可建议编码的问题行"
+        return base
+    limit = int(config.code_suggest_max or 0)
+    if limit and len(rows) > limit:
+        rank = {"P0": 0, "P1": 1, "P2": 2}
+        rows.sort(key=lambda r: min(rank.get(x["priority"], 2) for x in r["rules"]))
+        base["truncated_from"] = len(rows)
+        rows = rows[:limit]
+    base["requested"] = len(rows)
+
+    sys_codes, dev_codes = _suggest_dicts()
+    if not sys_codes or not dev_codes:
+        base["status"] = "error"
+        base["errors"].append("分类码索引缺失（config/kks_code_index.json），无法校验建议编码")
+        return base
+
+    client = OpenAICompatibleClient(config)
+    try:
+        model, _source = client.choose_model()
+    except AIReviewError as exc:
+        base["status"] = "error"
+        base["errors"].append(str(exc))
+        return base
+    base["model"] = model
+
+    all_rules = {x["rule_id"] for r in rows for x in r["rules"]}
+    clauses = _rule_clause_payload(all_rules, rule_source_lookup)
+    standard = str(result.get("standard", ""))
+    LOGGER.info("ai_code_suggest_start rows=%s batches=%s", len(rows),
+                (len(rows) + SUGGEST_BATCH_SIZE - 1) // SUGGEST_BATCH_SIZE)
+
+    suggestions: dict[str, dict[str, Any]] = {}
+    batches = [rows[i:i + SUGGEST_BATCH_SIZE] for i in range(0, len(rows), SUGGEST_BATCH_SIZE)]
+    for index, batch in enumerate(batches, 1):
+        allowed = {str(r["row"]) for r in batch}
+        payload = {
+            "task": "suggest_correct_code",
+            "standard_in_use": standard or "火电导则",
+            "编码骨架": "G|F0|F1F2F3|F4F5|A1A2|AN1AN2AN3（12 位；字母位/数字位见约束）",
+            "规则依据": clauses,
+            "rows": [_suggest_payload_row(r, sys_codes, dev_codes) for r in batch],
+        }
+        try:
+            response = client.review(model, SUGGEST_PROMPT, payload)
+        except Exception as exc:  # 单批失败不影响其他批次
+            base["errors"].append(str(exc)[:200])
+            LOGGER.warning("ai_code_suggest_batch_failed batch=%s error=%s", index, exc)
+            continue
+        raw = response.get("suggestions", [])
+        if not isinstance(raw, list):
+            base["errors"].append("模型返回的 suggestions 不是数组")
+            continue
+        for item in raw:
+            parsed = _safe_suggestion(item, allowed)
+            if parsed is None:
+                continue
+            base["returned"] += 1
+            code = parsed["suggested_code"]
+            if not code:
+                base["no_change"] += 1
+            valid, reason = _validate_suggested(code, sys_codes, dev_codes)
+            if code and not valid:
+                base["rejected"] += 1
+            elif code:
+                base["validated"] += 1
+            suggestions[parsed["row"]] = {**parsed, "valid": valid, "invalid_reason": reason, "model": model}
+        _emit_progress(progress_callback, {
+            "phase": "ai", "stage": "code_suggest", "status": "running",
+            "percent": 92, "message": "AI 正在为问题行生成规范编码",
+            "hint": f"第 {index}/{len(batches)} 批，已生成 {base['validated']} 条可用建议",
+        })
+
+    base["suggestions"] = suggestions
+    base["status"] = "completed" if suggestions or not base["errors"] else "error"
+    LOGGER.info("ai_code_suggest_done rows=%s returned=%s valid=%s rejected=%s",
+                base["requested"], base["returned"], base["validated"], base["rejected"])
+    return base
 
 
 def summarize_ledger(ledger: list[dict[str, Any]], progress_callback: ProgressCallback | None = None) -> dict[str, Any]:

@@ -721,12 +721,23 @@ def _prefix_index(codes):
     return s1, s2
 
 
-def _aggregate_by_segment(rows, k, extract, known, groups, prefixes, label, hard_rule):
+def _merge_code_dicts(primary, extra):
+    """合并两套标准的码字典（并集；同码保留标准原文名称，不覆盖）。"""
+    if not extra:
+        return dict(primary or {})
+    merged = dict(primary or {})
+    for code, name in (extra or {}).items():
+        merged.setdefault(code, name)
+    return merged
+
+
+def _aggregate_by_segment(rows, k, extract, known, groups, prefixes, label, hard_rule,
+                          standards_label='GB/T 50549-2020 与火电导则'):
     """按"分类码"聚合上报，而不是逐行报。
 
     为什么聚合：用舟山真实数据（1190 行）校准过——同一个未收录码往往出现在几十行上，
     逐行报会把清单撑爆并放大误报。聚合后一个码只出一条，附出现次数与代表行。
-    另：标准附录在 PDF 中分页，抽取后仍可能有极少数码缺失（实测 GG 就是这种情况），
+    另：两套标准的附录都可能有极少数码未提取出来（实测 GG 就是这种情况），
     因此"未收录"一律只作 P2 待核线索，不下"错误"结论。
     """
     bucket: dict[str, dict] = {}
@@ -750,18 +761,18 @@ def _aggregate_by_segment(rows, k, extract, known, groups, prefixes, label, hard
             continue
         head, group = seg[0], seg[:2]
         if head not in prefixes[0]:
-            detail = f'主组 "{head}" 未出现在 GB/T 50549-2020 附录的 {label} 取值内'
+            detail = f'主组 "{head}" 未出现在 {standards_label} 的 {label} 取值内'
             sev = 'P2'
         elif len(seg) >= 2 and group not in prefixes[1]:
-            detail = f'组 "{group}" 未出现在附录中（主组 {head} = {groups.get(head, "")[:18]} 合法）'
+            detail = f'组 "{group}" 未出现在 {standards_label}中（主组 {head} = {groups.get(head, "")[:18]} 合法）'
             sev = 'P2'
         else:
-            detail = f'组合 "{seg}" 未收录（主组 {head} = {groups.get(head, "")[:18]}）'
+            detail = f'组合 "{seg}" 未收录于 {standards_label}（主组 {head} = {groups.get(head, "")[:18]}）'
             sev = 'P2'
         item = bucket.setdefault(seg, {
             'index': i, 'code': c, 'segment': seg, 'severity': sev,
             'message': f'{label} "{seg}" {detail}',
-            'suggestion': '核对是否为集团扩展码或录入偏差；标准附录可能有极少数码未提取，须人工确认后处理。',
+            'suggestion': '核对是否为集团扩展码或录入偏差；两套标准的附录都可能有极少数码未提取，须人工确认后处理。',
             'count': 0, 'rows': [],
         })
         item['count'] += 1
@@ -771,16 +782,18 @@ def _aggregate_by_segment(rows, k, extract, known, groups, prefixes, label, hard
 
 
 def system_class_code_legality(cols, rows):
-    """KKS-32 系统分类码合法性（GB/T 50549-2020 4.4.2 + 附录A）。
+    """KKS-32 系统分类码合法性。
 
-    取 12 位码第 3-5 位（F1F2F3）。按"分类码"聚合上报，避免同一码刷屏。
-    未收录 → P2 待核（附录可能有极少数码未提取出来）。
+    依据：GB/T 50549-2020 4.4.2（按附录A选用）＋ 火电导则 5.2.1.2 / 6.1 系统索引。
+    取 12 位码第 3-5 位（F1F2F3）。**字典取两套标准的并集**——两套标准的系统分类码
+    体系并不完全一致（例如 S/X 主组含义不同），只按国标判会把企标合法码误报。
+    未收录 → P2 待核（两套标准的附录都可能有极少数码未提取出来）。
     """
     idx = _load_code_index()
-    known = idx.get('system_codes') or {}
+    known = _merge_code_dicts(idx.get('system_codes'), idx.get('system_codes_huodian'))
     if not known:
         return []
-    groups = idx.get('system_s1_groups') or {}
+    groups = _merge_code_dicts(idx.get('system_s1_groups'), idx.get('system_s1_groups_huodian'))
     prefixes = _prefix_index(known)
     k = cols.get('kks')
 
@@ -797,16 +810,22 @@ def system_class_code_legality(cols, rows):
 
 
 def device_class_code_legality(cols, rows):
-    """KKS-33 设备分类码合法性（GB/T 50549-2020 4.4.3 + 附录B）。
+    """KKS-33 设备分类码合法性。
 
-    取 12 位码第 8-9 位（A1A2）。含禁用字母 I/O 是硬错误（4.2.1 注 + 附录B
-    "I = 禁止使用"），单独按行报 P0；其余未收录按码聚合报 P2 待核。
+    依据：GB/T 50549-2020 4.4.3（按附录B选用，4.2.1 注禁用 I/O）
+        ＋ 火电导则 5.2.2.1（按 6.2 设备索引选用，5.1.3.1 同样禁用 I/O）。
+    取 12 位码第 8-9 位（A1A2）。**字典取两套标准的并集**——两套标准的设备分类码
+    体系差别很大（阀门：国标 QM / 企标 AA；泵：国标 GP / 企标 AP；管道：国标 WP /
+    企标 BR），只按国标判会把企标编码整片误报。
+
+    含禁用字母 I/O 是硬错误（两套标准一致），单独按行报 P0；
+    其余未收录按码聚合报 P2 待核。同码在两套标准里含义不同的，由 KKS-36 单独披露。
     """
     idx = _load_code_index()
-    known = idx.get('device_codes') or {}
+    known = _merge_code_dicts(idx.get('device_codes'), idx.get('device_codes_huodian'))
     if not known:
         return []
-    groups = idx.get('device_t1_groups') or {}
+    groups = _merge_code_dicts(idx.get('device_t1_groups'), idx.get('device_t1_groups_huodian'))
     prefixes = _prefix_index(known)
     cfg = load_rule_config()
     forbidden = set((cfg.get('code_grammar') or {}).get('forbidden_letters') or ['I', 'O'])
@@ -828,11 +847,60 @@ def device_class_code_legality(cols, rows):
         clause = (cfg_rules.get('sources') or [{}])[0].get('clause', '4.2.1 注')
         return ('P0',
                 f'设备分类码 "{seg}" 含禁用字母 {"、".join(bad)}：GB/T 50549-2020 {clause}'
-                f'（KKS 字母表禁用 I、O，防与数字 1、0 混淆；附录B 中 I 为"禁止使用"）',
-                '改为不含 I/O 的合法设备分类码（按标准附录B 选用）')
+                f'（KKS 字母表禁用 I、O，防与数字 1、0 混淆；附录B 中 I 为"禁止使用"；'
+                f'火电导则 5.1.3.1 同样规定禁用 I、O）',
+                '改为不含 I/O 的合法设备分类码（按采用的分类码索引选用）')
 
     return _aggregate_by_segment(rows, k, extract, known, groups, prefixes,
                                  '设备分类码', hard_rule)
+
+
+def standard_divergence_check(cols, rows):
+    """KKS-36 标准间分类码分歧披露。
+
+    GB/T 50549-2020 与火电导则在分类码上有两套不同的体系，同一个码可能含义完全不同。
+    此时**任何一方都不构成"错误"**，但审核人员必须知道这件事，否则会照着错的那套改。
+    因此本规则把"数据里真实出现的分歧码"按码聚合披露一条，写明双方定义与应按哪套确认。
+
+    只披露、不判错；等级固定 P2。
+    """
+    idx = _load_code_index()
+    div = (idx.get('cross_standard_divergences') or {})
+    div_map: dict[str, dict] = {}
+    for item in (div.get('system') or []):
+        div_map.setdefault(str(item.get('code')), {**item, 'kind': '系统分类码'})
+    for item in (div.get('device') or []):
+        div_map.setdefault(str(item.get('code')), {**item, 'kind': '设备分类码'})
+    if not div_map:
+        return []
+    k = cols.get('kks')
+    bucket: dict[str, dict] = {}
+    for i, r in enumerate(rows):
+        c = _row_code(r, k)
+        if len(c) < 12:
+            continue
+        # 系统码按前 2 位（组级）匹配、设备码按 2 位精确匹配——分歧清单只登记到这一层，
+        # 更细的编号分配差异属于 DIV-06 的已知情况，逐行报会淹没审核人员。
+        for key, kind_override in ((c[2:4], '系统分类码'), (c[7:9], '设备分类码')):
+            item = div_map.get(key)
+            if not item:
+                continue
+            kind = kind_override
+            entry = bucket.setdefault(key, {
+                'index': i, 'code': c, 'segment': key, 'severity': 'P2', 'count': 0, 'rows': [],
+                'message': (
+                    f'{kind} "{key}" 在 GB/T 50549-2020 与火电导则中含义不同：'
+                    f'国标 = {item.get("gb50549", "")[:40]}；企标（火电导则）= {item.get("huodian", "")[:40]}'
+                ),
+                'suggestion': (
+                    f'这不是错误。请先确认本批数据采用哪套标准：按火电导则编码时应为「{item.get("huodian", "")[:24]}」，'
+                    f'按国标编码时应为「{item.get("gb50549", "")[:24]}」；确认后再决定是否调整，不要仅凭本提示改码。'
+                ),
+            })
+            entry['count'] += 1
+            if len(entry['rows']) < 5:
+                entry['rows'].append(c)
+    return list(bucket.values())
 
 
 def valve_pipe_number_segment_check(cols, rows):

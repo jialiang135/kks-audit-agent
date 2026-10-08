@@ -28,6 +28,10 @@ services:
       AI_REVIEW_MAX_CANDIDATES: ${AI_REVIEW_MAX_CANDIDATES:-}
       AI_SUMMARY_ENABLED: ${AI_SUMMARY_ENABLED:-}
       AI_TREND_SUMMARY_ENABLED: ${AI_TREND_SUMMARY_ENABLED:-}
+      # 问题行「AI 建议编码」开关（1=启用，默认）与送生成行数上限（0=不限制）。
+      # 只对判定为有问题的行生成，结果再由本地复核（骨架/字母表/分类码字典）。
+      AI_CODE_SUGGEST_ENABLED: ${AI_CODE_SUGGEST_ENABLED:-}
+      AI_CODE_SUGGEST_MAX: ${AI_CODE_SUGGEST_MAX:-}
       # 审核产物（报告 HTML / 问题清单 Excel）保留天数：默认 90，设 0 = 不自动清理。
       # 超期目录会被删除，台账对应记录标记为「已归档」。
       KKS_ARTIFACT_RETENTION_DAYS: ${KKS_ARTIFACT_RETENTION_DAYS:-}

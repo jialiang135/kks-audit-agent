@@ -106,6 +106,7 @@ AI 的三个附加能力用环境变量（或 `config/app_config.json` 的 `ai` 
 | `AI_TREND_SUMMARY_ENABLED` | 台账「AI 跨文件趋势总结」 | 汇总报告不出趋势节 |
 | `AI_CODE_SUGGEST_ENABLED` | **问题行的「AI 建议编码」** | 不生成，报告不出现该列 |
 | `AI_CODE_SUGGEST_MAX` | 送生成的行数上限（`0` = 不限制） | 超限时按 P0>P1>P2 截断 |
+| `AI_CODE_SUGGEST_CONCURRENCY` | 建议编码批并发数（默认 `3`，`1` = 串行） | 问题行多时此步最耗时，并发只提速不改判定口径 |
 
 「AI 建议编码」只对**判定为有问题的行**生成，命中规则的**标准条款原文**会随 prompt 一起送入，
 生成结果再由本地复核（12 位骨架 / 禁用 `I`、`O` / 分类码必须落在两套标准字典内），

@@ -74,6 +74,7 @@ class AIConfig:
     trend_enabled: bool = True     # 台账跨文件趋势总结（AI_TREND_SUMMARY_ENABLED）
     code_suggest_enabled: bool = True   # 问题行「AI 建议编码」（AI_CODE_SUGGEST_ENABLED）
     code_suggest_max: int = 0           # 送生成的行数上限，0=不限制（AI_CODE_SUGGEST_MAX）
+    code_suggest_concurrency: int = 3   # 建议编码批并发数（AI_CODE_SUGGEST_CONCURRENCY）
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -150,6 +151,7 @@ def load_config() -> AIConfig:
         trend_enabled=_parse_bool(environment_value("AI_TREND_SUMMARY_ENABLED", ai.get("trend_enabled", "")), True),
         code_suggest_enabled=_parse_bool(environment_value("AI_CODE_SUGGEST_ENABLED", ai.get("code_suggest_enabled", "")), True),
         code_suggest_max=_parse_int(environment_value("AI_CODE_SUGGEST_MAX", ai.get("code_suggest_max", 0)), 0, 0, 2000),
+        code_suggest_concurrency=_parse_int(environment_value("AI_CODE_SUGGEST_CONCURRENCY", ai.get("code_suggest_concurrency", 3)), 3, 1, 8),
     )
 
 
@@ -1422,12 +1424,15 @@ def suggest_correct_codes(
     standard = str(_code_index().get("standard") or "")
     if not standard:
         standard = "GB/T 50549-2020《电厂标识系统编码标准》"
-    LOGGER.info("ai_code_suggest_start rows=%s batches=%s", len(rows),
-                (len(rows) + SUGGEST_BATCH_SIZE - 1) // SUGGEST_BATCH_SIZE)
 
     suggestions: dict[str, dict[str, Any]] = {}
     batches = [rows[i:i + SUGGEST_BATCH_SIZE] for i in range(0, len(rows), SUGGEST_BATCH_SIZE)]
-    for index, batch in enumerate(batches, 1):
+    total = len(batches)
+    concurrency = max(1, int(config.code_suggest_concurrency or 1))
+    LOGGER.info("ai_code_suggest_start rows=%s batches=%s concurrency=%s", len(rows), total, concurrency)
+
+    def run_batch(index: int, batch: list[dict[str, Any]]) -> dict[str, Any]:
+        """跑单批：线程内只组装局部结果（shard/stats/errors），不改任何共享状态。"""
         allowed = {str(r["row"]) for r in batch}
         payload = {
             "task": "suggest_correct_code",
@@ -1437,34 +1442,52 @@ def suggest_correct_codes(
             "规则依据": clauses,
             "rows": [_suggest_payload_row(r, sys_codes, dev_codes) for r in batch],
         }
+        out: dict[str, Any] = {"index": index, "shard": {}, "errors": [],
+                               "returned": 0, "no_change": 0, "validated": 0, "rejected": 0}
         try:
             response = client.review(model, SUGGEST_PROMPT, payload)
         except Exception as exc:  # 单批失败不影响其他批次
-            base["errors"].append(str(exc)[:200])
+            out["errors"].append(str(exc)[:200])
             LOGGER.warning("ai_code_suggest_batch_failed batch=%s error=%s", index, exc)
-            continue
+            return out
         raw = response.get("suggestions", [])
         if not isinstance(raw, list):
-            base["errors"].append("模型返回的 suggestions 不是数组")
-            continue
+            out["errors"].append("模型返回的 suggestions 不是数组")
+            return out
         for item in raw:
             parsed = _safe_suggestion(item, allowed)
             if parsed is None:
                 continue
-            base["returned"] += 1
+            out["returned"] += 1
             code = parsed["suggested_code"]
             if not code:
-                base["no_change"] += 1
+                out["no_change"] += 1
             valid, reason = _validate_suggested(code, sys_codes, dev_codes)
             if code and not valid:
-                base["rejected"] += 1
+                out["rejected"] += 1
             elif code:
-                base["validated"] += 1
-            suggestions[parsed["row"]] = {**parsed, "valid": valid, "invalid_reason": reason, "model": model}
+                out["validated"] += 1
+            out["shard"][parsed["row"]] = {**parsed, "valid": valid, "invalid_reason": reason, "model": model}
+        return out
+
+    done = 0
+    if concurrency == 1 or total == 1:
+        futures_iter = (run_batch(i, b) for i, b in enumerate(batches, 1))
+    else:
+        with ThreadPoolExecutor(max_workers=min(concurrency, total)) as pool:
+            futures_iter = pool.map(run_batch, range(1, total + 1), batches)
+    for out in futures_iter:
+        base["errors"].extend(out["errors"])
+        base["returned"] += out["returned"]
+        base["no_change"] += out["no_change"]
+        base["validated"] += out["validated"]
+        base["rejected"] += out["rejected"]
+        suggestions.update(out["shard"])
+        done += 1
         _emit_progress(progress_callback, {
             "phase": "ai", "stage": "code_suggest", "status": "running",
             "percent": 92, "message": "AI 正在为问题行生成规范编码",
-            "hint": f"第 {index}/{len(batches)} 批，已生成 {base['validated']} 条可用建议",
+            "hint": f"第 {done}/{total} 批完成（并发 {concurrency}），已生成 {base['validated']} 条可用建议",
         })
 
     base["suggestions"] = suggestions

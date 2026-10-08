@@ -967,7 +967,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
   其中 {meta.get('validated', 0)} 条通过本地复核（骨架/字母表/分类码字典），
   {meta.get('rejected', 0)} 条因不合规被丢弃。建议仅供参考，改码前请对照规则依据人工确认。</div>
   <div class="callout p2">每条建议都必须在本地复核里同时满足：<b>12 位骨架</b>（G|F0|F1F2F3|F4F5|A1A2|AN1AN2AN3）、
-  <b>不含 I/O</b>、<b>系统分类码与设备分类码在两套标准字典内</b>。不满足的不会出现在下表，
+  <b>不含 I/O</b>、<b>系统分类码与设备分类码在 GB/T 50549-2020 附录字典内</b>。不满足的不会出现在下表，
   也不会写进 Excel。表中留「—」表示模型认为证据不足，未给出建议。</div>
   <table class="data"><tr><th>行</th><th>原编码</th><th>设备名称</th><th>AI建议编码</th><th>依据</th><th>理由</th></tr>
   {"".join(body10)}{more10}</table>

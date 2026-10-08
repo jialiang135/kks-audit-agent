@@ -12,3 +12,10 @@ skill_backups/
 source-skill/
 _tmp_extract/
 *.pyc
+
+# 由 tools/extract_rules_*.py 从 国标/ 源文档生成的标准规则全文抽取。
+# 内容含标准正文，不入库；需要时在本地重跑 tools/ 下的脚本生成。
+kks-audit/references/rules_gb50549.md
+kks-audit/references/rules_gb50549.json
+kks-audit/references/rules_zhongmei.md
+kks-audit/references/rules_zhongmei.json

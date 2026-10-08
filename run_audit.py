@@ -419,6 +419,10 @@ RULE_DEFINITIONS: dict[str, str] = {
     "KKS-29": "OCR 易混字符待核：编码含 I/i/L/l/O/o 等易混字符，人工核对是否为数字 1/0 的识别错误。",
     "KKS-30": "文本卫生：码与名称的首尾空白、换行、制表符、全角空格等脏数据，标记并附清洗。",
     "KKS-31": "父子名称语义一致性：直接父子一级、同类设备的名称标识 token 应一致，矛盾即报。",
+    "KKS-32": "系统分类码合法性：第 3-5 位（F1F2F3）应为 GB/T 50549-2020 附录A 收录的三位字母码；未收录按码聚合提示待核。",
+    "KKS-33": "设备分类码合法性：第 8-9 位（A1A2）应为 GB/T 50549-2020 附录B 收录的两位字母码；含禁用字母 I/O 为硬错误。",
+    "KKS-34": "禁用字母 I/O：GB/T 50549-2020 4.2.1 注规定 KKS 字母表禁用 I、O（防与数字 1、0 混淆），附录B 中 I 为“禁止使用”。",
+    "KKS-35": "阀门/管道编号段语义：QM（截止阀）、WP（管道）的设备编号按功能分段——001-299 通用、301-399 测量、401-499 疏水排气、601-699 取样；编号段与名称功能词矛盾即提示。",
     "KKS-A": "名称语义与设备字母一致：名称含泵/阀等词应对应泵类/阀类字母，不符即名实疑点。",
     "KKS-C": "命名风格归一：1号机/1#机/#1机/一号机 等风格混用，提示统一风格。",
     "KKS-D": "空/缺名称：名称列为空、-、无、None 等，设为必填字段时按 P0 阻断。",
@@ -436,18 +440,27 @@ RULE_DEFINITIONS: dict[str, str] = {
 # RULE_SOURCES 值为"文件短名 + 条款号（表号）"，直接用于 HTML/Excel/Web"规则依据"列。
 # 编码规范无明文章节的工程/数据质量类规则统一为通用说明，不虚构条款。
 STANDARD_DEFAULT = "huodian"
-STANDARD_NAMES = {"huodian": "火电导则", "wind": "风电规范", "solar": "光伏规范"}
+# gb50549 / zhongmei 是"跨类型"依据：GB/T 50549-2020 同时覆盖火电(6章)、风力(9章)、光伏(10章)，
+# 中煤细则是集团落地版。分类码类规则统一引这两份，不再按厂型分叉。
+STANDARD_NAMES = {
+    "huodian": "火电导则", "wind": "风电规范", "solar": "光伏规范",
+    "gb50549": "GB/T 50549-2020", "zhongmei": "中煤细则",
+}
 # 与 国标/ 目录磁盘文件一一对应的完整文档名（展示时直接可对上文件名）
 STANDARD_FILES = {
     "huodian": "电力火电厂标识系统（KKS）编码导则-0813",
     "wind": "中国电力投资集团公司风电场标识系统（KKS）编码规范",
     "solar": "中国电力投资集团公司光伏发电站标识系统（KKS）编码规范",
+    "gb50549": "GBT 50549-2020 电厂标识系统编码标准",
+    "zhongmei": "中国中煤能源集团电厂标识系统编码应用细则（试行）A3.2",
 }
 # 报告头"规则依据体系"行：完整磁盘文件名（含序号前缀与扩展名，可直接在 国标/ 目录找到）
 STANDARD_FULL = {
     "huodian": "国标/电力火电厂标识系统（KKS）编码导则-0813.doc（火电导则）",
     "wind": "国标/3.中国电力投资集团公司风电场标识系统（KKS）编码规范.docx（风电规范）",
     "solar": "国标/4.中国电力投资集团公司光伏发电站标识系统（KKS）编码规范.docx（光伏规范）",
+    "gb50549": "国标/GBT 50549-2020 电厂标识系统编码标准.pdf（国家标准）",
+    "zhongmei": "国标/中国中煤能源集团电厂标识系统编码应用细则（试行）A3.2.docx（集团细则）",
 }
 GENERIC_SOURCE = "通用审计要求，无专条依据"
 _ST_STRUCT = ("火电导则 5.1.3 KKS编码构成（字符类型 N/A，禁用 I/O）", "风电规范 4.1 编码构成（字符类型 N/A，禁用 I/O）", "光伏规范 4.1 编码构成（字符类型 N/A，禁用 I/O）")
@@ -457,6 +470,12 @@ _ST_UNIQ = ("火电导则 3 术语和定义·标识（唯一记号）", "风电�
 _ST_DEV = ("火电导则 6.2 设备索引（表29~37）", "风电规范 5.2 设备索引（表18~24）", "光伏规范 5.2 设备索引（表19~24）")
 _ST_PART = ("火电导则 5.2.3 部件码", "风电规范 4.2.3 部件码", "光伏规范 4.2.3 部件码")
 _ST_COMBO = ("火电导则 6.1+6.2 系统/设备索引", "风电规范 5.1+5.2 系统/设备索引", "光伏规范 5.1+5.2 系统/设备索引")
+# 分类码类规则（KKS-32/33/35）：依据 GB/T 50549-2020 与中煤细则，三种厂型同一出处
+_GB_FILE = STANDARD_FILES["gb50549"]
+_ZM_FILE = STANDARD_FILES["zhongmei"]
+_ST_CODE_SYS = (f"{_GB_FILE} 4.4.2 系统分类码按附录A选用（附录A 系统分类索引）",) * 3
+_ST_CODE_DEV = (f"{_GB_FILE} 4.4.3 设备分类码按附录B选用；4.2.1 注 禁用 I、O（附录B 表B.0.2 I=禁止使用）",) * 3
+_ST_VALVE = (f"{_GB_FILE} 表5.1.4 阀门设备分类码；表5.1.5 QM/WP 设备编号分段（{_ZM_FILE} 8.1.5、8.1.6）",) * 3
 
 RULE_SOURCES: dict[str, dict[str, str]] = {}
 for _rid, _vals in {
@@ -467,13 +486,16 @@ for _rid, _vals in {
     "KKS-25": _ST_UNIQ, "KKS-25c": _ST_UNIQ, "KKS-26": _ST_PART,
     "KKS-28": _ST_G, "KKS-29": _ST_STRUCT,
     "KKS-A": _ST_DEV, "KKS-G": _ST_COMBO,
+    "KKS-32": _ST_CODE_SYS, "KKS-33": _ST_CODE_DEV, "KKS-34": _ST_CODE_DEV,
+    "KKS-35": _ST_VALVE,
 }.items():
     RULE_SOURCES[_rid] = dict(zip(("huodian", "wind", "solar"), _vals))
 # 出处列展示为"完整文件名 + 条款"，把元组中的短名前缀替换成 STANDARD_FILES 全名
 for _rid, _tbl in RULE_SOURCES.items():
     for _std, _short in STANDARD_NAMES.items():
-        _full = STANDARD_FILES[_std]
-        _tbl[_std] = _tbl[_std].replace(_short, _full, 1)
+        if _std not in _tbl:
+            continue
+        _tbl[_std] = _tbl[_std].replace(_short, STANDARD_FILES[_std], 1)
 
 
 def rule_source(rule_id: str, standard: str) -> str:
@@ -1034,6 +1056,39 @@ def _apply_template_skill_rules(
             message=f"直接父子名称标识不一致：{reason}。", suggestion="核对父子设备是否挂错或名称是否复制错误；不自动改码。", evidence=f"父名={parent_name}; 子名={child_name}",
         )
     diagnostics["executed_rules"].append("KKS-31")
+
+    # ---- 国标分类码语义（GB/T 50549-2020 附录A/B + 表5.1.4/5.1.5）----
+    # 字典来自 tools/build_code_index.py；未收录一律作待核线索（附录分页可能有极少数码未提取），
+    # 只有"含禁用字母 I/O"是硬错误。按分类码聚合上报，避免同一码刷屏。
+    for item in rules.system_class_code_legality(template_cols, template_rows):
+        _append_skill_issue(
+            issues, seen, records_by_index, rule_id="KKS-32", priority=item["severity"],
+            category="系统分类码未收录", index=item["index"],
+            message=f'{item["message"]}（本表 {item["count"]} 处，示例 {"、".join(item["rows"][:3])}）',
+            suggestion=item["suggestion"], status="needs_review",
+            evidence=f'分类码={item["segment"]}; 出现 {item["count"]} 次',
+        )
+    diagnostics["executed_rules"].append("KKS-32")
+
+    for item in rules.device_class_code_legality(template_cols, template_rows):
+        hard = item["severity"] == "P0"
+        _append_skill_issue(
+            issues, seen, records_by_index, rule_id="KKS-33", priority=item["severity"],
+            category="设备分类码含禁用字母" if hard else "设备分类码未收录", index=item["index"],
+            message=item["message"] if hard
+                    else f'{item["message"]}（本表 {item["count"]} 处，示例 {"、".join(item["rows"][:3])}）',
+            suggestion=item["suggestion"], status="open" if hard else "needs_review",
+            evidence=f'分类码={item["segment"]}; 出现 {item["count"]} 次',
+        )
+    diagnostics["executed_rules"].append("KKS-33")
+
+    for index, code, reason, suggestion, priority in rules.valve_pipe_number_segment_check(template_cols, template_rows):
+        _append_skill_issue(
+            issues, seen, records_by_index, rule_id="KKS-35", priority=priority,
+            category="阀门/管道编号段语义", index=index,
+            message=reason, suggestion=suggestion, status="needs_review",
+        )
+    diagnostics["executed_rules"].append("KKS-35")
     return diagnostics
 
 

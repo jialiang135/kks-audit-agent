@@ -657,6 +657,250 @@ def parent_child_name_conflict(cols, rows):
             break
     return issues
 
+# ============ 7. 国标分类码语义校验（GB/T 50549-2020 + 中煤细则） ============
+# 依据：
+#   GB/T 50549-2020 4.4.2  系统分类码应由 3 个大写英文字母组成，按附录 A 选用
+#   GB/T 50549-2020 4.4.3  设备分类码应由 2 个大写英文字母组成，按附录 B 选用
+#   GB/T 50549-2020 表5.1.4 阀门设备分类码 FL/QM/QN/RM
+#   GB/T 50549-2020 表5.1.5（= 中煤细则 8.1.6）QM、WP 的设备编号按功能分段
+#   GB/T 50549-2020 4.2.1 注  字母表禁用 I、O
+# 分类码字典由 tools/build_code_index.py 从两份标准的附录 A/B 生成。
+#
+# ⚠️ 误报纪律：分类码字典来自标准附录，但厂内可能存在集团扩展码或 OCR 未收录的码。
+# 因此本组校验按"信号强弱"分级——主组不存在（强）报 P1，主组存在但组合未收录（弱）报 P2，
+# 一律只标记待核，不自动改码。
+
+def _app_root():
+    import os
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+_CODE_INDEX_CACHE = None
+
+
+def _load_code_index():
+    """读取 config/kks_code_index.json（只读、带缓存；缺失时返回 {} 并静默跳过）。"""
+    global _CODE_INDEX_CACHE
+    if _CODE_INDEX_CACHE is None:
+        import json as _json, os
+        path = os.path.join(_app_root(), 'config', 'kks_code_index.json')
+        try:
+            with open(path, encoding='utf-8') as fh:
+                _CODE_INDEX_CACHE = _json.load(fh)
+        except (OSError, ValueError):
+            _CODE_INDEX_CACHE = {}
+    return _CODE_INDEX_CACHE
+
+
+def load_rule_config():
+    """读取 config/kks_rules.json（只读；缺失时返回 {}）。"""
+    import json as _json, os
+    path = os.path.join(_app_root(), 'config', 'kks_rules.json')
+    try:
+        with open(path, encoding='utf-8') as fh:
+            return _json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
+def _row_code(row, k):
+    if k is None:
+        return ''
+    v = row[k]
+    return str(v).strip() if v is not None else ''
+
+
+def _prefix_index(codes):
+    """把 {三位码: 名称} 折叠成可判定的前缀集合：{1位主组}、{2位组}。"""
+    s1, s2 = set(), set()
+    for code in codes:
+        if len(code) >= 1:
+            s1.add(code[0])
+        if len(code) >= 2:
+            s2.add(code[:2])
+    return s1, s2
+
+
+def _aggregate_by_segment(rows, k, extract, known, groups, prefixes, label, hard_rule):
+    """按"分类码"聚合上报，而不是逐行报。
+
+    为什么聚合：用舟山真实数据（1190 行）校准过——同一个未收录码往往出现在几十行上，
+    逐行报会把清单撑爆并放大误报。聚合后一个码只出一条，附出现次数与代表行。
+    另：标准附录在 PDF 中分页，抽取后仍可能有极少数码缺失（实测 GG 就是这种情况），
+    因此"未收录"一律只作 P2 待核线索，不下"错误"结论。
+    """
+    bucket: dict[str, dict] = {}
+    for i, r in enumerate(rows):
+        c = _row_code(r, k)
+        seg = extract(c)
+        if not seg:
+            continue
+        hard = hard_rule(seg)
+        if hard:
+            bucket.setdefault('__hard__' + seg, {
+                'index': i, 'code': c, 'segment': seg, 'severity': hard[0],
+                'message': hard[1], 'suggestion': hard[2], 'count': 0, 'rows': [],
+            })
+            item = bucket['__hard__' + seg]
+            item['count'] += 1
+            if len(item['rows']) < 5:
+                item['rows'].append(c)
+            continue
+        if seg in known:
+            continue
+        head, group = seg[0], seg[:2]
+        if head not in prefixes[0]:
+            detail = f'主组 "{head}" 未出现在 GB/T 50549-2020 附录的 {label} 取值内'
+            sev = 'P2'
+        elif len(seg) >= 2 and group not in prefixes[1]:
+            detail = f'组 "{group}" 未出现在附录中（主组 {head} = {groups.get(head, "")[:18]} 合法）'
+            sev = 'P2'
+        else:
+            detail = f'组合 "{seg}" 未收录（主组 {head} = {groups.get(head, "")[:18]}）'
+            sev = 'P2'
+        item = bucket.setdefault(seg, {
+            'index': i, 'code': c, 'segment': seg, 'severity': sev,
+            'message': f'{label} "{seg}" {detail}',
+            'suggestion': '核对是否为集团扩展码或录入偏差；标准附录可能有极少数码未提取，须人工确认后处理。',
+            'count': 0, 'rows': [],
+        })
+        item['count'] += 1
+        if len(item['rows']) < 5:
+            item['rows'].append(c)
+    return list(bucket.values())
+
+
+def system_class_code_legality(cols, rows):
+    """KKS-32 系统分类码合法性（GB/T 50549-2020 4.4.2 + 附录A）。
+
+    取 12 位码第 3-5 位（F1F2F3）。按"分类码"聚合上报，避免同一码刷屏。
+    未收录 → P2 待核（附录可能有极少数码未提取出来）。
+    """
+    idx = _load_code_index()
+    known = idx.get('system_codes') or {}
+    if not known:
+        return []
+    groups = idx.get('system_s1_groups') or {}
+    prefixes = _prefix_index(known)
+    k = cols.get('kks')
+
+    def extract(c):
+        if len(c) < 5:
+            return ''
+        seg = c[2:5]
+        if len(seg) != 3 or not seg.isalpha():
+            return ''      # 字符类型问题由 segment_type_check 负责
+        return seg
+
+    return _aggregate_by_segment(rows, k, extract, known, groups, prefixes,
+                                 '系统分类码', lambda seg: None)
+
+
+def device_class_code_legality(cols, rows):
+    """KKS-33 设备分类码合法性（GB/T 50549-2020 4.4.3 + 附录B）。
+
+    取 12 位码第 8-9 位（A1A2）。含禁用字母 I/O 是硬错误（4.2.1 注 + 附录B
+    "I = 禁止使用"），单独按行报 P0；其余未收录按码聚合报 P2 待核。
+    """
+    idx = _load_code_index()
+    known = idx.get('device_codes') or {}
+    if not known:
+        return []
+    groups = idx.get('device_t1_groups') or {}
+    prefixes = _prefix_index(known)
+    cfg = load_rule_config()
+    forbidden = set((cfg.get('code_grammar') or {}).get('forbidden_letters') or ['I', 'O'])
+    cfg_rules = (cfg.get('rule_sources') or {}).get('KKS-34') or {}
+    k = cols.get('kks')
+
+    def extract(c):
+        if len(c) < 12:
+            return ''
+        seg = c[7:9]
+        if len(seg) != 2 or not seg.isalpha():
+            return ''
+        return seg
+
+    def hard_rule(seg):
+        bad = [ch for ch in seg if ch in forbidden]
+        if not bad:
+            return None
+        clause = (cfg_rules.get('sources') or [{}])[0].get('clause', '4.2.1 注')
+        return ('P0',
+                f'设备分类码 "{seg}" 含禁用字母 {"、".join(bad)}：GB/T 50549-2020 {clause}'
+                f'（KKS 字母表禁用 I、O，防与数字 1、0 混淆；附录B 中 I 为"禁止使用"）',
+                '改为不含 I/O 的合法设备分类码（按标准附录B 选用）')
+
+    return _aggregate_by_segment(rows, k, extract, known, groups, prefixes,
+                                 '设备分类码', hard_rule)
+
+
+def valve_pipe_number_segment_check(cols, rows):
+    """KKS-35 阀门/管道设备编号段语义（GB/T 50549-2020 表5.1.5 = 中煤细则 8.1.6）。
+
+    规则：QM（截止阀）、WP（管道）的设备编号 T3T4T5 按功能分配——
+      001～299 未进一步区分（通用）｜301～399 测量用｜401～499 疏水和排气用（含排污）｜601～699 取样用。
+    只做"编号段 ↔ 名称功能词"的**互证**：两侧都明确且矛盾才报，避免误报。
+    """
+    cfg = load_rule_config()
+    seg_cfg = cfg.get('number_segment_semantics') or {}
+    applies = set(seg_cfg.get('applies_to_device_codes') or ['QM', 'WP'])
+    kw = seg_cfg.get('name_keywords') or {}
+    if not applies or not kw:
+        return []
+    k = cols.get('kks'); n = cols.get('name')
+    res = []
+    for i, r in enumerate(rows):
+        c = _row_code(r, k)
+        if len(c) < 12 or c[7:9] not in applies:
+            continue
+        name = str(r[n]).strip() if (n is not None and r[n] is not None) else ''
+        if not name:
+            continue
+        try:
+            number = int(c[9:12])
+        except ValueError:
+            continue
+        band = None
+        for rng in seg_cfg.get('segments') or []:
+            lo, hi = rng.get('range') or [None, None]
+            if lo is None:
+                continue
+            if lo <= number <= hi:
+                band = f'{lo}-{hi}'
+                break
+        if band is None:
+            continue
+        # 名称指向的功能段
+        wanted = None
+        for b, words in kw.items():
+            if any(w in name for w in words):
+                wanted = b
+                break
+        if wanted is None or wanted == band:
+            continue
+        # 名称与编号段矛盾：只在"通用段"以外报，通用段(001-299)允许任何名称
+        if band in ('001-299', '1-299'):
+            continue
+        res.append((i, c,
+                    f'{c[7:9]} 设备编号 "{c[9:12]}" 落在 {band} 段（{_segment_name(band, seg_cfg)}），但名称含 {_band_words(wanted, kw)} 语义',
+                    f'按 GB/T 50549-2020 表5.1.5，{_band_words(wanted, kw)} 类应使用 {wanted} 段；请核对编号或名称', 'P2'))
+    return res
+
+
+def _segment_name(band, seg_cfg):
+    for rng in seg_cfg.get('segments') or []:
+        lo, hi = rng.get('range') or [None, None]
+        if lo is not None and f'{lo}-{hi}' == band:
+            return rng.get('name', '')
+    return ''
+
+
+def _band_words(band, kw):
+    words = kw.get(band) or []
+    return '/'.join(words[:2]) if words else band
+
+
 # ============ 主函数（示例） ============
 if __name__ == '__main__':
     fp = sys.argv[1] if len(sys.argv) > 1 else None

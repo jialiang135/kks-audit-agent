@@ -35,5 +35,107 @@
     "ABC_phase_suffix": "末位 A/B/C，通常表示分相或变体，需确认主数据建模",
     "DCS_point": "-KF 后缀，通常是信号点号，不应直接塞入 12 位主码",
     "component": "-XXnn 后缀，通常是部件级扩展"
+  },
+
+  "code_grammar": {
+    "note": "GB/T 50549-2020 4.2.1 / 4.4.2 / 4.4.3 —— 编码骨架与字母表约束",
+    "forbidden_letters": ["I", "O"],
+    "forbidden_reason": "KKS 字母表禁用 I、O，避免与数字 1、0 混淆",
+    "system_class_code_length": 3,
+    "device_class_code_length": 2,
+    "skeleton": "G|F0|F1F2F3|F4F5|A1A2|AN1AN2AN3",
+    "segment_types": {
+      "G": "letter", "F0": "digit", "F1F2F3": "letter",
+      "F4F5": "digit", "A1A2": "letter", "AN1AN2AN3": "digit"
+    },
+    "code_index_file": "config/kks_code_index.json"
+  },
+
+  "valve_device_codes": {
+    "note": "GB/T 50549-2020 表5.1.4（= 中煤细则 8.1.5）阀门类设备分类码",
+    "FL": "危险压力条件下的保护（安全阀，含安全阀管道）",
+    "QM": "封闭外壳中可流动物质的流动转换（截止阀，起关断作用的阀门）",
+    "QN": "封闭外壳中可流动物质的流量变化（控制阀）",
+    "RM": "限制气态、液态和可流动物质的回流（止回阀）"
+  },
+  "pipe_device_code": {
+    "note": "GB/T 50549-2020 表5.1.5（= 中煤细则 8.1.6）管道设备分类码",
+    "WP": "在封闭容器内用于传导/引导物质流动的刚性连接"
+  },
+
+  "number_segment_semantics": {
+    "note": "GB/T 50549-2020 表5.1.5 / 中煤细则 8.1.6：QM、WP 的设备编号 T3T4T5 按功能分配",
+    "applies_to_device_codes": ["QM", "WP"],
+    "segments": [
+      {"range": [1, 299], "name": "未进一步区分", "desc": "通用的阀门/管道"},
+      {"range": [301, 399], "name": "测量用", "desc": "测量回路的阀门/管道"},
+      {"range": [401, 499], "name": "疏水和排气用", "desc": "疏水、放水、排气、排污"},
+      {"range": [601, 699], "name": "取样用", "desc": "取样回路的阀门/管道"}
+    ],
+    "name_keywords": {
+      "301-399": ["测量", "测点", "取样点"],
+      "401-499": ["疏水", "放水", "排气", "放气", "排污", "疏放"],
+      "601-699": ["取样", "采样"]
+    }
+  },
+
+  "supply_system_letters": {
+    "note": "GB/T 50549-2020 5.1.3 —— 厂用水、电、气等供应系统的系统分类码字母约定",
+    "independent_s1": ["G", "K", "Q", "X"],
+    "same_group_s2": ["V", "W", "X"],
+    "same_subgroup_s3": ["V", "W", "X"]
+  },
+
+  "special_device_codes": {
+    "note": "GB/T 50549-2020 5.2.2 —— 电气设备专用系统分类码/设备分类码",
+    "power_output_transformer_system": "MST",
+    "auxiliary_transformer_system_pattern": "B*T",
+    "coil_device_code": "TA"
+  },
+
+  "rule_sources": {
+    "note": "规则 → 标准条款出处；供报告展示与 AI 建议编码时把原文条款一并送入 prompt（务必准确）",
+    "KKS-32": {
+      "title": "系统分类码取值合法性",
+      "sources": [
+        {"standard": "GB/T 50549-2020", "clause": "4.4.2", "text": "系统码中的系统分类码应由3个大写英文字母组成，其编码字符应按本标准附录A选用。"},
+        {"standard": "GB/T 50549-2020", "clause": "附录A", "text": "系统分类码 S1 应按表 A.0.1 确定；系统分类码应按表 A.0.2 确定。"}
+      ]
+    },
+    "KKS-33": {
+      "title": "设备分类码取值合法性",
+      "sources": [
+        {"standard": "GB/T 50549-2020", "clause": "4.4.3", "text": "设备码中的设备分类码应由2个大写英文字母组成，其编码字符应按本标准附录B选用。"},
+        {"standard": "GB/T 50549-2020", "clause": "附录B", "text": "设备分类码 T1 及产品分类码 P1 应按表 B.0.1 确定；设备分类码及产品分类码应按表 B.0.2 确定。"}
+      ]
+    },
+    "KKS-34": {
+      "title": "禁用字母 I/O",
+      "sources": [
+        {"standard": "GB/T 50549-2020", "clause": "4.2.1 注", "text": "A 为大写的英文字母（禁用 I、O），字符类型 N 为阿拉伯数字。"},
+        {"standard": "GB/T 50549-2020", "clause": "附录B 表B.0.2", "text": "I —— Not to be applied —— 禁止使用。"}
+      ]
+    },
+    "KKS-35": {
+      "title": "阀门/管道设备编号段语义",
+      "sources": [
+        {"standard": "GB/T 50549-2020", "clause": "5.1.5", "text": "截止阀（设备分类码为 QM 的阀门）及所在的管道（设备分类码为 WP 的管道）的设备编号约定应符合表 5.1.5 的规定。"},
+        {"standard": "GB/T 50549-2020", "clause": "表5.1.5", "text": "QM/WP 设备编号 T3T4T5：001～299 未进一步区分（通用）；301～399 测量用；401～499 疏水和排气用（含排污）；601～699 取样用。"},
+        {"standard": "中煤集团细则", "clause": "8.1.6", "text": "阀门、管道及测量回路应按其功能来分配编号：001～299 未进一步区分；301～399 测量用；401～499 疏水和排气用；601～699 取样用。"}
+      ]
+    },
+    "KKS-36": {
+      "title": "名称与设备分类码语义一致",
+      "sources": [
+        {"standard": "GB/T 50549-2020", "clause": "表5.1.4", "text": "阀门设备分类码：FL 危险压力条件下的保护（安全阀）；QM 封闭外壳中可流动物质的流动转换（截止阀）；QN 封闭外壳中可流动物质的流量变化（控制阀）；RM 限制气态、液态和可流动物质的回流（止回阀）。"},
+        {"standard": "GB/T 50549-2020", "clause": "5.1.4", "text": "对阀门类设备进行标识时，阀门设备分类码应符合表5.1.4的规定。"}
+      ]
+    },
+    "KKS-37": {
+      "title": "厂用供应系统 S1/S2/S3 字母约定",
+      "sources": [
+        {"standard": "GB/T 50549-2020", "clause": "5.1.3", "text": "1 为不属同一个主组内的多个系统服务的供应系统，应做独立的辅助（厂用）或附属系统标识，其系统分类码中 S1 字符应为 G、K、Q、X。2 为属于一个主组但不同组的多个系统服务的供应系统，其 S1 可同服务对象，S2 字符应为 V、W、X。3 为属于同一个主组和组但不同子组的多个系统服务的供应系统，其 S1、S2 可同服务对象，S3 字符应为 V、W、X。"}
+      ]
+    }
   }
 }

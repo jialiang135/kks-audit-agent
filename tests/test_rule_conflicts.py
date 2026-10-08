@@ -44,22 +44,30 @@ class RuleConflictTest(unittest.TestCase):
         for rid in R.RULE_DEFINITIONS:
             self.assertTrue(R.RULE_DEFINITIONS[rid].strip(), f"{rid} 的问题定义为空")
 
-    def test_cross_standard_index_present(self):
-        """两套标准的字典都必须存在，否则并集判定会退化成单边判定。"""
+    def test_index_holds_single_current_standard(self):
+        """索引必须只含现行标准的字典；残留旧体系数据会让判定与建议编码指向错设备。"""
         import json
         index = json.loads(checker.CODE_INDEX.read_text(encoding="utf-8"))
-        self.assertGreater(len(index.get("system_codes") or {}), 2000, "国标系统分类码字典缺失")
-        self.assertGreater(len(index.get("device_codes") or {}), 150, "国标设备分类码字典缺失")
-        self.assertGreater(len(index.get("system_codes_huodian") or {}), 300, "火电导则系统码字典缺失")
-        self.assertGreater(len(index.get("device_codes_huodian") or {}), 60, "火电导则设备码字典缺失")
+        self.assertGreater(len(index.get("system_codes") or {}), 2000, "系统分类码字典缺失")
+        self.assertGreater(len(index.get("device_codes") or {}), 150, "设备分类码字典缺失")
+        self.assertIn("50549-2020", str(index.get("standard") or ""), "索引未声明现行标准")
+        for key in index:
+            self.assertFalse(key.endswith("_huodian"), f"索引里残留旧体系字典：{key}")
+            self.assertNotIn("divergence", key, f"索引里残留分歧清单：{key}")
 
-    def test_divergence_registry_matches_config(self):
-        """索引里算出的歧义码必须在 config 的 standard_divergences 里有对应登记。"""
+    def test_version_discipline_registered(self):
+        """现行依据与已排除的旧版本都必须在 config 里登记，否则无法机器判定依据是否过期。"""
         import json
         cfg = json.loads(checker.RULES_JSON.read_text(encoding="utf-8"))
-        text = json.dumps(cfg.get("standard_divergences") or {}, ensure_ascii=False)
-        for tag in ("DIV-01", "DIV-02", "DIV-03", "DIV-04"):
-            self.assertIn(tag, text, f"standard_divergences 缺少 {tag} 登记")
+        basis = cfg.get("standard_basis") or {}
+        self.assertTrue(basis.get("current"), "standard_basis.current 为空")
+        self.assertTrue(basis.get("excluded"), "standard_basis.excluded 为空")
+        current = " ".join(json.dumps(x, ensure_ascii=False) for x in basis["current"])
+        excluded = " ".join(json.dumps(x, ensure_ascii=False) for x in basis["excluded"])
+        self.assertIn("50549-2020", current)
+        for token in ("50549-2010", "火电厂标识系统"):
+            self.assertIn(token, excluded, f"已废止来源未登记：{token}")
+        self.assertNotIn("standard_divergences", cfg, "分歧登记表已随旧体系删除")
 
 
 if __name__ == "__main__":

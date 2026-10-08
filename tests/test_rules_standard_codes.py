@@ -115,18 +115,30 @@ class ValveSegmentTests(unittest.TestCase):
 
 
 class RuleSourceTests(unittest.TestCase):
-    def test_new_rules_cite_national_standard(self):
+    def test_new_rules_cite_current_national_standard(self):
+        """依据只允许是现行 GB/T 50549-2020，且必须写清条款号。"""
         for rule_id in ("KKS-32", "KKS-33", "KKS-35"):
-            for standard in ("huodian", "wind", "solar"):
-                src = rule_source(rule_id, standard)
-                self.assertIn("50549-2020", src, f"{rule_id}/{standard} 应引用国标")
+            src = rule_source(rule_id)
+            self.assertIn("50549-2020", src, f"{rule_id} 应引用 GB/T 50549-2020")
+            self.assertRegex(src, r"\d\.\d", f"{rule_id} 的依据应带条款号")
+
+    def test_no_rule_cites_retired_standard(self):
+        """任何规则的依据都不得出现已废止的 2010 体系（含派生导则）。"""
+        for rule_id in run_audit.RULE_DEFINITIONS:
+            src = rule_source(rule_id)
+            for token in ("50549-2010", "火电导则", "风电规范", "光伏规范"):
+                self.assertNotIn(token, src, f"{rule_id} 的依据引用了已废止资料：{token}")
 
     def test_valve_rule_also_cites_group_rule(self):
-        self.assertIn("8.1.5", rule_source("KKS-35", "huodian"))
+        src = rule_source("KKS-35")
+        self.assertIn("5.1.4", src)
+        self.assertIn("8.1.5", src)
 
     def test_definitions_exist(self):
-        for rule_id in ("KKS-32", "KKS-33", "KKS-34", "KKS-35"):
+        for rule_id in ("KKS-32", "KKS-33", "KKS-35"):
             self.assertTrue(run_audit.RULE_DEFINITIONS.get(rule_id))
+        # KKS-34 已并入 KKS-33 的 P0 分支（原为"登记但从未产出"的幽灵规则）
+        self.assertNotIn("KKS-34", run_audit.RULE_DEFINITIONS)
 
 
 if __name__ == "__main__":

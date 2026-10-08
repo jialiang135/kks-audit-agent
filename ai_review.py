@@ -1101,13 +1101,17 @@ def summarize_audit(result: dict[str, Any], progress_callback: ProgressCallback 
 #   2. 规则依据必须准确——把命中的标准**条款原文**塞进 prompt，不让模型凭印象编；
 #   3. 生成结果必须过本地复核（骨架/字母表/字典），不合规的标为不可用，不写进建议列。
 #
+# ⚠️ 依据只有一份：GB/T 50549-2020（附录A/B，中煤细则附录补充）。
+#    不得再引入已废止版本（GB/T 50549-2010 及其派生导则）的码表——同一码在两套体系里
+#    含义不同，混用会让建议编码指向完全不同的设备。
+#
 # 与 review_issue_candidates 的区别：复核阶段判"这条到底是不是问题"，本阶段回答"该怎么改"。
 SUGGEST_BATCH_SIZE = 8
 SUGGEST_PROMPT = """你是电厂 KKS 编码整改工程师。任务：给**已被规则判定为有问题**的行，给出一个符合标准的规范编码。
 
 硬性约束（违反任何一条即为无效答案，会被程序丢弃）：
-1. 编码必须恰好 12 位，骨架为 G|F0|F1F2F3|F4F5|A1A2|AN1AN2AN3：
-   G 字母、F0 数字、F1F2F3 字母、F4F5 数字、A1A2 字母、AN1AN2AN3 三位数字。
+1. 编码必须恰好 12 位，对应 GB/T 50549-2020 4.4.1 功能面标识三级编码（火电项目全厂码 H1 缺省）：
+   H2H3（2 位，字母或数字）+ S1S2S3（3 位字母）+ S4S5（2 位数字）+ T1T2（2 位字母）+ T3T4T5（3 位数字）。
 2. 只允许大写英文字母与阿拉伯数字，**禁用字母 I 和 O**。
 3. 系统分类码 F1F2F3、设备分类码 A1A2 必须从"候选分类码"里选，不得自己发明字母组合。
 4. 最小改动：只改导致问题的那一段；机组前缀 G、系统编号 F4F5、设备编号 AN 在没有问题时必须保持原值。
@@ -1136,28 +1140,14 @@ def _code_index() -> dict[str, Any]:
 
 
 def _suggest_dicts() -> tuple[dict[str, str], dict[str, str]]:
-    """返回（系统码字典, 设备码字典）——两套标准取并集，与 KKS-32/33 的判定口径一致。
+    """返回（系统分类码字典, 设备分类码字典）。
 
-    ⚠️ 同码在两套标准里含义不同的（如 GP：国标=泵、企标=照明检修配电箱）**两个名称都保留**，
-    并在候选里分别标注「国标」「企标」。它们只用于给模型提供候选与释义；
-    真正决定"这条建议是否有效"的是 _validate_suggested 里的成员资格与骨架校验。
+    字典来自 `config/kks_code_index.json`，即 **GB/T 50549-2020 附录A/B**（中煤细则附录作补充）。
+    ⚠️ 不要再合并任何已废止版本（GB/T 50549-2010 及其派生导则）的码表——
+    同一码在两套体系里含义不同，混用会让建议编码指向完全不同的设备。
     """
     idx = _code_index()
-
-    def merge(gb_key: str, hd_key: str) -> dict[str, str]:
-        gb = dict(idx.get(gb_key) or {})
-        hd = dict(idx.get(hd_key) or {})
-        merged: dict[str, str] = {}
-        for code in sorted(set(gb) | set(hd)):
-            parts = []
-            if code in gb and gb[code]:
-                parts.append(f"国标：{gb[code]}")
-            if code in hd and hd[code]:
-                parts.append(f"企标：{hd[code]}")
-            merged[code] = " ｜ ".join(parts)
-        return merged
-
-    return merge("system_codes", "system_codes_huodian"), merge("device_codes", "device_codes_huodian")
+    return dict(idx.get("system_codes") or {}), dict(idx.get("device_codes") or {})
 
 
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
@@ -1172,8 +1162,8 @@ def _shingles(text: str, size: int = 2) -> set[str]:
 def _candidate_codes(name: str, codes: dict[str, str], limit: int = 8) -> list[dict[str, str]]:
     """按设备/系统名称与字典条目的字面重合度挑候选码。
 
-    为什么要给候选：模型直接发明字母组合是最大风险源。这里先从标准字典里按名称相似度
-    选出少量候选，让模型在候选内选择，把"编造"的概率压到最低。
+    为什么要给候选：模型直接发明字母组合是最大风险源。这里先从 GB/T 50549-2020 附录
+    字典里按名称相似度选出少量候选，让模型在候选内选择，把"编造"的概率压到最低。
 
     打分口径（用真实名称校准过）：字典条目的名称形如「定义 / 举例」，定义部分匹配权重更高；
     中文里"泵""阀"这类单字才是关键信息（"给水泵"和字典里的"提升泵、清洗泵"只有单字重合），
@@ -1228,7 +1218,7 @@ def _rule_clause_payload(rule_ids: set[str], lookup: Callable[[str, str], str] |
                 "text": str(item.get("text", ""))[:400],
             })
         if not (sources.get(rid) or {}).get("sources") and lookup:
-            out.append({"rule_id": rid, "clause": lookup(rid, "huodian")[:200], "text": ""})
+            out.append({"rule_id": rid, "clause": lookup(rid, "")[:200], "text": ""})
     return out
 
 
@@ -1269,9 +1259,9 @@ def _suggest_payload_row(row: dict[str, Any], sys_codes: dict[str, str], dev_cod
     code = row["kks_code"]
     names: dict[str, str] = {}
     if len(code) >= 5:
-        names["F1F2F3(系统分类码)"] = sys_codes.get(code[2:5], "（两套标准都未收录）")
+        names["F1F2F3(系统分类码)"] = sys_codes.get(code[2:5], "（GB/T 50549-2020 附录未收录）")
     if len(code) >= 9:
-        names["A1A2(设备分类码)"] = dev_codes.get(code[7:9], "（两套标准都未收录）")
+        names["A1A2(设备分类码)"] = dev_codes.get(code[7:9], "（GB/T 50549-2020 附录未收录）")
     return {
         "row": int(row["row"]) if str(row["row"]).isdigit() else row["row"],
         "当前编码": code,
@@ -1334,9 +1324,9 @@ def _validate_suggested(code: str, sys_codes: dict[str, str], dev_codes: dict[st
         if kind == "ALNUM" and not seg.isalnum():
             return False, f'{label}（第{start}-{end}位）"{seg}" 含非字母数字'
     if code[2:5] not in sys_codes:
-        return False, f'系统分类码 "{code[2:5]}" 不在两套标准字典内'
+        return False, f'系统分类码 "{code[2:5]}" 不在 GB/T 50549-2020 附录A 字典内'
     if code[7:9] not in dev_codes:
-        return False, f'设备分类码 "{code[7:9]}" 不在两套标准字典内'
+        return False, f'设备分类码 "{code[7:9]}" 不在 GB/T 50549-2020 附录B 字典内'
     return True, ""
 
 
@@ -1428,7 +1418,10 @@ def suggest_correct_codes(
 
     all_rules = {x["rule_id"] for r in rows for x in r["rules"]}
     clauses = _rule_clause_payload(all_rules, rule_source_lookup)
-    standard = str(result.get("standard", ""))
+    # 依据说明取索引里声明的现行标准，避免与 run_audit 形成循环导入
+    standard = str(_code_index().get("standard") or "")
+    if not standard:
+        standard = "GB/T 50549-2020《电厂标识系统编码标准》"
     LOGGER.info("ai_code_suggest_start rows=%s batches=%s", len(rows),
                 (len(rows) + SUGGEST_BATCH_SIZE - 1) // SUGGEST_BATCH_SIZE)
 
@@ -1438,8 +1431,9 @@ def suggest_correct_codes(
         allowed = {str(r["row"]) for r in batch}
         payload = {
             "task": "suggest_correct_code",
-            "standard_in_use": standard or "火电导则",
-            "编码骨架": "G|F0|F1F2F3|F4F5|A1A2|AN1AN2AN3（12 位；字母位/数字位见约束）",
+            "standard_in_use": standard,
+            "编码骨架": "GB/T 50549-2020 4.4.1 功能面标识三级编码（火电项目全厂码 H1 缺省）："
+                        "H2H3(2) + S1S2S3(3) + S4S5(2) + T1T2(2) + T3T4T5(3) = 12 位",
             "规则依据": clauses,
             "rows": [_suggest_payload_row(r, sys_codes, dev_codes) for r in batch],
         }

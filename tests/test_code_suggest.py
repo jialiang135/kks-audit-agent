@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-"""问题行「AI 建议编码」与跨标准分类码冲突的回归测试。
+"""问题行「AI 建议编码」与「只用现行标准」的回归测试。
 
 覆盖三件事：
 1. 生成范围——只对"有问题的行"生成；
-2. 准确性防线——建议编码必须过本地复核（骨架/禁用字母/两套标准字典）；
-3. 冲突处置——同码在两套标准里含义不同时不判错，改为披露；两套字典取并集判定。
+2. 准确性防线——建议编码必须过本地复核（骨架 / 禁用 I、O / GB/T 50549-2020 附录字典）；
+3. 版本纪律——字典只来自现行标准，已废止的 2010 体系码表不得混入；
+   旧体系遗留码只能报"未收录待核"，绝不判成错误。
 """
 import importlib.util
 import json
@@ -19,6 +20,7 @@ if str(PROJECT) not in sys.path:
 
 import ai_review as A  # noqa: E402
 import report_business as RB  # noqa: E402
+import run_audit  # noqa: E402
 
 
 def _load_template():
@@ -39,22 +41,28 @@ class SuggestDictTest(unittest.TestCase):
     def setUpClass(cls):
         cls.sys_codes, cls.dev_codes = A._suggest_dicts()
 
-    def test_dicts_cover_both_standards(self):
+    def test_dicts_come_from_current_standard_only(self):
+        """字典必须与索引完全一致，且只来自现行标准（不得再合并 2010 体系码表）。"""
         index = json.loads((PROJECT / "config" / "kks_code_index.json").read_text(encoding="utf-8"))
-        self.assertGreater(len(self.sys_codes), len(index["system_codes"]))
-        self.assertGreater(len(self.dev_codes), len(index["device_codes"]))
-        # 同码异义的两个释义都要在候选里出现，否则模型只知道一套标准
-        self.assertIn("国标", self.dev_codes["GP"])
-        self.assertIn("企标", self.dev_codes["GP"])
+        self.assertEqual(self.sys_codes, index["system_codes"])
+        self.assertEqual(self.dev_codes, index["device_codes"])
+        for key in index:
+            self.assertFalse(key.endswith("_huodian"), f"索引里残留旧体系字典：{key}")
+            self.assertNotIn("divergence", key, f"索引里残留分歧清单：{key}")
 
-    def test_enterprise_code_is_a_candidate(self):
-        """企标语义的码必须能被检索出来（GP=照明检修配电箱 是企标定义）。"""
-        got = [c["code"] for c in A._candidate_codes("照明检修配电箱", self.dev_codes, 5)]
-        self.assertIn("GP", got)
+    def test_dicts_describe_2020_semantics(self):
+        """GP 在 2020 版是泵类，不得再出现"照明检修配电箱"这类 2010 体系释义。"""
+        self.assertIn("泵", self.dev_codes["GP"])
+        self.assertNotIn("照明", self.dev_codes["GP"])
+        self.assertIn("风机", self.dev_codes["GQ"])
 
     def test_pump_name_matches_pump_codes(self):
         got = [c["code"] for c in A._candidate_codes("给水泵", self.dev_codes, 5)]
-        self.assertTrue({"GP", "AP"} & set(got), f"给水泵 未匹配到泵类码：{got}")
+        self.assertIn("GP", got, f"给水泵 未匹配到泵类码：{got}")
+
+    def test_fan_name_matches_fan_code(self):
+        got = [c["code"] for c in A._candidate_codes("轴流风机", self.dev_codes, 5)]
+        self.assertIn("GQ", got, f"轴流风机 未匹配到风机码：{got}")
 
     def test_validation_rejects_violations(self):
         bad_cases = {
@@ -70,9 +78,16 @@ class SuggestDictTest(unittest.TestCase):
             self.assertIn(expect, reason, f"{code} 的拒绝原因应包含「{expect}」，实际：{reason}")
 
     def test_validation_accepts_legal_codes(self):
-        for code in ("00LBA10AP008", "Y0XAG10AN001", "00LBA10AA001"):
+        for code in ("00LBA10GP008", "Y0XAG10GQ001", "00LBA10QM001"):
             ok, reason = A._validate_suggested(code, self.sys_codes, self.dev_codes)
             self.assertTrue(ok, f"{code} 应通过校验，实际：{reason}")
+
+    def test_validation_rejects_retired_system_codes(self):
+        """按 2020 版已不存在的旧体系设备码（AA/AP/AN）必须被拒绝。"""
+        for code in ("00LBA10AA001", "00LBA10AP001", "00XAG10AN001"):
+            ok, reason = A._validate_suggested(code, self.sys_codes, self.dev_codes)
+            self.assertFalse(ok, f"{code} 属于旧体系码，不该被判为合法")
+            self.assertIn("附录B", reason)
 
     def test_validation_rejects_code_missing_from_dicts(self):
         ok, reason = A._validate_suggested("00LBA10ZZ001", self.sys_codes, self.dev_codes)
@@ -203,14 +218,24 @@ class SuggestReportTest(unittest.TestCase):
         self.assertIn("AI建议编码", wb.sheetnames)
 
 
-class CrossStandardConflictTest(unittest.TestCase):
-    """两套标准的分类码冲突：并集判定 + 分歧披露，不判错。"""
+class SingleStandardBasisTest(unittest.TestCase):
+    """只按 GB/T 50549-2020 判定：旧体系码按"未收录待核"处理，绝不会判成错误。"""
 
-    def test_enterprise_codes_not_flagged(self):
-        """企标合法码（AA 阀门 / AP 泵 / AN 风机）不得被判为未收录。"""
+    def test_2020_codes_not_flagged(self):
+        """2020 版合法码（GP 泵 / GQ 风机 / QM 截止阀）不得被判为未收录。"""
+        rows = [["00LAC10GP008", "给水泵"], ["00XAG10GQ001", "轴流风机"], ["00LBA10QM001", "截止阀"]]
+        hits = TEMPLATE.device_class_code_legality(COLS, rows)
+        self.assertEqual([], hits, f"2020 版合法码被误报：{hits}")
+
+    def test_retired_codes_are_pending_not_errors(self):
+        """旧体系码（AA 阀门 / AP 泵 / AN 风机）按现行国标只报 P2 待核，不判错。"""
         rows = [["00LAB10AA001", "电动阀门"], ["00LAC10AP008", "给水泵"], ["00XAG10AN001", "轴流风机"]]
         hits = TEMPLATE.device_class_code_legality(COLS, rows)
-        self.assertEqual([], hits, f"企标码被误报：{hits}")
+        self.assertEqual({"AA", "AP", "AN"}, {h["segment"] for h in hits})
+        self.assertTrue(all(h["severity"] == "P2" for h in hits),
+                        "旧体系遗留码只能是待核线索，不能判成错误")
+        self.assertTrue(all("50549-2020" in h["message"] for h in hits),
+                        "依据必须写明现行国标")
 
     def test_unknown_code_still_flagged_as_pending(self):
         hits = TEMPLATE.device_class_code_legality(COLS, [["00XAG10GG001", "轴流风机"]])
@@ -221,20 +246,21 @@ class CrossStandardConflictTest(unittest.TestCase):
         hits = TEMPLATE.device_class_code_legality(COLS, [["00LBA10QI001", "给水阀"]])
         self.assertEqual("P0", hits[0]["severity"])
 
-    def test_divergence_is_disclosed_not_judged(self):
-        hits = TEMPLATE.standard_divergence_check(COLS, [["00LBA10GP001", "照明检修配电箱"]])
-        self.assertTrue(hits, "GP 属于两套标准同码异义，应被披露")
-        self.assertTrue(all(h["severity"] == "P2" for h in hits))
-        self.assertIn("这不是错误", hits[0]["suggestion"])
-        self.assertIn("国标", hits[0]["message"])
-        self.assertIn("企标", hits[0]["message"])
+    def test_divergence_check_removed(self):
+        """KKS-36（标准间分歧披露）随旧体系一并删除，不应再存在于引擎里。"""
+        self.assertFalse(hasattr(TEMPLATE, "standard_divergence_check"))
+        self.assertFalse(hasattr(TEMPLATE, "_merge_code_dicts"))
+        self.assertNotIn("KKS-36", run_audit.RULE_DEFINITIONS)
 
-    def test_config_registers_divergences(self):
+    def test_config_registers_version_discipline(self):
         cfg = json.loads((PROJECT / "config" / "kks_rules.json").read_text(encoding="utf-8"))
-        entries = cfg["standard_divergences"]["code_level_divergences"]
-        scopes = {e["scope"] for e in entries}
-        self.assertIn("设备分类码主组 T1", scopes)
-        self.assertIn("阀门类", scopes)
+        basis = cfg["standard_basis"]
+        files = {item["file"] for item in basis["current"]}
+        self.assertTrue(any("50549-2020" in f for f in files), "现行依据必须登记 GB/T 50549-2020 语料")
+        excluded = " ".join(item["standard"] for item in basis["excluded"])
+        self.assertIn("50549-2010", excluded, "已废止版本必须登记在案")
+        self.assertIn("火电厂标识系统", excluded)
+        self.assertNotIn("standard_divergences", cfg, "分歧登记表已随旧体系删除")
 
 
 if __name__ == "__main__":

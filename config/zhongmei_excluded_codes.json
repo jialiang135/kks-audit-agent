@@ -1,0 +1,2360 @@
+{
+ "J": {
+  "cn": "核产热",
+  "en": "Nuclear heat generation",
+  "note": "—",
+  "starred": false
+ },
+ "K": {
+  "cn": "反应堆辅助系统",
+  "en": "Nuclear auxiliary systems",
+  "note": "—",
+  "starred": false
+ },
+ "JA": {
+  "cn": "反应堆系统",
+  "en": "Reactor system",
+  "note": "—",
+  "starred": false
+ },
+ "JAA": {
+  "cn": "反应堆压力容器",
+  "en": "Reactor vessel",
+  "note": "—",
+  "starred": false
+ },
+ "JAB": {
+  "cn": "需要单独标识的反应堆压力容器封头内部构件",
+  "en": "Reactor vessel closure head internals requiring separate identification marking",
+  "note": "—",
+  "starred": false
+ },
+ "JAC": {
+  "cn": "反应堆容器内部构件(如果JAC不能满足标识,在JB下对反应堆容器内部进行编码)",
+  "en": "Reactor vessel internals (if identification marking is too complex,encode reactor vessel internals and \"JB\")",
+  "note": "—",
+  "starred": false
+ },
+ "JAD": {
+  "cn": "反应堆容器衬里",
+  "en": "Reactor vessel liner",
+  "note": "—",
+  "starred": false
+ },
+ "JAE": {
+  "cn": "反应堆衬套冷却系统",
+  "en": "Reactor vessel liner cooling system",
+  "note": "—",
+  "starred": false
+ },
+ "JAF": {
+  "cn": "反应堆容器预应力混凝土系统",
+  "en": "Reactor vessel prestressing system on implementation as prestressed concrete vessel",
+  "note": "—",
+  "starred": false
+ },
+ "JAG": {
+  "cn": "反应堆容器内绝热层",
+  "en": "Reactor vessel internal insulation",
+  "note": "—",
+  "starred": false
+ },
+ "JAH": {
+  "cn": "反应堆容器外绝热层",
+  "en": "Reactor vessel external insulation",
+  "note": "—",
+  "starred": false
+ },
+ "JAJ": {
+  "cn": "反应堆容器外壁冷却系统（只在与衬套冷却系统不是一个系统时才用）",
+  "en": "Reactor vessel outer wall cooling system (only if separate from liner cooling system)",
+  "note": "—",
+  "starred": false
+ },
+ "JAK": {
+  "cn": "后续标准预留 (JAK 至 JAS)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JAT": {
+  "cn": "泄漏系统和泄漏探测系统",
+  "en": "Leak-off system and leakage detection system",
+  "note": "—",
+  "starred": false
+ },
+ "JAU": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JAV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "JAW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "JAX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "JAY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "JAZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JB": {
+  "cn": "反应堆容器内部构件 (只有当 JAC 不满足标识时才使用 JB)",
+  "en": "Reactor vessel internals (use \"JB\" only if \"JAC\" is not adequate for identification marking)",
+  "note": "—",
+  "starred": false
+ },
+ "JBA": {
+  "cn": "反应堆容器内部构件",
+  "en": "Reactor vessel internals",
+  "note": "—",
+  "starred": false
+ },
+ "JBB": {
+  "cn": "后续标准预留 (JBB 至 JBP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JBQ": {
+  "cn": "可用 (JBQ 至 JBU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "JBV": {
+  "cn": "后续标准预留 (JBV 至 JBZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JC": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JD": {
+  "cn": "反应堆控制和停堆系统",
+  "en": "Reactor control and shutdown system",
+  "note": "—",
+  "starred": false
+ },
+ "JDA": {
+  "cn": "控制棒驱动装置",
+  "en": "Control rod drive unit",
+  "note": "—",
+  "starred": false
+ },
+ "JDB": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JDC": {
+  "cn": "用于冷却剂流量的机械,过程控制系统",
+  "en": "Mechanical, process control system for coolant flow rate",
+  "note": "—",
+  "starred": false
+ },
+ "JDD": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JDE": {
+  "cn": "固态中子吸收剂停堆系统",
+  "en": "Solid neutron absorber shutdown system",
+  "note": "—",
+  "starred": false
+ },
+ "JDF": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JDG": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JDH": {
+  "cn": "液态中子吸收剂停堆系统",
+  "en": "Liquid neutron absorber shutdown system",
+  "note": "—",
+  "starred": false
+ },
+ "JDJ": {
+  "cn": "第二备用液态中子吸收剂停堆系统",
+  "en": "Secondary backup liquid neutron absorber shutdown system",
+  "note": "—",
+  "starred": false
+ },
+ "JDK": {
+  "cn": "紧急停堆系统",
+  "en": "Emergency shutdown system",
+  "note": "—",
+  "starred": false
+ },
+ "JDL": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JDM": {
+  "cn": "气态中子吸收装置停堆系统",
+  "en": "Gaseous neutron absorber shutdown system",
+  "note": "—",
+  "starred": false
+ },
+ "JDN": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JDP": {
+  "cn": "停堆系统的电源供应系统",
+  "en": "Power supply system for shutdown system",
+  "note": "—",
+  "starred": false
+ },
+ "JDQ": {
+  "cn": "后续标准预留(JDQ 至 JDS)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JDT": {
+  "cn": "泄漏与泄漏收集系统",
+  "en": "Leak-off system and leakage collecting system",
+  "note": "—",
+  "starred": false
+ },
+ "JDU": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JDV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "JDW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "JDX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "JDY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "JDZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JE": {
+  "cn": "反应堆冷却剂系统",
+  "en": "Reactor coolant system",
+  "note": "—",
+  "starred": false
+ },
+ "JEA": {
+  "cn": "反应堆冷却剂热交换器(用于双回路核电厂蒸汽发生器)",
+  "en": "Reactor coolant heat exchange (for two-cycle plants: steam generation)",
+  "note": "对一回路系统和二回路系统： 从(包括):热交换器进口 至(包括):热交换器出口",
+  "starred": false
+ },
+ "JEB": {
+  "cn": "反应堆冷却剂循环系统",
+  "en": "Reactor coolant circulation",
+  "note": "从(包括):喷嘴进口 至(包括):喷嘴出口 如果循环泵在反应堆容器内： 至(不包括):反应堆容器的出口连接法兰盘",
+  "starred": false
+ },
+ "JEC": {
+  "cn": "反应堆冷却剂管道系统(不可用在单回路的核电厂)",
+  "en": "Reactor coolant piping system (not for single-cycle plant)",
+  "note": "从(不包括):反应堆冷却剂热交换器出口 至(不包括):反应堆冷却剂泵出口 从(不包括):反应堆冷却剂泵出口 至(不包括):反应堆压力容器出口 从(不包括):反应堆压力容器出口 至(不包括):反应堆冷却剂热交换器出口",
+  "starred": false
+ },
+ "JEE": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JEF": {
+  "cn": "反应堆冷却剂稳压系统",
+  "en": "Reactor coolant pressurizing system",
+  "note": "在双回路中: 从(不包括):反应堆冷却剂管道系统 至(包括):泄压阀和安全阀",
+  "starred": false
+ },
+ "JEG": {
+  "cn": "反应堆冷却剂泄压系统(参见单回路核电厂的 LBK)",
+  "en": "Reactor coolant pressure relief system (see \"LBK\" for single-cycle plant)",
+  "note": "双回路电厂: 从(不包括):泄压阀和安全阀 至(包括):溢流罐和相关的再循环冷却设备 直接回路电厂: 从(不包括):反应堆压力容器 至(不包括):压力控制系统减轻反应堆冷却剂系统允许的压力",
+  "starred": false
+ },
+ "JEH": {
+  "cn": "后续标准预留(JEH 至 JES)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JET": {
+  "cn": "反应堆冷却剂泄漏与收集系统",
+  "en": "Reactor coolant leak-off and collection system",
+  "note": "—",
+  "starred": false
+ },
+ "JEU": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JEV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "JEW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "JEX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "JEY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "JEZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JF": {
+  "cn": "慢化剂系统",
+  "en": "Moderator system",
+  "note": "—",
+  "starred": false
+ },
+ "JFA": {
+  "cn": "一回路与二回路系统中慢化剂换热系统",
+  "en": "Moderator heat exchange system on primary and secondary sides",
+  "note": "从（包括）:热交换器入口 至（包括）:热交换器出口",
+  "starred": false
+ },
+ "JFB": {
+  "cn": "慢化剂循环",
+  "en": "Moderator circulation",
+  "note": "从（包括）:喷嘴入口 至（包括）:喷嘴出口",
+  "starred": false
+ },
+ "JFC": {
+  "cn": "慢化剂管路系统",
+  "en": "Moderator piping system",
+  "note": "从(不包括): 慢化剂热交换器 至(不包括): 慢化剂循环系统 从(不包括): 慢化剂循环系统 至(不包括): 慢化剂罐从(包括): 反应堆压力容器 至(不包括): 慢化剂热交换器",
+  "starred": false
+ },
+ "JFD": {
+  "cn": "慢化剂箱(如果密闭在反应堆容器内, 在反应堆内部构件中标识)",
+  "en": "Moderator tank (if enclosed in reactor vessel, identification under reactor internals)",
+  "note": "—",
+  "starred": false
+ },
+ "JFE": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JFF": {
+  "cn": "慢化剂稳压系统",
+  "en": "Moderator pressurizing system",
+  "note": "从(包括): 慢化剂管路系统出口 至(包括): 减压和安全阀门入口",
+  "starred": false
+ },
+ "JFG": {
+  "cn": "慢化剂泄压系统",
+  "en": "Moderator pressure relief system",
+  "note": "从(包括): 减压和安全阀门出口 至(包括): 再循环冷却系统入口",
+  "starred": false
+ },
+ "JFH": {
+  "cn": "后续标准预留(JFH 至 JFS)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JFT": {
+  "cn": "慢化剂泄漏系统",
+  "en": "Moderator leak-off system",
+  "note": "—",
+  "starred": false
+ },
+ "JFU": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JFV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "JFW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "JFX": {
+  "cn": "控制和保护设备的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "JFY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "JFZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JG": {
+  "cn": "二次冷却剂系统（仅用于三回路核电厂）",
+  "en": "Secondary coolant system (only for three-cycle plant)",
+  "note": "—",
+  "starred": false
+ },
+ "JGA": {
+  "cn": "一回路、二回路系统中二次冷却剂换热器（蒸汽发生系统）",
+  "en": "Secondary coolant heat exchange (steam generation system) on primary and secondary sides",
+  "note": "从（包括）：热交换器入口至（包括）：热交换器出口",
+  "starred": false
+ },
+ "JGB": {
+  "cn": "二次冷却剂循环系统",
+  "en": "Secondary coolant circulation",
+  "note": "从（包括）：喷嘴进口至（包括）：喷嘴出口",
+  "starred": false
+ },
+ "JGC": {
+  "cn": "二次冷却剂配管系统（不包含循环系统和热交换器）",
+  "en": "Secondary coolant piping system (excluding circulation system and heat exchangers)",
+  "note": "—",
+  "starred": false
+ },
+ "JGD": {
+  "cn": "后续标准预留(JGD 至 JGE)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JGF": {
+  "cn": "二次冷却剂稳压系统",
+  "en": "Secondary coolant pressurizing system",
+  "note": "从(包括):二次冷却剂配管系统出口至(包括):减压和安全阀门入口",
+  "starred": false
+ },
+ "JGG": {
+  "cn": "二次冷却剂泄压系统",
+  "en": "Secondary coolant pressure relief system",
+  "note": "从(包括):安全阀门出口至(包括):转运点入口",
+  "starred": false
+ },
+ "JGH": {
+  "cn": "后续标准预留(JGH 至 JGS)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JGT": {
+  "cn": "二次冷却剂泄漏与收集系统",
+  "en": "Secondary coolant leak-off and collection system",
+  "note": "—",
+  "starred": false
+ },
+ "JGU": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JGV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "JGW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "JGX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "JGY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "JGZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JH": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JJ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JK": {
+  "cn": "带辅助部件的反应堆堆芯",
+  "en": "Reactor core with appurtenances",
+  "note": "—",
+  "starred": false
+ },
+ "JKA": {
+  "cn": "可用(例如用于元件或部件标识) (JKA 至 JKP)",
+  "en": "Available for use (e.g. for identification of elements/sections)",
+  "note": "—",
+  "starred": false
+ },
+ "JKQ": {
+  "cn": "气动小球测量系统(利用可活化探头测量反应堆堆芯中子注量率分布)",
+  "en": "Aeroball system for determination of flux (distribution in the core with traveling, activity-sensitive probes)",
+  "note": "—",
+  "starred": false
+ },
+ "JKR": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JKS": {
+  "cn": "测量堆芯内温度与中子流量的仪表系统",
+  "en": "In-core instrumentation system for detecting temperature and neutron flux in the core",
+  "note": "—",
+  "starred": false
+ },
+ "JKT": {
+  "cn": "测量堆芯外温度与中子流量的仪表系统",
+  "en": "Ex-core instrumentation system for detecting temperature and neutron flux outside of the core",
+  "note": "—",
+  "starred": false
+ },
+ "JKU": {
+  "cn": "包壳管破损燃料组件探测系统",
+  "en": "Failed fuel assemblies detection system for detecting cladding tube damage",
+  "note": "—",
+  "starred": false
+ },
+ "JKV": {
+  "cn": "后续标准预留(JKV 至 JKZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JL": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JM": {
+  "cn": "安全壳和内部结构",
+  "en": "Containment and internals",
+  "note": "—",
+  "starred": false
+ },
+ "JMA": {
+  "cn": "安全壳",
+  "en": "Containment",
+  "note": "—",
+  "starred": false
+ },
+ "JMB": {
+  "cn": "堆芯熔融稳定系统",
+  "en": "Core melt stabilization system",
+  "note": "—",
+  "starred": false
+ },
+ "JMC": {
+  "cn": "安全壳环形空间泄漏系统",
+  "en": "Annulus leak-off system",
+  "note": "—",
+  "starred": false
+ },
+ "JMD": {
+  "cn": "燃料贮存建筑 UFA 和反应堆建筑 UJA 之间的核燃料组件输送的安全壳贯穿件",
+  "en": "Containment penetration for conveyance of fuel assemblies between fuel assembly storage building \"UFA\" and reactor building \"UJA\"",
+  "note": "—",
+  "starred": false
+ },
+ "JME": {
+  "cn": "系统气闸",
+  "en": "System airlock",
+  "note": "—",
+  "starred": false
+ },
+ "JMF": {
+  "cn": "人员气闸",
+  "en": "Personnel airlock",
+  "note": "—",
+  "starred": false
+ },
+ "JMG": {
+  "cn": "应急人员气闸",
+  "en": "Emergency airlock",
+  "note": "—",
+  "starred": false
+ },
+ "JMH": {
+  "cn": "土建开孔",
+  "en": "Construction opening",
+  "note": "—",
+  "starred": false
+ },
+ "JMJ": {
+  "cn": "安全壳内结构部件(仅用于安装标识)",
+  "en": "Structural components inside containment (only for identification of installation location)",
+  "note": "—",
+  "starred": false
+ },
+ "JMK": {
+  "cn": "安全壳外壁管道穿孔(仅用于安装标识)",
+  "en": "Piping penetrations in containment wall (only for identification of installation location)",
+  "note": "—",
+  "starred": false
+ },
+ "JML": {
+  "cn": "安全壳外壁电缆穿孔(仅用于安装标识)",
+  "en": "Cable penetrations in containment wall (only for identification of installation location)",
+  "note": "—",
+  "starred": false
+ },
+ "JMM": {
+  "cn": "安全壳贯穿件处的泄漏监测与泄漏系统",
+  "en": "Leakage monitoring and leak-off system at containment penetrations",
+  "note": "—",
+  "starred": false
+ },
+ "JMN": {
+  "cn": "用于安全壳减压的安全壳喷淋系统",
+  "en": "Containment spray system for pressure reduction in containment",
+  "note": "—",
+  "starred": false
+ },
+ "JMP": {
+  "cn": "通过冷凝来限制安全壳内压力积聚的降压系统",
+  "en": "Pressure suppression system to limit pressure buildup in containment by condensation",
+  "note": "—",
+  "starred": false
+ },
+ "JMQ": {
+  "cn": "安全壳排热系统",
+  "en": "System for heat removal from containment",
+  "note": "—",
+  "starred": false
+ },
+ "JMR": {
+  "cn": "安全壳气体过滤系统",
+  "en": "System for filtering containment atmosphere",
+  "note": "—",
+  "starred": false
+ },
+ "JMS": {
+  "cn": "用于混合安全壳气体的氢混合系统",
+  "en": "Hydrogen mixing system for mixing containment atmosphere",
+  "note": "—",
+  "starred": false
+ },
+ "JMT": {
+  "cn": "用于降低安全壳气体中不被允许的 $ H_{{2}} $ 含量的安全壳消氢系统",
+  "en": "Hydrogen reduction system for reduction of unallowable $ H_{{2}} $ concentrations in the containment atmosphere",
+  "note": "—",
+  "starred": false
+ },
+ "JMU": {
+  "cn": "用于测量安全壳气体中 $ H_{{2}} $ 含量的氢检测系统",
+  "en": "Hydrogen monitoring system for $ H_{{2}} $ concentration measurement in containment atmosphere",
+  "note": "—",
+  "starred": false
+ },
+ "JMV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "JMW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "JMX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "JMY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "JMZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JN": {
+  "cn": "堆芯余热导出系统",
+  "en": "Systems for removal of residual heat from reactor core",
+  "note": "—",
+  "starred": false
+ },
+ "JNA": {
+  "cn": "停堆时堆芯余热导出系统",
+  "en": "Residual heat removal system for shut down reactor",
+  "note": "—",
+  "starred": false
+ },
+ "JNB": {
+  "cn": "停堆时应急堆芯余热导出系统",
+  "en": "Emergency residual heat removal system for shut down reactor",
+  "note": "—",
+  "starred": false
+ },
+ "JNC": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JND": {
+  "cn": "一回路冷却剂微量或中等泄漏时，一回路冷却系统高压安全注入系统(如果与JNA分设)",
+  "en": "High pressure injection in primary coolant system for makeup of small or medium leaks (if separate from \"JNA\")",
+  "note": "—",
+  "starred": false
+ },
+ "JNE": {
+  "cn": "后续标准预留(JNE至JNF)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JNG": {
+  "cn": "一回路冷却剂大量泄漏事故时，反应堆冷却系统对堆芯大量注入的低压安全注入冷却剂系统(如果与JNA分设)",
+  "en": "Low-pressure feed (core flooding) in reactor coolant system for flooding of the reactor core in the event of large leaks (if separate from \"JNA\")",
+  "note": "—",
+  "starred": false
+ },
+ "JNH": {
+  "cn": "后续标准预留(JNH至JNJ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JNK": {
+  "cn": "为余热导出需求准备的含硼水贮存系统",
+  "en": "Borated water storage system for use in case of requirement on residual heat removal",
+  "note": "—",
+  "starred": false
+ },
+ "JNL": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JNM": {
+  "cn": "堆芯熔体余热导出系统",
+  "en": "System for residual heat removal from core melt",
+  "note": "—",
+  "starred": false
+ },
+ "JNN": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JNP": {
+  "cn": "功能测试系统 (运行时余热导出系统的功能测试)",
+  "en": "Function testing system (function testing of residual heat removal system during operation)",
+  "note": "—",
+  "starred": false
+ },
+ "JNQ": {
+  "cn": "后续标准预留 (JNQ 至 JNU)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JNV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "JNW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "JNX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "JNY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "JNZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JP": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JQ": {
+  "cn": "光学系统,硬连线备份系统",
+  "en": "OM-systems, hard wired backup systems",
+  "note": "—",
+  "starred": false
+ },
+ "JQA": {
+  "cn": "光学系统, 硬连线备份系统",
+  "en": "OM-system, hard wired backup system",
+  "note": "—",
+  "starred": false
+ },
+ "JQB": {
+  "cn": "后续标准预留(JQB 至 JQP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JQQ": {
+  "cn": "可用(JQQ 至 JQU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "JQV": {
+  "cn": "后续标准预留(JQV 至 JQZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JR": {
+  "cn": "反应堆保护系统",
+  "en": "Reactor protection system",
+  "note": "—",
+  "starred": false
+ },
+ "JRA": {
+  "cn": "反应堆保护系统",
+  "en": "Reactor protection system",
+  "note": "—",
+  "starred": false
+ },
+ "JRB": {
+  "cn": "后续标准预留(JRB 至 JRP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JRQ": {
+  "cn": "可用(JRQ 至 JRU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "JRV": {
+  "cn": "后续标准预留(JRV 至 JRZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JS": {
+  "cn": "反应堆控制系统",
+  "en": "Reactor control system",
+  "note": "—",
+  "starred": false
+ },
+ "JSA": {
+  "cn": "反应堆控制系统",
+  "en": "Reactor control system",
+  "note": "—",
+  "starred": false
+ },
+ "JSB": {
+  "cn": "后续标准预留(JSB 至 JSP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JSQ": {
+  "cn": "可用(JSQ 至 JSU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "JSV": {
+  "cn": "后续标准预留(JSV 至 JSZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JT": {
+  "cn": "反应堆运行、保护和状态限制系统",
+  "en": "Reactor operational, protective and status limitation system",
+  "note": "—",
+  "starred": false
+ },
+ "JTA": {
+  "cn": "反应堆运行、保护和状态限制系统",
+  "en": "Reactor operational, protective and status limitation system",
+  "note": "—",
+  "starred": false
+ },
+ "JTB": {
+  "cn": "后续标准预留(JTB 至 JTP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JTQ": {
+  "cn": "可用 (JTQ 至 JTU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "JTV": {
+  "cn": "后续标准预留(JTV 至 JTZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JU": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "JVA": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "JVB": {
+  "cn": "后续标准预留(JVB 至 JVP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JVQ": {
+  "cn": "可用 (JVQ 至 JVU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "JVV": {
+  "cn": "后续标准预留(JVV 至 JVZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "JWA": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "JWB": {
+  "cn": "后续标准预留(JWB 至 JWP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JWQ": {
+  "cn": "可用(JWQ 至 JWU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "JWV": {
+  "cn": "后续标准预留(JWV 至 JWZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply systems for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "JXA": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "JXB": {
+  "cn": "后续标准预留(JXB 至 JXP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JXQ": {
+  "cn": "可用(JXQ 至 JXU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "JXV": {
+  "cn": "后续标准预留(JXV 至 JXZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JY": {
+  "cn": "控制和保护系统（不包括 JQ、JR、JS、JT）",
+  "en": "Control and protection systems (excluding \"JQ\" \"JR\" \"JS\" \"JT\")",
+  "note": "—",
+  "starred": false
+ },
+ "JYA": {
+  "cn": "后续标准预留(JYA、JYB)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JYC": {
+  "cn": "污染物监测系统",
+  "en": "Contamination monitoring system",
+  "note": "—",
+  "starred": false
+ },
+ "JYD": {
+  "cn": "可用",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "JYE": {
+  "cn": "驱动设备诊断系统",
+  "en": "Diagnostic system for rotating machinery",
+  "note": "—",
+  "starred": false
+ },
+ "JYF": {
+  "cn": "松动部件监测系统",
+  "en": "Loose parts monitoring system",
+  "note": "—",
+  "starred": false
+ },
+ "JYG": {
+  "cn": "振动监测系统",
+  "en": "Vibration monitoring system",
+  "note": "—",
+  "starred": false
+ },
+ "JYH": {
+  "cn": "安全壳内部泄漏监测系统",
+  "en": "Leakage monitoring system for detection of leaks inside of the containment",
+  "note": "—",
+  "starred": false
+ },
+ "JYJ": {
+  "cn": "安全壳外部泄漏监测系统",
+  "en": "Leakage monitoring system for detection of leaks outside of the containment",
+  "note": "—",
+  "starred": false
+ },
+ "JYK": {
+  "cn": "放射性监测系统（局部剂量率）",
+  "en": "Radioactivity monitoring system (local dose rate)",
+  "note": "—",
+  "starred": false
+ },
+ "JYL": {
+  "cn": "组件疲劳监测系统",
+  "en": "Fatigue monitoring system for components",
+  "note": "—",
+  "starred": false
+ },
+ "JYM": {
+  "cn": "用于辐射和活性监测的移动监测系统",
+  "en": "Mobile monitoring system for radiation and activity monitoring",
+  "note": "—",
+  "starred": false
+ },
+ "JYN": {
+  "cn": "辐射与活性监测的实验室系统",
+  "en": "Laboratory system for radiation and activity monitoring",
+  "note": "—",
+  "starred": false
+ },
+ "JYP": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JYQ": {
+  "cn": "可用 (JYQ 至 JYU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "JYV": {
+  "cn": "阀门监测系统",
+  "en": "Valve monitoring system",
+  "note": "—",
+  "starred": false
+ },
+ "JYW": {
+  "cn": "后续标准预留 (JYW 至 JYZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "JZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KA": {
+  "cn": "设备冷却系统",
+  "en": "Component cooling systems",
+  "note": "—",
+  "starred": false
+ },
+ "KAA": {
+  "cn": "与安全相关的冷却负荷的设备冷却系统",
+  "en": "Component cooling system for safety-related cooling loads",
+  "note": "—",
+  "starred": false
+ },
+ "KAB": {
+  "cn": "正常运行相关的冷却负荷的设备冷却系统",
+  "en": "Component cooling system for process-related cooling loads",
+  "note": "—",
+  "starred": false
+ },
+ "KAC": {
+  "cn": "其他冷却负荷的设备冷却系统",
+  "en": "Component cooling system for other cooling loads",
+  "note": "—",
+  "starred": false
+ },
+ "KAD": {
+  "cn": "应急设备冷却系统",
+  "en": "Emergency component cooling system",
+  "note": "—",
+  "starred": false
+ },
+ "KAE": {
+  "cn": "可用 (KAE 至 KAF)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KAG": {
+  "cn": "后续标准预留 (KAG 至 KAU)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KAV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "KAW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KAX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KAY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KAZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KB": {
+  "cn": "冷却剂处理",
+  "en": "Coolant treatment",
+  "note": "—",
+  "starred": false
+ },
+ "KBA": {
+  "cn": "液位和容积控制系统",
+  "en": "Level and volume control system",
+  "note": "—",
+  "starred": false
+ },
+ "KBB": {
+  "cn": "冷却剂供应系统",
+  "en": "Coolant supply system",
+  "note": "从(包括):存储箱入口至(包括):储备系统出口",
+  "starred": false
+ },
+ "KBC": {
+  "cn": "硼酸和除盐水控制系统",
+  "en": "Boric acid and demineralized water control system",
+  "note": "从(包括):除盐水箱和硼酸存储箱入口至(不包括):储备系统出口",
+  "starred": false
+ },
+ "KBD": {
+  "cn": "化学控制系统",
+  "en": "Chemical control system",
+  "note": "从(包括):化学试剂存储箱至(不包括):储备系统出口",
+  "starred": false
+ },
+ "KBE": {
+  "cn": "冷却剂净化系统",
+  "en": "Coolant purification system",
+  "note": "—",
+  "starred": false
+ },
+ "KBF": {
+  "cn": "冷却剂处理系统(含浓缩)",
+  "en": "Coolant treatment system (also evaporation)",
+  "note": "—",
+  "starred": false
+ },
+ "KBG": {
+  "cn": "冷却剂除气干燥系统",
+  "en": "Coolant degasification system",
+  "note": "—",
+  "starred": false
+ },
+ "KBH": {
+  "cn": "冷却剂净化再生系统",
+  "en": "Regeneration system for coolant purification",
+  "note": "—",
+  "starred": false
+ },
+ "KBJ": {
+  "cn": "氚提取系统",
+  "en": "Tritium extraction system",
+  "note": "—",
+  "starred": false
+ },
+ "KBK": {
+  "cn": "可用(KBK 至 KAM)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KBN": {
+  "cn": "后续标准预留(KBN 至 KBU)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KBV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "KBW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KBX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KBY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KBZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KC": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KD": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KE": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KF": {
+  "cn": "慢化剂处理( $ D_{{2}}O $ 催化剂)",
+  "en": "Moderator treatment ( $ D_{{2}}O $ moderator)",
+  "note": "—",
+  "starred": false
+ },
+ "KFA": {
+  "cn": "慢化剂循环的液位和容积控制系统",
+  "en": "Level and volume control system,moderator cycle",
+  "note": "—",
+  "starred": false
+ },
+ "KFB": {
+  "cn": "慢化剂供应系统",
+  "en": "Moderator supply system",
+  "note": "从(包括):存储箱至(不包括):储备系统出口",
+  "starred": false
+ },
+ "KFC": {
+  "cn": "后续标准预留 (KFC 至 KFD)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KFE": {
+  "cn": "慢化剂精处理系统",
+  "en": "Moderator polishing system",
+  "note": "—",
+  "starred": false
+ },
+ "KFF": {
+  "cn": "可用 (KFF 至 KFG)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KFH": {
+  "cn": "后续标准预留(KFH 至 KFV)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KFW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KFX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KFY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KFZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KG": {
+  "cn": "二回路冷却剂处理系统( $ D_{{2}}O $ 慢化剂)",
+  "en": "Secondary coolant handling ( $ D_{{2}}O $ moderator)",
+  "note": "—",
+  "starred": false
+ },
+ "KGA": {
+  "cn": "二回路冷却剂液位和容积控制系统",
+  "en": "Level and volume control system, secondary coolant cycle",
+  "note": "—",
+  "starred": false
+ },
+ "KGB": {
+  "cn": "二回路冷却剂供应",
+  "en": "Secondary coolant supply",
+  "note": "从(包括):存储箱至(不包括):储备系统出口",
+  "starred": false
+ },
+ "KGC": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KGD": {
+  "cn": "化学控制系统",
+  "en": "Chemical control system",
+  "note": "从(包括):化学配料罐至(不包括):储备系统出口",
+  "starred": false
+ },
+ "KGE": {
+  "cn": "二回路净化系统",
+  "en": "Secondary coolant purification system",
+  "note": "—",
+  "starred": false
+ },
+ "KGF": {
+  "cn": "可用 (KGF 至 KGJ)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KGK": {
+  "cn": "后续标准预留 (KGK 至 KGU)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KGV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "KGW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KGX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KGY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KGZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KH": {
+  "cn": "反应堆伴热系统 (非电的)",
+  "en": "Nuclear heat tracing systems (non-electrical)",
+  "note": "—",
+  "starred": false
+ },
+ "KHA": {
+  "cn": "用于反应堆冷却剂系统的伴热系统",
+  "en": "Heat tracing system for reactor coolant system",
+  "note": "—",
+  "starred": false
+ },
+ "KHB": {
+  "cn": "二回路冷却剂系统的伴热系统",
+  "en": "Heat tracing system for secondary coolant system",
+  "note": "—",
+  "starred": false
+ },
+ "KHC": {
+  "cn": "其他系统的伴热系统",
+  "en": "Heat tracing system for other systems",
+  "note": "—",
+  "starred": false
+ },
+ "KHD": {
+  "cn": "后续标准预留(KHD 至 KHV)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KHW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KHX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KHY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KHZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KJ": {
+  "cn": "反应堆冷冻水系统",
+  "en": "Nuclear chilled water systems",
+  "note": "—",
+  "starred": false
+ },
+ "KJA": {
+  "cn": "用于冷却剂处理的低温系统(低于0°C)",
+  "en": "Low temperature system (below 0°C) for coolant handling",
+  "note": "—",
+  "starred": false
+ },
+ "KJB": {
+  "cn": "用于气态放射性废物处理的低温系统(低于0°C)",
+  "en": "Low temperature system (below 0°C) for handling of gaseous radioactive waste",
+  "note": "—",
+  "starred": false
+ },
+ "KJC": {
+  "cn": "后续标准预留(KJC 至 KJK)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KJL": {
+  "cn": "用于冷却剂处理的冷冻水系统",
+  "en": "Chilled water system for coolant treatment",
+  "note": "—",
+  "starred": false
+ },
+ "KJM": {
+  "cn": "用于气态放射性废物处理的冷冻水系统",
+  "en": "Chilled water system for gaseous radioactive waste processing",
+  "note": "—",
+  "starred": false
+ },
+ "KJN": {
+  "cn": "备用冷却器的冷冻水系统 ( 可用, KJN 至 KJQ )",
+  "en": "Chilled water system for backup coolers (available for use )",
+  "note": "—",
+  "starred": false
+ },
+ "KJR": {
+  "cn": "后续标准预留(KJR 至 KJV)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KJW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KJX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KJY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KJZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KK": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KL": {
+  "cn": "采暖、通风和空调系统(HVAC) (用于受控区和隔离区)",
+  "en": "Heating, ventilation, air-conditioning(HVAC) systems (in controlled areas and exclusion areas)",
+  "note": "—",
+  "starred": false
+ },
+ "KLA": {
+  "cn": "反应堆建筑内部的采暖、通风和空调系统(HVAC)",
+  "en": "Heating, ventilation, air-conditioning interior of reactor building systems in interior of reactor building",
+  "note": "—",
+  "starred": false
+ },
+ "KLB": {
+  "cn": "反应堆厂房环层建筑采暖、通风和空调系统(HVAC)",
+  "en": "Heating, ventilation, air-conditioning (HVAC) systems in annulus of reactor building",
+  "note": "—",
+  "starred": false
+ },
+ "KLC": {
+  "cn": "受控区域(保护建筑)采暖、通风和空调系统(HVAC)",
+  "en": "Heating, ventilation, air-conditioning (HVAC) systems in controlled areas (safeguard building)",
+  "note": "—",
+  "starred": false
+ },
+ "KLD": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KLE": {
+  "cn": "反应堆辅助建筑的采暖、通风和空调系统(HVAC)",
+  "en": "Heating, ventilation, air-conditioning reactor auxiliary building (HVAC) systems in reactor auxiliary building",
+  "note": "—",
+  "starred": false
+ },
+ "KLF": {
+  "cn": "放射性废料处理建筑的采暖、通风和空调系统(HVAC)",
+  "en": "Heating, ventilation, air-conditioning (HVAC) systems in processing building for radioactive waste",
+  "note": "—",
+  "starred": false
+ },
+ "KLG": {
+  "cn": "后续标准预留 (KLG 至 KLK)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KLL": {
+  "cn": "燃料元件贮存区域的采暖、通风和空调系统(HVAC)",
+  "en": "Heating, ventilation, air-conditioning(HVAC) systems in area of storage of fuel elements",
+  "note": "—",
+  "starred": false
+ },
+ "KLM": {
+  "cn": "后续标准预留(KLM至KLP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KLQ": {
+  "cn": "可用(KLQ至KLU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KLV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "KLW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KLX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KLY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KLZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KM": {
+  "cn": "固态放射性废物的处理系统",
+  "en": "Solid radioactive waste processing system",
+  "note": "—",
+  "starred": false
+ },
+ "KMA": {
+  "cn": "固态放射性废物处理系统",
+  "en": "Processing and treatment system for hard radioactive waste",
+  "note": "—",
+  "starred": false
+ },
+ "KMB": {
+  "cn": "后续标准预留(KMB至KMC)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KMD": {
+  "cn": "过滤器更换系统",
+  "en": "Filter replacement system",
+  "note": "—",
+  "starred": false
+ },
+ "KME": {
+  "cn": "用于固态放射性废物的中间贮存系统",
+  "en": "Intermediate storage system for hard radioactive waste",
+  "note": "—",
+  "starred": false
+ },
+ "KMF": {
+  "cn": "后续标准预留(KMF 至 KMP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KMQ": {
+  "cn": "可用(KMQ 至 KMU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KMV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "KMW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KMX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KMY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KMZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KN": {
+  "cn": "液态放射性废物处理系统",
+  "en": "Liquid radioactive waste processing system",
+  "note": "—",
+  "starred": false
+ },
+ "KNA": {
+  "cn": "后续标准预留(KNA 至 KNB)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KNC": {
+  "cn": "固态放射性聚合物的处理系统",
+  "en": "Processing and treatment system for hard radioactive concentrates",
+  "note": "—",
+  "starred": false
+ },
+ "KND": {
+  "cn": "后续标准预留(KND 至 KNE)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KNF": {
+  "cn": "液态放射性废物的处理系统",
+  "en": "Processing and treatment system for liquid radioactive waste",
+  "note": "—",
+  "starred": false
+ },
+ "KNG": {
+  "cn": "后续标准预留(KNG 至 KNJ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KNK": {
+  "cn": "用于液态放射性废物的中间贮存系统",
+  "en": "Intermediate storage system for liquid radioactive waste",
+  "note": "—",
+  "starred": false
+ },
+ "KNL": {
+  "cn": "后续标准预留(KNL 至 KNP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KNQ": {
+  "cn": "可用(KNQ 至 KNU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KNV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "KNW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KNX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KNY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KNZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KP": {
+  "cn": "气态放射性废物处理系统",
+  "en": "Gaseous radioactive waste processing system",
+  "note": "—",
+  "starred": false
+ },
+ "KPA": {
+  "cn": "后续标准预留(KPA 至 KPK)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KPL": {
+  "cn": "用于气态放射性废物的处理系统",
+  "en": "Processing and treatment system for gaseous radioactive waste",
+  "note": "—",
+  "starred": false
+ },
+ "KPM": {
+  "cn": "后续标准预留(KPM 至 KPP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KPQ": {
+  "cn": "用于气体放射性废物贮存系统",
+  "en": "Intermediate storage system for gaseous radioactive waste",
+  "note": "—",
+  "starred": false
+ },
+ "KPR": {
+  "cn": "可用(KPR 至 KPU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KPV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "KPW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KPX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KPY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KPZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KQ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KR": {
+  "cn": "核系统气体供应和处理(焊接保护气体供应系统见 XE)",
+  "en": "Nuclear gas supply and disposal (see \"XE\" for welding protection supply)",
+  "note": "—",
+  "starred": false
+ },
+ "KRA": {
+  "cn": "保护气体供应",
+  "en": "Blanket gas supply",
+  "note": "—",
+  "starred": false
+ },
+ "KRB": {
+  "cn": "保护气体供应(KRB 至 KRH)",
+  "en": "Blanket gas supply",
+  "note": "—",
+  "starred": false
+ },
+ "KRJ": {
+  "cn": "惰性气体供应",
+  "en": "Inert gas supply",
+  "note": "—",
+  "starred": false
+ },
+ "KRK": {
+  "cn": "惰性气体供应(KRK 至 KRN)",
+  "en": "Inert gas supply",
+  "note": "—",
+  "starred": false
+ },
+ "KRP": {
+  "cn": "可用 (KRP 至 KRU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KRV": {
+  "cn": "润滑剂系统",
+  "en": "Lubricant system",
+  "note": "—",
+  "starred": false
+ },
+ "KRW": {
+  "cn": "密封流体供应系统",
+  "en": "Sealing fluid supply system",
+  "note": "—",
+  "starred": false
+ },
+ "KRX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KRY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KRZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KS": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KT": {
+  "cn": "受控和禁止区域液体介质和通风系统的收集和排水系统",
+  "en": "Collection and drainage systems for liquid media and vent systems in controlled and exclusion area",
+  "note": "—",
+  "starred": false
+ },
+ "KTA": {
+  "cn": "受控和禁止区域液体介质和通风系统的收集和排水系统",
+  "en": "Collection and drainage systems for liquid media and vent systems in controlled and exclusion area",
+  "note": "—",
+  "starred": false
+ },
+ "KTB": {
+  "cn": "后续标准预留(KTB 至 KTP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KTQ": {
+  "cn": "可用(KTQ 至 KTU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KTV": {
+  "cn": "后续标准预留(KTV 至 KTW)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KTX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KTY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KTZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KU": {
+  "cn": "受控和禁止区域的液体和气体介质取样系统",
+  "en": "Sampling systems for liquid and gaseous media in controlled and exclusion area",
+  "note": "—",
+  "starred": false
+ },
+ "KUA": {
+  "cn": "活性液体介质的取样系统",
+  "en": "Sampling system for active liquid media",
+  "note": "—",
+  "starred": false
+ },
+ "KUB": {
+  "cn": "弱活性液体介质的取样系统",
+  "en": "Sampling system for weak active liquid media",
+  "note": "—",
+  "starred": false
+ },
+ "KUC": {
+  "cn": "后续标准预留(KUC 至 KUE)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KUF": {
+  "cn": "气体介质取样系统",
+  "en": "Sampling system for gaseous media",
+  "note": "—",
+  "starred": false
+ },
+ "KUG": {
+  "cn": "后续标准预留(KUG 至 KUJ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KUK": {
+  "cn": "活动取样系统和测量系统",
+  "en": "Activity sampling system and measuring system",
+  "note": "—",
+  "starred": false
+ },
+ "KUL": {
+  "cn": "安全壳气体的事故取样系统",
+  "en": "Fault sampling system from containment atmosphere",
+  "note": "—",
+  "starred": false
+ },
+ "KUM": {
+  "cn": "后续标准预留(KUM 至 KUW)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KUX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KUY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KUZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KV": {
+  "cn": "受控和禁止区域的负载设备润滑系统",
+  "en": "Lubricant system for loads in controlled and exclusion area",
+  "note": "—",
+  "starred": false
+ },
+ "KVA": {
+  "cn": "受控和禁止区域的负载设备润滑系统",
+  "en": "Lubricant system for loads in controlled and exclusion area",
+  "note": "—",
+  "starred": false
+ },
+ "KVB": {
+  "cn": "后续标准预留(KVB 至 KVP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KVQ": {
+  "cn": "可用(KVQ 至 KVU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KVV": {
+  "cn": "后续标准预留(KVV 至 KVZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KW": {
+  "cn": "受控和禁止区域的负载设备密封和冲洗流体供应系统",
+  "en": "Sealing fluid, flushing fluid supply for loads in controlled and exclusion area",
+  "note": "—",
+  "starred": false
+ },
+ "KWA": {
+  "cn": "受控和禁止区域的负载设备密封和冲洗流体供应系统",
+  "en": "Sealing fluid, flushing fluid supply for loads in controlled and exclusion area",
+  "note": "—",
+  "starred": false
+ },
+ "KWB": {
+  "cn": "后续标准预留(KWB 至 KWP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KWQ": {
+  "cn": "可用(KWQ 至 KWU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KWV": {
+  "cn": "后续标准预留(KWV 至 KWW)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KWX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KWY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KWZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KX": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply systems for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KXA": {
+  "cn": "控制和保护系统的流体供应系统",
+  "en": "Fluid supply system for control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KXB": {
+  "cn": "后续标准预留(KXB至KXP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KXQ": {
+  "cn": "可用(KXQ至KXU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KXV": {
+  "cn": "后续标准预留(KXV至KXZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KY": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection systems",
+  "note": "—",
+  "starred": false
+ },
+ "KYA": {
+  "cn": "控制和保护系统",
+  "en": "Control and protection system",
+  "note": "—",
+  "starred": false
+ },
+ "KYB": {
+  "cn": "后续标准预留(KYB至KYP)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KYQ": {
+  "cn": "可用(KYQ至KYU)",
+  "en": "Available for use",
+  "note": "—",
+  "starred": false
+ },
+ "KYV": {
+  "cn": "后续标准预留(KYV至KYZ)",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ },
+ "KZ": {
+  "cn": "后续标准预留",
+  "en": "Reserved for later standardization",
+  "note": "—",
+  "starred": false
+ }
+}

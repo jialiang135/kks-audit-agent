@@ -73,8 +73,10 @@ class ProtectedRouteTests(unittest.TestCase):
         )
 
     def test_admin_post_endpoints_are_protected(self):
-        for endpoint in ("/api/config", "/api/skill", "/api/skill/upload", "/api/ai/test"):
-            self.assertIn(endpoint, server.PROTECTED_POST)
+        self.assertEqual(
+            server.PROTECTED_POST,
+            {"/api/config", "/api/skill", "/api/skill/upload", "/api/ai/test", "/api/history/delete"},
+        )
 
     def test_ledger_endpoints_require_admin_token(self):
         """台账返回原始文件名、内容哈希、审核时间与 P0/P1/P2 统计，不能因页面展示需要而公开。"""

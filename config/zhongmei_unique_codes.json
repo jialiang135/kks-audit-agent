@@ -1,0 +1,292 @@
+{
+ "CBD": {
+  "cn": "操作员控制台",
+  "kind": "system",
+  "source": "中煤细则表14"
+ },
+ "CBB": {
+  "cn": "DCS、DEH 工程师站 /历史数据站/SOE 站/HART 管理站/ 辅网工程师站/现 场总线设备管理站 /信息系统管",
+  "kind": "system",
+  "source": "中煤细则表14"
+ },
+ "CBC": {
+  "cn": "TDM/VMS/炉管泄漏 /飞灰含碳/风粉在 线等系统的工程师 站",
+  "kind": "system",
+  "source": "中煤细则表15"
+ },
+ "CPB": {
+  "cn": "MIS 机柜、箱",
+  "kind": "system",
+  "source": "中煤细则表15"
+ },
+ "CQB": {
+  "cn": "电子间锅炉 380 （415）VAC 电源柜 /220（240）VAC 电 源柜/电磁阀柜等",
+  "kind": "system",
+  "source": "中煤细则表15"
+ },
+ "CRE": {
+  "cn": "信息安全防护机柜",
+  "kind": "system",
+  "source": "中煤细则表15"
+ },
+ "CAD": {
+  "cn": "DEH 机柜",
+  "kind": "system",
+  "source": "中煤细则表15"
+ },
+ "CQD": {
+  "cn": "DEH 电源柜",
+  "kind": "system",
+  "source": "中煤细则表15"
+ },
+ "CAE": {
+  "cn": "ETS 机柜",
+  "kind": "system",
+  "source": "中煤细则表15"
+ },
+ "CQC": {
+  "cn": "电子间汽机 380 （415）VAC 电源柜 /220（240）VAC 电",
+  "kind": "system",
+  "source": "中煤细则表15"
+ },
+ "CUU": {
+  "cn": "辅网监控系统",
+  "kind": "system",
+  "source": "中煤细则表16"
+ },
+ "CUB": {
+  "cn": "汽水取样系统、加 药系统",
+  "kind": "system",
+  "source": "中煤细则表16"
+ },
+ "CUC": {
+  "cn": "化学补给水系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUD": {
+  "cn": "凝结水精处理系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUE": {
+  "cn": "燃油泵房、天然气 调压站",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUF": {
+  "cn": "海水淡化系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUG": {
+  "cn": "补充水泵房、原水 预处理",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUH": {
+  "cn": "除灰渣、除尘、钢 板仓系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUJ": {
+  "cn": "污水处理系统、生 活水处理",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUK": {
+  "cn": "废水处理系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUL": {
+  "cn": "循环水软化水处理 系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUM": {
+  "cn": "空冷系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUN": {
+  "cn": "热网系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUP": {
+  "cn": "循环水泵房、消防 水泵房、公用水泵 房、雨水泵房",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUQ": {
+  "cn": "空压机系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUR": {
+  "cn": "氢站",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUS": {
+  "cn": "脱硝系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CUT": {
+  "cn": "脱硫系统",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CTB": {
+  "cn": "锅炉侧保温箱",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CTC": {
+  "cn": "汽机侧保护箱",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CTD": {
+  "cn": "汽机侧保温箱",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CTE": {
+  "cn": "辅助车间保护箱",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CTF": {
+  "cn": "辅助车间保温箱",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CTG": {
+  "cn": "脱硫保护箱",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "CTH": {
+  "cn": "脱硫保温箱",
+  "kind": "system",
+  "source": "中煤细则表17"
+ },
+ "UYC": {
+  "cn": "综合",
+  "kind": "system",
+  "source": "中煤细则表18"
+ },
+ "UYM": {
+  "cn": "机务",
+  "kind": "system",
+  "source": "中煤细则表18"
+ },
+ "UYG": {
+  "cn": "化学",
+  "kind": "system",
+  "source": "中煤细则表18"
+ },
+ "UYH": {
+  "cn": "暖通",
+  "kind": "system",
+  "source": "中煤细则表18"
+ },
+ "UYP": {
+  "cn": "水工供水、给排水",
+  "kind": "system",
+  "source": "中煤细则表18"
+ },
+ "UYE": {
+  "cn": "除灰、脱硫",
+  "kind": "system",
+  "source": "中煤细则表18"
+ },
+ "UYN": {
+  "cn": "其他",
+  "kind": "system",
+  "source": "中煤细则表18"
+ },
+ "PA": {
+  "cn": "固定摄像机（枪机/半球）",
+  "kind": "device",
+  "source": "中煤细则表10"
+ },
+ "PB": {
+  "cn": "球机/高速球/云台",
+  "kind": "device",
+  "source": "中煤细则表10"
+ },
+ "PC": {
+  "cn": "微距相机",
+  "kind": "device",
+  "source": "中煤细则表10"
+ },
+ "PD": {
+  "cn": "防腐蚀球机",
+  "kind": "device",
+  "source": "中煤细则表10"
+ },
+ "PE": {
+  "cn": "耐高温筒机",
+  "kind": "device",
+  "source": "中煤细则表10"
+ },
+ "PV": {
+  "cn": "防爆摄像机",
+  "kind": "device",
+  "source": "中煤细则表10"
+ },
+ "PU": {
+  "cn": "AI旋镜像机",
+  "kind": "device",
+  "source": "中煤细则表10"
+ },
+ "PR": {
+  "cn": "红外摄像机",
+  "kind": "device",
+  "source": "中煤细则表10"
+ },
+ "PT": {
+  "cn": "热成像摄像机(包含热成像 周界像机)",
+  "kind": "device",
+  "source": "中煤细则表11"
+ },
+ "PL": {
+  "cn": "炉膛火焰摄像机",
+  "kind": "device",
+  "source": "中煤细则表11"
+ },
+ "PP": {
+  "cn": "全景摄像机（720 °全景、全 景鹰眼）",
+  "kind": "device",
+  "source": "中煤细则表11"
+ },
+ "PN": {
+  "cn": "5G 类摄像机",
+  "kind": "device",
+  "source": "中煤细则表11"
+ },
+ "PM": {
+  "cn": "作业记录仪",
+  "kind": "device",
+  "source": "中煤细则表11"
+ },
+ "KB": {
+  "cn": "访客机、终端、一体机 类设备",
+  "kind": "device",
+  "source": "中煤细则表12"
+ },
+ "KC": {
+  "cn": "人行道闸类设备",
+  "kind": "device",
+  "source": "中煤细则表12"
+ },
+ "KD": {
+  "cn": "车辆道闸类设备",
+  "kind": "device",
+  "source": "中煤细则表12"
+ }
+}

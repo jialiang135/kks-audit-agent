@@ -184,6 +184,14 @@ def check_registry(run, cfg, findings: list[Finding]) -> None:
     # 调用里的规则号才算"已实现"；组键（KKS-17/22）的成员通过组键产出，也算已实现。
     called = _expand_group_ids({rid for rid in defs
                                 if f'rule_id="{rid}"' in src_text or f"rule_id='{rid}'" in src_text})
+    # Tuple dispatch and conditional expressions also produce registered rules.
+    for node in ast.walk(ast.parse(src_text)):
+        if isinstance(node, ast.Call):
+            for keyword in node.keywords:
+                if keyword.arg == "rule_id":
+                    called.update(child.value for child in ast.walk(keyword.value)
+                                  if isinstance(child, ast.Constant) and isinstance(child.value, str)
+                                  and child.value in defs)
     # 流程口径 / 策略说明类规则本就不产出问题行，已在 config 登记
     no_finding = set(((cfg.get("process_only_rules") or {}).get("rules")) or {})
     no_finding |= set(((cfg.get("policy_only_rules") or {}).get("rules")) or {})
@@ -210,22 +218,14 @@ def check_config(run, cfg, index, findings: list[Finding]) -> None:
 
     # B1 全厂码取值表 ↔ 代码常量
     table = cfg.get("unit_code_table") or {}
-    units = set(table.get("units_1to9") or [])
-    common = (set(table.get("phase_common") or []) | set(table.get("multi_phase_common") or [])
-              | set(table.get("plant_common") or []))
-    free = set(table.get("free_use") or [])
-    if common != set(run.COMMON_UNITS):
-        err("unit_code_table.phase_common/multi_phase_common/plant_common",
-            "配置里的公用字母集合与 run_audit.COMMON_UNITS 不一致",
-            f"配置={sorted(common)}；代码={sorted(run.COMMON_UNITS)}")
-    if free != set(run.FREE_UNIT_LETTERS):
-        err("unit_code_table.free_use", "配置与 run_audit.FREE_UNIT_LETTERS 不一致",
-            f"配置={sorted(free)}；代码={sorted(run.FREE_UNIT_LETTERS)}")
-    mapping = table.get("unit_mapping") or {}
-    if {k: v for k, v in mapping.items() if k.isalpha()} != run.UNIT_LETTER_MAP:
-        err("unit_code_table.unit_mapping", "配置与 run_audit.UNIT_LETTER_MAP 不一致")
-    if not units <= set("123456789"):
-        err("unit_code_table.units_1to9", "1~9 号机组取值应只含数字 1~9", str(sorted(units)))
+    expected = {"single_units": [f"{n:02d}" for n in range(1,61)],
+                "pair_common": [f"{n:02d}" for n in range(61,91)],
+                "agreed_common": [f"{n:02d}" for n in range(91,100)], "plant_common": ["00"]}
+    for key, values in expected.items():
+        if table.get(key) != values:
+            err("unit_code_table." + key, "未对齐GB/T 50549-2020表4.3.1-2", str(table.get(key)))
+    if run.code_unit("07HAC10GP001") != 7 or run.code_unit("61HAC10GP001") is not None:
+        err("unit_parser", "机组解析不得将两机共用61读成6号机")
 
     # B2/B3 根父级与旧前缀
     if set(cfg.get("root_parent_values") or []) != set(run.ROOT_PARENTS):
@@ -364,11 +364,7 @@ def check_version_discipline(cfg, index, findings: list[Finding]) -> None:
                                     " ｜ ".join(bad_lines[:4])))
     # config 里允许出现旧版本（standard_basis 就是登记用途，current 项也常需要说明
     # "本版已废止 2010 版"），但把 standard_basis 整段摘掉之后，剩下任何地方都不该再提到它们。
-    raw = RULES_JSON.read_text(encoding="utf-8")
-    outside = raw
-    for block in (basis.get("current") or []) + (basis.get("excluded") or []):
-        for indent in (None, 2):
-            outside = outside.replace(json.dumps(block, ensure_ascii=False, indent=indent), "")
+    outside = json.dumps({key: value for key, value in cfg.items() if key != "standard_basis"}, ensure_ascii=False)
     leaked = [tok for tok in RETIRED_TOKENS if tok in outside]
     if leaked:
         err("config/kks_rules.json",

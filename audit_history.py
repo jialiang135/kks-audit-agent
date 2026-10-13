@@ -26,6 +26,7 @@ LOGGER = logging.getLogger("kks-audit.history")
 LEDGER_NAME = "audit_ledger.json"
 TREND_NAME = "audit_trend.json"
 HISTORY_NAME = "KKS审核台账汇总.html"
+TRASH_DIR_NAME = ".trash"
 
 # 产物索引：台账只记 run_id，报告与问题清单本身留在 runs/<run_id>/ 下，
 # 由保留策略按天清理；清理后把台账对应记录标记为已归档。
@@ -170,6 +171,158 @@ def _parse_run_start(run_id: str) -> datetime | None:
         return None
 
 
+def entry_key(entry: dict[str, Any]) -> str:
+    """台账记录的业务主键：内容哈希 + 时间 + 文件名。
+
+    不用数组下标做删除标识：台账会因"同文件重复上传去重"而重排（命中记录被移到末尾），
+    下标在用户点删除与应用请求之间就可能指向另一条记录。
+    """
+    return "|".join(str(entry.get(field, "")) for field in ("hash", "ts", "file"))
+
+
+def entry_keys(entry: dict[str, Any]) -> set[str]:
+    """一条记录可被识别的所有写法，用于兼容只有旧字段的前端。"""
+    keys = {entry_key(entry)}
+    digest, ts, name = (str(entry.get(f, "")) for f in ("hash", "ts", "file"))
+    if digest:
+        keys.add(f"{digest}|{ts}|")
+        keys.add(f"{digest}||")
+    return {key for key in keys if key.strip("|")}
+
+
+def load_trash_records(ledger_dir: Path) -> list[dict[str, Any]]:
+    """读取软删除留痕（runs/.trash/removed-*.json），用于汇总页展示与人工恢复。
+
+    台账是审计记录，删除必须留痕：每次删除写一个独立文件（含被删记录原文与上下文），
+    文件本身不随汇总页渲染而被清理，只有人工才应删除。
+    """
+    trash = ledger_dir / TRASH_DIR_NAME
+    if not trash.is_dir():
+        return []
+    records: list[dict[str, Any]] = []
+    for path in sorted(trash.glob("removed-*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(data, dict):
+            data["_file"] = path.name
+            records.append(data)
+    return records
+
+
+def _write_trash(ledger_dir: Path, payload: dict[str, Any]) -> Path:
+    trash = ledger_dir / TRASH_DIR_NAME
+    trash.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%dT%H%M%S_%f")
+    path = trash / f"removed-{stamp}.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    return path
+
+
+def _move_run_dir_to_trash(ledger_dir: Path, run_id: str) -> tuple[str, str]:
+    """把 runs/<run_id>/ 移进 .trash/（可恢复），而不是直接删。
+
+    只接受严格符合 run_id 格式、且解析后仍在 runs 根下的目录，避免变成任意目录删除。
+    返回 (移动后的路径, 失败原因)；返回值可能为 ("", 原因) 或 (路径, "")。
+    """
+    if not RUN_ID_RE.fullmatch(run_id):
+        return "", ""
+    root = ledger_dir.resolve()
+    source = (root / run_id).resolve()
+    if root not in source.parents or not source.is_dir():
+        return "", ""
+    trash = root / TRASH_DIR_NAME
+    trash.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    target = trash / f"{run_id}.{stamp}"
+    suffix = 1
+    while target.exists():
+        target = trash / f"{run_id}.{stamp}.{suffix}"
+        suffix += 1
+    try:
+        shutil.move(str(source), str(target))
+    except OSError as exc:
+        # Windows 上文件被占用（WinError 32）是常见情形：审核端刚读过的 xlsx 若句柄未释放，
+        # 或用户正开着该文件。此时**不能**让整次删除失败——台账记录照删，产物留原地并如实上报。
+        detail = getattr(exc, "strerror", None) or str(exc)
+        return "", f"{run_id}（{detail}）"
+    return str(target), ""
+
+
+def remove_ledger_entries(
+    ledger_dir: Path,
+    keys: set[str],
+    *,
+    remove_artifacts: bool = False,
+    operator: str = "",
+) -> dict[str, Any]:
+    """从台账移除指定记录（软删除：留痕 + 产物可恢复）。
+
+    安全约定：
+    - 台账是质量审核的审计记录，删除本身也要可追溯，因此被删记录原文写入
+      `.trash/removed-*.json`（含删除时间、操作者、命中的键），并返回给调用方；
+    - `remove_artifacts=False`（默认）只把记录从台账移除，`runs/<run_id>/` 的报告与
+      问题清单原地保留，仍可由直链或重新上传取回；
+    - `remove_artifacts=True` 时把整个产物目录**移动**到 `.trash/`，不物理删除；
+    - 返回 `trashed_paths` 与 `recovery` 说明，便于事后恢复。
+    """
+    path = ledger_dir / LEDGER_NAME
+    ledger = load_ledger(path)
+    wanted = {key for key in keys if str(key).strip()}
+    kept: list[dict[str, Any]] = []
+    removed: list[dict[str, Any]] = []
+    for entry in ledger:
+        if wanted & entry_keys(entry):
+            removed.append(entry)
+        else:
+            kept.append(entry)
+    if not removed:
+        return {"ok": False, "error": "没有匹配的台账记录（可能已被删除或台账已刷新）", "removed": [], "remaining": len(ledger), "trashed_paths": [], "trash_record": ""}
+
+    trashed: list[str] = []
+    artifact_failures: list[str] = []
+    if remove_artifacts:
+        for entry in removed:
+            moved, failure = _move_run_dir_to_trash(ledger_dir, str(entry.get("run_id", "")))
+            if moved:
+                trashed.append(moved)
+            if failure:
+                artifact_failures.append(failure)
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(kept, ensure_ascii=False, indent=1), encoding="utf-8")
+    record = _write_trash(ledger_dir, {
+        "removed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "operator": operator or "admin-token",
+        "remove_artifacts": bool(remove_artifacts),
+        "keys": sorted(wanted),
+        "entries": removed,
+        "trashed_paths": trashed,
+        "artifact_failures": artifact_failures,
+        "ledger_before": len(ledger),
+        "ledger_after": len(kept),
+    })
+    LOGGER.info(
+        "ledger_removed count=%s remove_artifacts=%s remaining=%s trash=%s artifact_failures=%s",
+        len(removed), bool(remove_artifacts), len(kept), record.name, len(artifact_failures),
+    )
+    recovery = f"被删记录原文保存在 {record}"
+    if trashed:
+        recovery += f"；产物已移入 {ledger_dir / TRASH_DIR_NAME}/，移回 runs/ 即可恢复"
+    if artifact_failures:
+        recovery += f"；有 {len(artifact_failures)} 个产物目录因被占用未能移动，仍在 runs/ 下"
+    return {
+        "ok": True,
+        "removed": removed,
+        "remaining": len(kept),
+        "trashed_paths": trashed,
+        "artifact_failures": artifact_failures,
+        "trash_record": str(record),
+        "recovery": recovery + "。",
+    }
+
+
 def backfill_run_ids(ledger_dir: Path) -> int:
     """给缺 run_id 的历史台账记录补上产物索引（按输入文件内容哈希精确匹配）。
 
@@ -280,10 +433,16 @@ def _dup_badge(entry: dict[str, Any]) -> str:
     return f' <span class="dup" title="重复审核 {repeats} 次，首次 {first}">×{repeats}</span>'
 
 
-def render_history_html(path: Path, ledger: list[dict[str, Any]], ai_trend: dict[str, Any] | None = None) -> None:
-    """渲染跨文件汇总报告：累计 KPI + 本次对比 + AI 趋势总结 + 逐文件明细。"""
+def render_history_html(
+    path: Path,
+    ledger: list[dict[str, Any]],
+    ai_trend: dict[str, Any] | None = None,
+    removed: list[dict[str, Any]] | None = None,
+) -> None:
+    """渲染跨文件汇总报告：累计 KPI + 本次对比 + AI 趋势总结 + 逐文件明细 + 删除留痕。"""
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not ledger:
+    removed = removed or []
+    if not ledger and not removed:
         path.write_text("<!DOCTYPE html><html lang=zh-CN><meta charset=utf-8><body>暂无审核记录</body></html>", encoding="utf-8")
         return
 
@@ -311,11 +470,13 @@ def render_history_html(path: Path, ledger: list[dict[str, Any]], ai_trend: dict
             f"<td>{'增量' if entry.get('incremental') else '全量'}</td></tr>"
         )
 
-    latest = ledger[-1]
+    latest = ledger[-1] if ledger else {}
     latest_rate = (int(latest.get("issues", 0) or 0) / int(latest.get("rows", 0) or 0) * 100) if int(latest.get("rows", 0) or 0) else 0
     others = ledger[:-1]
     cmp_html = "（首个文件，暂无历史可对比）"
-    if others:
+    if not ledger:
+        cmp_html = "（台账已无记录：全部记录已被移除，移除留痕见下方小节）"
+    elif others:
         o_rows = sum(int(e.get("rows", 0) or 0) for e in others)
         o_issues = sum(int(e.get("issues", 0) or 0) for e in others)
         o_rate = (o_issues / o_rows * 100) if o_rows else 0
@@ -341,6 +502,27 @@ def render_history_html(path: Path, ledger: list[dict[str, Any]], ai_trend: dict
             + "</div></div>"
         )
 
+    # 删除留痕：台账是审计记录，删了也要看得见"删过什么、什么时候、谁删的"
+    removed_html = ""
+    if removed:
+        items = ""
+        for record in removed[-20:]:
+            names = "、".join(_esc(str(e.get("file", ""))) for e in (record.get("entries") or []) if isinstance(e, dict))
+            items += (
+                f"<tr><td>{_esc(record.get('removed_at', ''))}</td><td>{names or '—'}</td>"
+                f"<td>{'含产物' if record.get('remove_artifacts') else '仅台账'}</td>"
+                f"<td>{_esc(record.get('operator', ''))}</td>"
+                f"<td class='num'>{int(record.get('ledger_before', 0) or 0)}→{int(record.get('ledger_after', 0) or 0)}</td></tr>"
+            )
+        removed_html = (
+            '<div class="sec"><h2>已移除的台账记录（留痕）</h2>'
+            f'<table class="hrow" style="width:100%;border-collapse:collapse">'
+            f'<tr><th>移除时间</th><th>文件</th><th>范围</th><th>操作者</th><th>记录数</th></tr>{items}</table>'
+            f'<div class="sub" style="margin-top:10px">共 {len(removed)} 条移除留痕，原文保存在 '
+            f'<code>runs/.trash/removed-*.json</code>（含被删记录完整字段与产物移动后的路径），可据此人工恢复。</div>'
+            '</div>'
+        )
+
     html = f"""<!DOCTYPE html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -348,7 +530,7 @@ def render_history_html(path: Path, ledger: list[dict[str, Any]], ai_trend: dict
 <style>{CSS}{_HIST_CSS}</style></head>
 <body><div class="wrap">
 <header><h1>KKS 审核台账汇总</h1><div class="meta">
-累计 {len(ledger)} 次审核 ｜ 更新于 {datetime.now().strftime('%Y-%m-%d %H:%M')}</div></header>
+累计 {len(ledger)} 次审核{f' ｜ 已移除 {len(removed)} 条（留痕）' if removed else ''} ｜ 更新于 {datetime.now().strftime('%Y-%m-%d %H:%M')}</div></header>
 
 <div class="kpis">
 <div class="kpi"><div class="n">{len(ledger)}</div><div class="l">累计审核文件</div></div>
@@ -369,10 +551,46 @@ def render_history_html(path: Path, ledger: list[dict[str, Any]], ai_trend: dict
 </table>
 <div class="sub" style="margin-top:10px">同一文件重复上传按内容哈希去重：仅保留最新结果并标注 ×N 次数，文件内容变化则记为一次新审核。单次明细见各次审核报告（HTML/Excel）；台账数据 audit_ledger.json 可回溯。</div>
 </div>
-
+{removed_html}
 <div class="foot">审计台账自动维护，每次审核后更新 ｜ {datetime.now().strftime('%Y-%m-%d')}</div>
 </div></body></html>"""
     path.write_text(html, encoding="utf-8")
+
+
+def ledger_fingerprint(ledger: list[dict[str, Any]]) -> str:
+    """台账内容指纹：只取影响趋势结论的稳定字段，顺序无关。
+
+    用途是判断"要不要再花一次模型调用"。指纹只由业务字段算出，`ts`/`repeats`/`run_id`
+    这类每次运行都会变的字段不参与，否则同一份台账永远算"变了"。
+    """
+    items: list[str] = []
+    for entry in ledger:
+        priority = entry.get("priority", {}) or {}
+        items.append("~".join(str(part) for part in (
+            entry.get("file", ""),
+            entry.get("rows", 0),
+            entry.get("issues", 0),
+            priority.get("P0", 0),
+            priority.get("P1", 0),
+            priority.get("P2", 0),
+            entry.get("ai_reviewed", 0),
+            bool(entry.get("incremental")),
+            str(entry.get("conclusion", ""))[:120],
+        )))
+    digest = hashlib.sha256("\n".join(sorted(items)).encode("utf-8")).hexdigest()
+    return digest[:16]
+
+
+def trend_enabled() -> bool:
+    """跨文件趋势总结开关（AI_TREND_SUMMARY_ENABLED，默认开）。
+
+    按时间优先要结果时，把它设为 0 可省掉一次串行模型调用；此时汇总页沿用上次成功
+    的趋势总结（缓存里有就照常展示），不会丢掉已有内容。
+    """
+    raw = (os.environ.get("AI_TREND_SUMMARY_ENABLED") or "").strip().lower()
+    if not raw:
+        return True
+    return raw in {"1", "true", "yes", "y", "on"}
 
 
 def record_and_render(
@@ -391,14 +609,25 @@ def record_and_render(
         ledger = load_ledger(ledger_dir / LEDGER_NAME)
     trend: dict[str, Any] = {}
     if len(ledger) >= 2:  # 仅 1 条记录时不存在"跨文件"趋势
-        try:
-            trend = summarize_ledger(ledger, progress_callback=progress_callback) or {}
-        except Exception as exc:  # 趋势失败不阻断台账
-            LOGGER.warning("ai_trend_failed_unexpected error=%s", exc)
-            trend = {}
-        if str(trend.get("overall", "")).strip():
-            save_trend(ledger_dir, trend)
+        cached = load_trend(ledger_dir)
+        fingerprint = ledger_fingerprint(ledger)
+        if not trend_enabled():
+            trend = cached
+            LOGGER.info("ai_trend_skipped reason=AI_TREND_SUMMARY_ENABLED=false cached=%s", bool(cached))
+        elif str(cached.get("fingerprint", "")) == fingerprint:
+            # 台账内容没变（例如同一文件重传、只刷新了时间戳），复用上次结论，不再调模型
+            trend = cached
+            LOGGER.info("ai_trend_reused fingerprint=%s", fingerprint)
         else:
-            trend = load_trend(ledger_dir)  # 本次未产出则沿用上次成功结果
-    render_history_html(summary, ledger, ai_trend=trend)
+            try:
+                trend = summarize_ledger(ledger, progress_callback=progress_callback) or {}
+            except Exception as exc:  # 趋势失败不阻断台账
+                LOGGER.warning("ai_trend_failed_unexpected error=%s", exc)
+                trend = {}
+            if str(trend.get("overall", "")).strip():
+                trend["fingerprint"] = fingerprint
+                save_trend(ledger_dir, trend)
+            else:
+                trend = cached  # 本次未产出则沿用上次成功结果
+    render_history_html(summary, ledger, ai_trend=trend, removed=load_trash_records(ledger_dir))
     return summary

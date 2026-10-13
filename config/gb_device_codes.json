@@ -1,0 +1,1334 @@
+{
+ "A": {
+  "cn": "两个或更多目的或任务",
+  "en": "Two or more purposes or tasksNote: this class is only for objects for which no main intended purpose or task can be identified",
+  "note": "此类仅适于无法识别其使用目的或任务的对象",
+  "starred": false
+ },
+ "B": {
+  "cn": "将输入变量(物理属性，条件或事件)转换为进一步处理的信号",
+  "en": "Converting an input variable (physical property, condition or event) into a signal for further processing",
+  "note": "—",
+  "starred": false
+ },
+ "C": {
+  "cn": "能源、信息或材料的存储",
+  "en": "Storing of energy, information or material",
+  "note": "—",
+  "starred": false
+ },
+ "D": {
+  "cn": "后续标准预留",
+  "en": "Reserved for future standardization",
+  "note": "—",
+  "starred": false
+ },
+ "E": {
+  "cn": "提供辐射能或热能",
+  "en": "Providing radiant or thermal energy",
+  "note": "—",
+  "starred": false
+ },
+ "F": {
+  "cn": "对于危险或在不希望出现的情况下通过能量流、信号、人员或设备进行直接保护(自动作),包括用于保护的系统和设备",
+  "en": "Direct protection (self-acting) of a flow of energy, signals, personnel or equipment from dangerous or unwanted conditions, including systems and equipment for protective purposes",
+  "note": "—",
+  "starred": false
+ },
+ "G": {
+  "cn": "触发能量或者物质流产生信号,作为信息载体或者参考信息源",
+  "en": "Initiating a flow of energy or material generating signals used as information carriers or reference source",
+  "note": "—",
+  "starred": false
+ },
+ "H": {
+  "cn": "生产一种新型材料或产品",
+  "en": "Producing a new kind of material or product",
+  "note": "—",
+  "starred": false
+ },
+ "I": {
+  "cn": "禁止使用",
+  "en": "Not to be applied",
+  "note": "—",
+  "starred": false
+ },
+ "J": {
+  "cn": "后续标准预留",
+  "en": "Reserved for future standardization",
+  "note": "—",
+  "starred": false
+ },
+ "K": {
+  "cn": "处理(接收、处理和提供)信号或信息(不包括用于保护的目的或应用,见F类)",
+  "en": "Processing (receiving, treating and providing) signals or information (excluding objects for protective purposes, see Class F)",
+  "note": "—",
+  "starred": false
+ },
+ "L": {
+  "cn": "后续标准预留",
+  "en": "Reserved for future standardization",
+  "note": "—",
+  "starred": false
+ },
+ "M": {
+  "cn": "提供驱动目的的机械能(旋转或线性机械运动)",
+  "en": "Providing mechanical energy (rotational or linear mechanical motion) for driving purposes",
+  "note": "—",
+  "starred": false
+ },
+ "N": {
+  "cn": "后续标准预留",
+  "en": "Reserved for future standardization",
+  "note": "—",
+  "starred": false
+ },
+ "O": {
+  "cn": "禁止使用",
+  "en": "Not to be applied",
+  "note": "—",
+  "starred": false
+ },
+ "P": {
+  "cn": "信息显示",
+  "en": "Presenting information",
+  "note": "—",
+  "starred": false
+ },
+ "Q": {
+  "cn": "控制或改变能量、信号或物质的流动(对于控制回路中的信号，参见 K 和 S类)",
+  "en": "Controlled switching or varying a flow of energy, of signals or of material (for signals in control circuits, see classes K and S)",
+  "note": "—",
+  "starred": false
+ },
+ "R": {
+  "cn": "对能源、信息或材料进行限制或稳定流向",
+  "en": "Restricting or stabilizing motion or a flow of energy, information or material",
+  "note": "—",
+  "starred": false
+ },
+ "S": {
+  "cn": "将手动操作转换为进一步处理的信号",
+  "en": "Converting a manual operation into a signal for further processing",
+  "note": "—",
+  "starred": false
+ },
+ "T": {
+  "cn": "保持能量的类型进行能量转换，保持信息内容进行信息转换，材料的外形或形状的转换",
+  "en": "Conversion of energy maintaining the kind of energy, conversion of an established signal maintaining the content of information, conversion of the form or shape of a material",
+  "note": "—",
+  "starred": false
+ },
+ "U": {
+  "cn": "保持对象处在预定位置",
+  "en": "Keeping objects in a defined position",
+  "note": "—",
+  "starred": false
+ },
+ "V": {
+  "cn": "材料或产品的处理(治理)(包括预处理和后处理)",
+  "en": "Processing (treating) of material or products (including preparatory and post-treatment)",
+  "note": "—",
+  "starred": false
+ },
+ "W": {
+  "cn": "引导或传输能量、信号、材料或产品从一地到另一地",
+  "en": "Guiding or transporting energy, signals, material or products from one place to another",
+  "note": "—",
+  "starred": false
+ },
+ "X": {
+  "cn": "连接物体",
+  "en": "Connecting objects",
+  "note": "—",
+  "starred": false
+ },
+ "Y": {
+  "cn": "后续标准预留",
+  "en": "Reserved for future standardization",
+  "note": "—",
+  "starred": false
+ },
+ "Z": {
+  "cn": "后续标准预留",
+  "en": "Reserved for future standardization",
+  "note": "—",
+  "starred": false
+ },
+ "AF": {
+  "cn": "过程中的人工干预，并显示过程值和状态",
+  "en": "Manual intervention in process and display process quantities and states",
+  "note": "触摸屏",
+  "starred": false
+ },
+ "AG": {
+  "cn": "转换、处理和储存信号和信息",
+  "en": "Convert, process and store signals and information",
+  "note": "可编程控制器、现场控制/保护装置",
+  "starred": false
+ },
+ "BA": {
+  "cn": "电位",
+  "en": "Electrical potential",
+  "note": "电压测量仪、电压传感器、电压继电器、电压监测仪",
+  "starred": false
+ },
+ "BC": {
+  "cn": "电流",
+  "en": "Electrical current",
+  "note": "电流传感器、电缆式电流互感器、电流测量分流器、分流电阻器、热过载继电器、变压器保护、分流器、中性点电流互感器、电流继电器、电流互感器、总和电流互感器、饱和电抗器",
+  "starred": false
+ },
+ "BD": {
+  "cn": "密度",
+  "en": "Density",
+  "note": "密度传感器、密度计、密度测量仪、密度测量装置",
+  "starred": false
+ },
+ "BE": {
+  "cn": "其他电气或电磁变量，如频率",
+  "en": "Other electrical or electromagnetic variable",
+  "note": "频率测量装置、低频继电器、换能器",
+  "starred": false
+ },
+ "BF": {
+  "cn": "流量",
+  "en": "Flow",
+  "note": "科里奥利流量传感器、科里奥利流量计、电磁流量传感器、超声波流量传感器、流量计、流量计(非电)、流量测量装置(非电)、流量传感器、流量监视器、电磁流量开关、磁感应流量传感器、机械流量控制器、体积流量传感器(电)、体积传感器(非电)、体积流量测量装置、带信号输出的圆柱形活塞流量计、转子流量计、变面积流量计、变面积流量测量装置、质量流量计",
+  "starred": false
+ },
+ "BG": {
+  "cn": "计量、位置、长度(包括距离、延伸率、振幅)",
+  "en": "Gauge, position, length (including distance, elongation, amplitude)",
+  "note": "距离传感器、风速仪、运动检测器、膨胀传感器、应变计、应变计传感器、膨胀测量装置、膨胀测量条、感应膨胀探头、瞬时接触位置开关、瞬时接触限位开关、长度传感器、长度测量装置、距离测量、振幅测量、延伸量的测量、长度测量、位置测量、接近开关、电感式接近开关、电容式接近开关、声纳接近开关、接近传感器、光学接近开关、远程位置传感器、位置传感器、位置开关、位置测量装置、位置监视器",
+  "starred": false
+ },
+ "BJ": {
+  "cn": "功率",
+  "en": "Power",
+  "note": "功率测量装置",
+  "starred": false
+ },
+ "BK": {
+  "cn": "时间",
+  "en": "Time",
+  "note": "时间测量装置、时间发生器",
+  "starred": false
+ },
+ "BL": {
+  "cn": "液位(料位)",
+  "en": "Level",
+  "note": "液位开关、液位监视器、雷达(FMCW)液位计、雷达探测器(液位测量)、浮动开关、液位测量装置、超声波液位计、超声波液位开关、振动式液位开关",
+  "starred": false
+ },
+ "BM": {
+  "cn": "水分、湿度",
+  "en": "Moisture, humidity",
+  "note": "湿度变送器、水分指示器、湿度计、湿度测量装置、湿度传感器、湿度监测器、水分仪、恒湿器、湿度调节器",
+  "starred": false
+ },
+ "BP": {
+  "cn": "压力、真空",
+  "en": "Pressure, vacuum",
+  "note": "差压传感器、差压测量装置、压力传感器、压力变送器、压力测量箱、压力测量装置、压力开关、压力控制装置、接触式压力计、晶体压力传感器、真空测量、压电换能器、风压继电器、带信号输出的气压计",
+  "starred": false
+ },
+ "BQ": {
+  "cn": "质量(成分、浓度、纯度、材料属性)",
+  "en": "Quality (composition, concentration, purity, material property)",
+  "note": "分析测量、分析传感器、分析装置、氯传感器、气体分析仪、气体分析装置、气体检测器、电导率传感器、电导率计、电导率探针、分析值测量、质量变量的测量、酸度测量、物理特性测量、黏度测量、pH 测量、pH 电极、pH 传感器、质量变量传感器、质量变量测量、烟气测量装置、氧化还原电极、氧分析仪、酸度测量、物理性能检测、浊度仪、杂质测量、黏度传感器、黏度测量",
+  "starred": false
+ },
+ "BR": {
+  "cn": "辐射",
+  "en": "Radiation",
+  "note": "放射量测定器、放射剂量测量鉴定器、火灾探测器、光电元件、光敏电阻、光电管、危险传感器(火灾等)、盖革计数器、感烟探测器、电离室、辐射变量的测量、中子通量检测器、中子通量测量、个人剂量仪、光电管、烟雾探测器、光谱仪、辐射探测器、辐射传感器、辐射测量仪器、计数管(核辐射计数器)",
+  "starred": false
+ },
+ "BS": {
+  "cn": "速度、频率(用于机械)(包括加速度)",
+  "en": "Speed, frequency (including acceleration)",
+  "note": "风速仪、自同步发送器、测速发电机、速度测量装置(非电气)、速度测量、超速停车装置、功率计、磁阻电位器、离心开关、频率计、速度传感器、霍尔效应发生器、霍尔效应探头、用于速度测量的增量变送器、频率测量、振动测量、压电式速度传感器、压电加速度计、普朗特管、振动速度传感器、振动传感器、振动探测器、振动测量、速度测量频闪仪、转速计",
+  "starred": false
+ },
+ "BT": {
+  "cn": "温度",
+  "en": "Temperature",
+  "note": "NTC 热敏电阻、红外线温度计、PTC 热敏电阻、接触式温度计、温度测量、高温计、辐射温度计、温度感应器、温度测量、温度监视器、热敏电阻、热电传感器、热电偶 TC、热传感器、恒温器、电阻温度计 RT、表盘式温度计",
+  "starred": false
+ },
+ "BU": {
+  "cn": "多变量",
+  "en": "Multi-variable",
+  "note": "瓦斯/气体继电器、多变量测量",
+  "starred": false
+ },
+ "BW": {
+  "cn": "重量、力",
+  "en": "Weight, force",
+  "note": "扭矩传感器、重力测量、重力测量装置、称重传感器、作用力的测量、质量测量、天秤",
+  "starred": false
+ },
+ "BX": {
+  "cn": "其他的量",
+  "en": "Other quantities",
+  "note": "条形码读取器、文档阅读器、电视摄像机、麦克风、拾音盒、音频传输、摄像机",
+  "starred": false
+ },
+ "BZ": {
+  "cn": "事件数、计数、组合任务",
+  "en": "Number of events, counts, combined tasks",
+  "note": "事件数测量、组合式仪表互感器(电压和电流)、测量事件数",
+  "starred": false
+ },
+ "CA": {
+  "cn": "电能的容性存储",
+  "en": "Capacitive storage of electric energy",
+  "note": "校正电容器(电气)、电容器、耦合电容器",
+  "starred": false
+ },
+ "CB": {
+  "cn": "电能的感应储存",
+  "en": "Inductive storage of electric energy",
+  "note": "电感储能、超导体、线圈",
+  "starred": false
+ },
+ "CC": {
+  "cn": "电能的化学储存",
+  "en": "Chemical storage of electric energy",
+  "note": "蓄电池、锂离子充电电池、缓冲电池、二次电池",
+  "starred": false
+ },
+ "CF": {
+  "cn": "信息的存储",
+  "en": "Storage of information",
+  "note": "模拟值存储、光盘、可擦写可编程只读存储器(EPROM)、事件存储器、硬盘、核心内存、磁带机、磁带存储器、磁盘存储器、随机存取存储器(RAM)、寄存器、内存(电)、内存设备(电)、磁鼓存储器(电)",
+  "starred": false
+ },
+ "CL": {
+  "cn": "在固定地点的原材料开放式存储(收集、容纳)",
+  "en": "Open storage of material at fixed location (collection, housing)",
+  "note": "灰仓、水池、混凝土容器(坑、箱)、燃料组件池、仓、坑、煤仓、存储池、开口容器、冲洗盆、桶、盆、蓄水池(水库)",
+  "starred": false
+ },
+ "CM": {
+  "cn": "在固定地点的原材料封闭式存储(收集、容纳)",
+  "en": "Closed storage of material at fixed location (collection, housing)",
+  "note": "校准容器、灰箱、筒仓、缓冲罐(在测量回路中)、压力容器、增压器、蓄能器、闪蒸罐、储气罐、主冷凝器、石灰筒仓、热水器、锅炉汽包、热井(主冷凝器)、储存罐、缓冲器、反应容器、筒仓、罐/箱、圆桶",
+  "starred": false
+ },
+ "CN": {
+  "cn": "材料的可移动存储(收集、容纳)",
+  "en": "Moveable storage of material (collection, housing)",
+  "note": "燃料组件输送罐、集装箱、桶、气瓶、运输容器",
+  "starred": false
+ },
+ "CP": {
+  "cn": "热能存储",
+  "en": "Storage of thermal energy",
+  "note": "空气压送罐、蒸汽蓄能器、蒸汽存储、热水蓄能器",
+  "starred": false
+ },
+ "CQ": {
+  "cn": "机械能存储",
+  "en": "Storage of mechanical energy",
+  "note": "飞轮、橡皮筋",
+  "starred": false
+ },
+ "CZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "EA": {
+  "cn": "使用电能产生用于照明目的的电磁辐射",
+  "en": "Generation of electromagnetic radiation for lighting purposes using electrical energy",
+  "note": "气体放电管、白炽灯、荧光灯、紫外线发射器、照明设备(电)",
+  "starred": false
+ },
+ "EB": {
+  "cn": "通过电能转换产生热量",
+  "en": "Generation of heat by conversion of electrical energy",
+  "note": "电伴热加热器、直通加热器(电气)、内置加热器(电)、电锅炉、电动蒸汽发生器、电加热器、电炉、加热套(电)、电热丝、加热设备(电)、加热元件(电气)、电热毯、加热筒(电气)、加热棒(电)、加热(电)、电加热器线圈、红外加热器、电暖器",
+  "starred": false
+ },
+ "EC": {
+  "cn": "通过电能转换产生冷却能量",
+  "en": "Generation of cooling energy by conversion of electrical energy",
+  "note": "冰箱(电)、冷冻设备、制冷压缩机(电)、冰箱压缩机、冷却设备(电)、空调主机(电)",
+  "starred": false
+ },
+ "EE": {
+  "cn": "通过电能产生其他电磁辐射",
+  "en": "Generation of other electromagnetic radiation by means of electrical energy",
+  "note": "激光、微波激射器、X射线装置",
+  "starred": false
+ },
+ "EF": {
+  "cn": "产生用于信号目的的电磁辐射",
+  "en": "Generation of electromagnetic radiation for signalling purposes",
+  "note": "电子管",
+  "starred": false
+ },
+ "EL": {
+  "cn": "通过化石燃料的燃烧产生用于照明目的的电磁辐射",
+  "en": "Generation of electromagnetic radiation for lighting purposes by combustion of fossil fuels",
+  "note": "煤气灯、气体灯",
+  "starred": false
+ },
+ "EM": {
+  "cn": "通过化学能转化产生热量",
+  "en": "Generation of heat by conversion of chemical energy",
+  "note": "燃烧装置、燃烧器、蒸汽锅炉(烟气侧)、燃气燃烧器、天然气点火燃烧器、油燃烧器、调节油燃烧器(含备用燃烧器)、炉篦燃烧室、备用燃烧器、滚筒式干燥炉、点火燃烧器",
+  "starred": false
+ },
+ "EN": {
+  "cn": "通过化学能转化产生冷却能",
+  "en": "Generation of cooling energy by conversion of chemical energy",
+  "note": "吸收器(用于冷却)、吸收式制冷机",
+  "starred": false
+ },
+ "EP": {
+  "cn": "通过对流产生热量",
+  "en": "Generation of heat by convection",
+  "note": "热水锅炉(非电)、蒸汽发生器、双管换热器、回转空气加热器、气体预热器、气体换热器、加热元件(非电)、表面式换热器、散热器、散热器(为设备部件)、对流散热器、暖风器、直接接触式换热器、表面热交换器、板式热交换器、燃烧空气预热器、蒸发器(热交换器)、省煤器、预热器、热交换器、再热器",
+  "starred": false
+ },
+ "EQ": {
+  "cn": "通过对流产生冷却能量",
+  "en": "Generation of cooling energy by convection",
+  "note": "氨水冷却器、蒸汽冷却器、蒸汽冷凝器、蒸汽喷射冰箱、注射冷却器、减温器、蒸汽压缩式冰箱、冷冻机(通过对流)、复叠制冷机组、冷凝器(热交换器)、冷却器(通过对流)、冰箱(通过对流)、空调末端(表冷)",
+  "starred": false
+ },
+ "ES": {
+  "cn": "通过机械能转换产生冷却能量",
+  "en": "Generation of cooling energy by conversion of mechanical energy",
+  "note": "—",
+  "starred": false
+ },
+ "ET": {
+  "cn": "通过核裂变产生热量",
+  "en": "Generation of heat by nuclear fission",
+  "note": "燃料组件、燃料元件、燃料棒",
+  "starred": false
+ },
+ "EU": {
+  "cn": "产生粒子辐射",
+  "en": "Generation of particle radiation",
+  "note": "中子发生器",
+  "starred": false
+ },
+ "EZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "FA": {
+  "cn": "过电压保护",
+  "en": "Protection against overvoltage",
+  "note": "避雷器、放电电阻、过电压保护器、防过压信号保护、过压保护、电涌放电器、防过压保护装置、电涌保护器、防雷保护单元、避雷针、浪涌限制器、抑制器电路、过压保护二极管、过压保险丝、过电压阻断装置",
+  "starred": false
+ },
+ "FB": {
+  "cn": "残余电流保护",
+  "en": "Protection against residual current",
+  "note": "残余电流保护装置 RCD、残余电流动作断路器(RCCB)",
+  "starred": false
+ },
+ "FC": {
+  "cn": "过流保护",
+  "en": "Protection against overcurrent",
+  "note": "电磁脱扣器、双金属跳闸元件、微型熔断器、通信断路器、高压高分断路器、低压高分断路器、保险丝、螺旋式熔断器、微型断路器 MCB、自动断路器、信号保险丝、电压互感器熔断器、热磁式微型断路器、热过载脱扣器、热延时过流脱扣器、热熔断路器、过电流保护装置",
+  "starred": false
+ },
+ "FE": {
+  "cn": "其他电气危险保护",
+  "en": "Protection against other electrical hazards",
+  "note": "—",
+  "starred": false
+ },
+ "FL": {
+  "cn": "危险压力条件下的保护",
+  "en": "Protection against hazardous pressure condition",
+  "note": "破裂型安全设备、爆破片、防爆膜、爆破保护装置、气瓶阀、高压旁路阀、安全配件、安全风门、安全阀、蒸汽安全阀、超压安全阀、真空破坏阀、压力调节器、安全阀(溢流阀)",
+  "starred": false
+ },
+ "FM": {
+  "cn": "防火保护",
+  "en": "Protection against effects of fire",
+  "note": "消防屏障、防火隔板、消防设施(风险检测和保护措施触发)、防火阀、防火门、挡火门、水闸(防火)",
+  "starred": false
+ },
+ "FN": {
+  "cn": "对于危险工况或损坏的保护",
+  "en": "Protection against hazardous operating condition or damage",
+  "note": "测温套管(仅作为测量设备保护)、热电偶保护套、热电偶套管(仅适用于传感器保护)、保护罩、保护装置、安全离合器",
+  "starred": false
+ },
+ "FP": {
+  "cn": "对于危险放射(例如辐射、化学释放、噪声)的保护",
+  "en": "Protection against hazardous emission (e.g. radiation, chemical emissions, noise)",
+  "note": "消音器、隔音罩、隔音墙、隔音屏障",
+  "starred": false
+ },
+ "FQ": {
+  "cn": "对于危险或在不希望出现的情况下人员和动物的保护(例如安全措施)",
+  "en": "Protection against hazards or unwanted situations for persons or animals (e.g. safeguarding)",
+  "note": "安全栅、安全气囊、吸盘、接触保护、栏杆、井盖、栅栏(对人的保护)、屏风、围栏(安全)",
+  "starred": false
+ },
+ "FR": {
+  "cn": "磨损保护(例如腐蚀)",
+  "en": "Protection against wear (e.g. corrosion)",
+  "note": "阴极保护",
+  "starred": false
+ },
+ "FS": {
+  "cn": "环境影响保护(例如天气,地球物理的影响)",
+  "en": "Protection against environmental effects (e. g. weather, geophysical effects)",
+  "note": "地球物理学的保护、雪崩保护、天气保护",
+  "starred": false
+ },
+ "FZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "GA": {
+  "cn": "通过机械能触发电能",
+  "en": "Initiation of an electrical energy flow by use of mechanical energy",
+  "note": "电动发电机、发电机组",
+  "starred": false
+ },
+ "GB": {
+  "cn": "通过化学能转化触发电能",
+  "en": "Initiation of an electrical energy flow by chemical conversion",
+  "note": "电池、燃料电池、锂电池、一次性电池、原电池、干电池组、干电池",
+  "starred": false
+ },
+ "GC": {
+  "cn": "通过光能转化触发电能",
+  "en": "Initiation of an electrical energy flow using light",
+  "note": "太阳能电池",
+  "starred": false
+ },
+ "GF": {
+  "cn": "作为信息载体而产生的信号",
+  "en": "Generation of signals as an information carrier",
+  "note": "频率发生器、脉冲发生器、振荡器、石英振荡器、方波发生器、发射器、信号机、信号发生器、正弦波发生器、时钟脉冲发射器、时钟脉冲发生器",
+  "starred": false
+ },
+ "GL": {
+  "cn": "触发固体物质的连续流动",
+  "en": "Initiation of a continuous flow of solid matter",
+  "note": "皮带输送机、斗式输送机、斗式提升机、灌注机、比例混合器、加药器、斗链输送机、输送带、输送机、围裙式输送机、织带式输送机、带式输送机、链式输送机、刮板链输送机、刮板输送机、循环式输送机、板式输送机(分配器)、板式输送机、伯利休斯螺杆(分配器)、滚筒式输送机、振动筛、叶轮给料机、摆动式输送机、振动输送机、通过式输送机、分配器",
+  "starred": false
+ },
+ "GM": {
+  "cn": "触发固体物质的非连续流动",
+  "en": "Initiation of a discontinuous flow of solid matter",
+  "note": "电梯、燃料组件存储抓斗、门式起重机、回转机构、电动葫芦、远程操纵器、滑轮组(永久安装)、抓取或起重装置、升降平台、卷扬机、起重装置、起升装置、升降装置、吊起装置、翻转设备、助力机械手、起重机、起重机桥架、起吊葫芦、手推车、机械手、龙门吊、绳绞车、卸料设备(起重机、机械臂)、绞盘",
+  "starred": false
+ },
+ "GN": {
+  "cn": "后续标准预留",
+  "en": "Reserved for future standardization",
+  "note": "—",
+  "starred": false
+ },
+ "GP": {
+  "cn": "通过能量供应驱动触发液体或可流动物质的流动",
+  "en": "Initiation of a flow of liquid or flowable substances driven by an energy supply",
+  "note": "提升泵、清洗泵、计量泵、比例泵、给料螺杆泵、旋转活塞泵、旋转阀泵、电磁泵、叶片泵、液环泵、循环泵、容积式泵、活塞泵、柱塞泵、往复泵、离心泵、空气发动机、空气涡轮、隔膜泵、泵、软管泵、螺旋输送机、偏心轮螺杆泵、螺杆泵、潜水泵、喷射泵、齿轮泵",
+  "starred": false
+ },
+ "GQ": {
+  "cn": "通过机械动力触发气体物质流动",
+  "en": "Initiation of a flow of gaseous substances by a mechanical driver",
+  "note": "排气口、空气压缩机、轴流风机、轴流式压缩机、换气扇、蒸汽鼓风机、蒸汽吹灰器、蒸汽清洗机、蒸汽喷射器、旋转式鼓风机、旋转式压缩机、旋叶式压缩机、排烟装置、旋叶式压缩机、翼室压缩机、液环压缩机、风扇、鼓风机装置、容积式鼓风机、往复式压缩机、压缩机、离心风机、离心压缩机、气泵、隔膜压缩机、径向风扇、径向式压力机、罗茨鼓风机、旋转式压缩机、吹灰器、排烟风机、螺杆压缩机、空气泵、容积式风机(或鼓风机)",
+  "starred": false
+ },
+ "GR": {
+  "cn": "后续标准预留",
+  "en": "Reserved for future standardization",
+  "note": "—",
+  "starred": false
+ },
+ "GS": {
+  "cn": "通过驱动介质触发液体或气体的流动",
+  "en": "Initiation of a flow of liquid or gaseous substances by driving medium",
+  "note": "抽油烟机(空气喷射器的一部分)、喷射器、注射器",
+  "starred": false
+ },
+ "GT": {
+  "cn": "通过重力触发液体或气体流动",
+  "en": "Initiation of a flow of liquid or gaseous substances by gravity",
+  "note": "注油器",
+  "starred": false
+ },
+ "GU": {
+  "cn": "通过交通工具的移动触发流动",
+  "en": "Initiation of a flow by mobile means of transportation",
+  "note": "运输装置、叉车、货车、卡车、移动式起重机、加油车、油罐车、低平板挂车",
+  "starred": false
+ },
+ "GZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "HL": {
+  "cn": "通过组装生产新产品",
+  "en": "Generation of a new product by assembling",
+  "note": "压制机",
+  "starred": false
+ },
+ "HM": {
+  "cn": "通过离心力分离物质的混合物修订:这个过程涉及字母代码\"HN\"(机械过程)",
+  "en": "Separation of mixtures of substances by centrifugal force Amendment: this process is related to letter code \"HN\" (mechanical processes)",
+  "note": "旋风分离器、离心机、洗涤器(通过离心力分离物质)、水力旋流器、卧螺离心机",
+  "starred": false
+ },
+ "HN": {
+  "cn": "通过重力来分离多种物质的混合物",
+  "en": "Separation of mixtures of substances by gravity",
+  "note": "重力分离器、分离格栅、排污、沉淀池、刮板(分级)、洗罐、滤料过滤器、防蒸汽过滤器、淀析容器、带通滤波器、汽油滤清器(物理分离)、除湿、脱气器、气提器、气提塔、除尘、排水、抓耙、清洁设备、澄清池、絮凝池、湿式除尘器、油气分离器(通过重力分离)、震动设备、砂子分类器、振动筛、沉降池、过滤器、筛分机、旋转增稠器(通过重力分离物质)、振动器(用于分离)、洗涤器(通过重力分离物质)、洗涤塔、空气分级器(物理分离器)、卷料过滤器",
+  "starred": false
+ },
+ "HP": {
+  "cn": "通过热过程分离多种物质的混合物(例如：汽化、蒸馏、吸收、萃取)",
+  "en": "Separation of mixtures of substances by thermal processes (e. g. vaporization, destillation, absorption, extraction)",
+  "note": "分离介质的薄膜蒸发器、浓缩蒸发器、转轮/吸附式除湿机(转轮、吸附)、提取器机单元、提取器容器、离子交换器、阳离子型过滤器、阳离子交换器、吹扫罐、闪蒸罐、锅炉、闪蒸盒、冷凝分离器(通过热工艺)、蒸汽疏水阀、蒙特空气干燥器、压盖空气冷凝器、蒸发,蒸发器(与分离相关)、洗涤器(通过热过程进行物质分离)",
+  "starred": false
+ },
+ "HQ": {
+  "cn": "通过过滤或分类分离物质的混合物",
+  "en": "Separation of mixtures of substances by filtering or classification",
+  "note": "过滤器(非电气)、过滤容器、过滤设备、过滤元件、压滤机(压滤)、过滤器、液体过滤器、气体过滤器、气体洗涤器、热气过滤器、滤芯、旋转过滤器、单室过滤器、分级/分类/振打装置(分离)、刮刀(通过分类分离不同物质的混合物)、空气过滤器、油分离器(通过过滤分离)、冲击分离器(通过过滤分离)、篦(分类)、洗涤器(通过过滤分离物质)",
+  "starred": false
+ },
+ "HR": {
+  "cn": "用静电或磁力分离物质的混合物",
+  "en": "Separation of mixtures of substances by electrostatic or magnetic forces",
+  "note": "静电除尘器、电磁分离器、电磁过滤器、静电过滤器、磁选机、悬浮电磁铁",
+  "starred": false
+ },
+ "HS": {
+  "cn": "通过物理过程来分离不同物质的混合物",
+  "en": "Separation of mixtures of substances by physical processes",
+  "note": "油分离器(通过物理过程分离)、冲击分离器(物理过程)、洗涤器(通过物理过程分离物质)",
+  "starred": false
+ },
+ "HT": {
+  "cn": "生成新的气态物质",
+  "en": "Generation of new gaseous substances",
+  "note": "气化器",
+  "starred": false
+ },
+ "HU": {
+  "cn": "通过破碎生成新形式的固体材料",
+  "en": "Generation of new form of solid material by crushing",
+  "note": "破碎机、制粒机(体积缩小)、锤式破碎机、煤磨、球磨机、磨机、摆锤磨机、冲击式粉碎机、管磨机、打浆机磨、搅拌轮磨、鼓磨、辊式破碎机、轧机、切割机、破碎设备(只是过程中的一部分)",
+  "starred": false
+ },
+ "HV": {
+  "cn": "通过粗化生成新形式的固体材料",
+  "en": "Generation of new form of solid material by coarsening",
+  "note": "压块机、固体废料打包机、模式成型机、造粒设备(用于处理)、打包机(包装)、烧结设备、压实机",
+  "starred": false
+ },
+ "HW": {
+  "cn": "通过混合生成新物质",
+  "en": "Generation of new substances by mixing",
+  "note": "蒸汽加湿装置、乳化剂、捏合机、搅拌装置、叶轮、加湿器(机械)、混合机、混合装置、搅拌锅、旋转式混合器",
+  "starred": false
+ },
+ "HX": {
+  "cn": "通过化学反应产生新物质",
+  "en": "Generation of new substances by chemical reaction",
+  "note": "反应炉、反应堆、氯气发生装置",
+  "starred": false
+ },
+ "HY": {
+  "cn": "通过生物反应产生新物质",
+  "en": "Generation of new substances by biological reaction",
+  "note": "发酵罐、堆肥容器",
+  "starred": false
+ },
+ "HZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "KF": {
+  "cn": "电气和电子信号的处理",
+  "en": "Processing of electrical and electronic signals",
+  "note": "机、测试适配器、测试设备(电气)、测试装置、计算设备、电脑、舌簧继电器、电气控制器、继电器、继电器模块、定序器、信号模块、电压控制器、位置控制器、报警信号设备、同步装置、技术服务器、温度控制器、终端服务器、瘦客户端、晶体管、逆变器模块、比较器、逻辑元素、延迟装置、时间延迟继电器、计时继电器、转换继电器、工作站、时间继电器、定时器、中央处理机单元CPU",
+  "starred": false
+ },
+ "KG": {
+  "cn": "光声信号处理",
+  "en": "Processing of optical and acoustical signals",
+  "note": "测试设备(非电气)、测试装置、镜子",
+  "starred": false
+ },
+ "KH": {
+  "cn": "流体和气动信号处理",
+  "en": "Processing of fluid and pneumatic signals",
+  "note": "压力调节器(非电气)、流量调节器(非电气)、电动气动定位器、阀块(非电气)、阀门组件(阀块)、调速器(非电气)、先导阀(非电气)、先导阀(流体)",
+  "starred": false
+ },
+ "KJ": {
+  "cn": "机械信号处理",
+  "en": "Processing of mechanical signals",
+  "note": "飞球式调速器、传感器(非电气)、检查装置(机械)",
+  "starred": false
+ },
+ "KK": {
+  "cn": "各种输入/输出信息载体(如电动/气动)的处理",
+  "en": "Processing of various input/output information carriers (e.g. electrical/pneumatic)",
+  "note": "先导阀(电气)、电动导阀、电液转换器、电液换能器(转换器)、电动气动定位器、电动气动控制器",
+  "starred": false
+ },
+ "KZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "MA": {
+  "cn": "电磁力驱动",
+  "en": "Driving by electromagnetic force",
+  "note": "起动电动机(电)、驱动电动机、异步电动机、制动电动机、交流电动机、电动机、电动伺服驱动器、电动马达、直流电动机、高压异步电动机、高压同步电动机、线性电动机、无级变速传动、执行器、同步电机、通用电机(电)",
+  "starred": false
+ },
+ "MB": {
+  "cn": "磁力驱动",
+  "en": "Driving by magnetic force",
+  "note": "电磁线圈(螺线管)、调节驱动(磁力)、起重磁盘、磁力起重机、磁力离合单元、磁力执行器、磁力促动器",
+  "starred": false
+ },
+ "ML": {
+  "cn": "机械力驱动",
+  "en": "Driving by mechanical force",
+  "note": "弹力驱动、重力驱动、皮带传动、执行器(机械)",
+  "starred": false
+ },
+ "MM": {
+  "cn": "液压或气压驱动",
+  "en": "Driving by hydraulic or pneumatic force",
+  "note": "电液驱动、液压驱动、液压马达、液压缸、气动执行器、伺服电机",
+  "starred": false
+ },
+ "MN": {
+  "cn": "蒸汽流动力驱动",
+  "en": "Driving by steam flow force",
+  "note": "蒸汽机、汽轮机",
+  "starred": false
+ },
+ "MP": {
+  "cn": "气流驱动",
+  "en": "Driving by gas flow force",
+  "note": "压缩空气发动机、燃气轮机",
+  "starred": false
+ },
+ "MQ": {
+  "cn": "风力驱动",
+  "en": "Driving by wind force",
+  "note": "风力发电机",
+  "starred": false
+ },
+ "MR": {
+  "cn": "流体驱动",
+  "en": "Driving by fluid flow force",
+  "note": "水轮机",
+  "starred": false
+ },
+ "MS": {
+  "cn": "通过化学方法转化的能量驱动",
+  "en": "Driving by force using chemical conversion means",
+  "note": "起动发电机(非电气)、燃气发动机、汽油发动机、柴油发动机、复合燃料发动机、燃烧电机",
+  "starred": false
+ },
+ "MZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "PF": {
+  "cn": "离散状态的可视化显示",
+  "en": "Visible presentation of discrete states",
+  "note": "二进制状态指示器、球形帽、标准指示装置、信号设备(电气)、信号设备(非电气)、信号灯、光信号装置、标识指示器、信号装置(光学)、位置指示器、顺序指示器",
+  "starred": false
+ },
+ "PG": {
+  "cn": "离散变量值的可视化显示",
+  "en": "Visible presentation of values of discrete variables",
+  "note": "(机械显示)、容积式流量计、体积流量计数器、带机械显示的旋转活塞式流量计、操作计数器、循环切换计数器、观察孔(水平)、检查窗(流量)、电压表、扩大量程的电压表、电能表、同步指示器、温度计、时钟(电动)、时钟(机械)、流量计数器、功率表、电度表、计数器(电气)、时间测量装置(非电气)",
+  "starred": false
+ },
+ "PH": {
+  "cn": "以图形、绘画或文本形式的信息可视化显示",
+  "en": "Visible presentation of information in drawing, pictorial or textual form",
+  "note": "指示管、控制台打字机、显像管、视频屏幕、显示屏幕、数据显示器、打印机、事件记录器、大屏幕、连续记录仪、监视器、示波器、绘图仪、虚线记录仪、录音机、电压记录仪、故障记录器、故障值记录仪",
+  "starred": false
+ },
+ "PJ": {
+  "cn": "声音信息显示",
+  "en": "Audible presentation of information",
+  "note": "声信号装置、声信号单元(机械)、喇叭、铃、扬声器、信号装置、声音信号设备(电气)、信号装置、声音信号设备(机械)、警报器、蜂鸣器",
+  "starred": false
+ },
+ "PK": {
+  "cn": "触觉信息显示",
+  "en": "Tactile presentation of information",
+  "note": "触觉信号装置",
+  "starred": false
+ },
+ "PZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "QA": {
+  "cn": "电能电路的转换和变化",
+  "en": "Switching and variation of electrical energy circuits",
+  "note": "电磁阀、磁场断路器、励磁开关、高压断路器、短路设备、断路器、电源接触器、电源控制器单元、功率晶体管、电机启动器、电机保护开关、手车开关、集电环短路开关、高速接触器、接触器、星三角起动器、变压器的多触点开关、晶闸管控制器、变压器有载分接开关、三端双向可控硅、旁路接触器、连接器",
+  "starred": false
+ },
+ "QB": {
+  "cn": "电能电路隔离",
+  "en": "Isolation of electrical energy circuits",
+  "note": "高压负荷开关、高压隔离开关、负荷开关、负荷隔离开关、换极开关、熔断式负荷开关、熔断式隔离开关、中性点隔离开关、隔离开关",
+  "starred": false
+ },
+ "QC": {
+  "cn": "电能电路接地",
+  "en": "Earthing of electrical energy circuits",
+  "note": "接地开关、接地隔离开关、中性点接地开关",
+  "starred": false
+ },
+ "QL": {
+  "cn": "制动器",
+  "en": "Braking",
+  "note": "外部闸瓦制动器、闸瓦制动器、带式制动器、制动器、制动设备、内部闸瓦制动器、多盘制动器、推动制动器、减震器、鼓式制动器、全盘式制动器",
+  "starred": false
+ },
+ "QM": {
+  "cn": "封闭外壳中可流动物质的流动转换",
+  "en": "Switching of flow of flowable substances in closed enclosures",
+  "note": "切断阀、截止阀、蝶阀、隔离阀组件、隔离闸阀、出口阀(龙头)、通风阀(也包括自动定向)、排水阀、排气阀(自动直接加载)、屏障设备、消火栓、百叶窗挡板(在锁定)、百叶窗挡板(在流体密封方面)、浮球阀、多通球阀、多通挡板、多通闸阀、多通阀、隔膜隔离闸板阀、隔膜隔离阀、阀块(非电气)、测量管线隔离阀、测量电路隔离阀、闸板阀、夹管阀",
+  "starred": false
+ },
+ "QN": {
+  "cn": "封闭外壳中可流动物质的流量变化",
+  "en": "Varying of flow of flowable substances in closed enclosures",
+  "note": "器(过滤)、冷凝分离器(物理过程)、控制阀、控制球阀、控制蝶阀、控制闸阀、过流阀",
+  "starred": false
+ },
+ "QP": {
+  "cn": "在开放式外壳中液体物质的流量切换或改变",
+  "en": "Switching or varying of flow of liquid substances in open enclosures",
+  "note": "坝板(在开放的范围限制流量)、坝板(防洪)、滑动门、水闸、闸门、带铰链的门、沉没的门、堰",
+  "starred": false
+ },
+ "QQ": {
+  "cn": "提供对区域的通道",
+  "en": "Providing access to an area",
+  "note": "枢纽、旋转门、回转门、折叠门、窗口(开/关)、电梯门、卷闸门、气闸、屏障(例如:对人)、门(打开/关闭)",
+  "starred": false
+ },
+ "QR": {
+  "cn": "关闭流动性物质流动(不通过阀门)",
+  "en": "Shut-off of flow of flowable substances (no valves)",
+  "note": "遮盖物、罩子、锁(导通/截止的液体和可流动物质流)",
+  "starred": false
+ },
+ "QZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "RA": {
+  "cn": "限制电能流动",
+  "en": "Limiting a flow of electrical energy",
+  "note": "启动装置(电气)、启动电阻、限制器、制动电阻、负载电阻、旁路二极管、二极管、反应器(电)、电抗线圈、灭磁电阻、不可变电阻、液体起动器、平滑电抗器、电感、阻塞二极管、限流器、限流电抗器、滤波器(电气)、电阻、电阻起动器、电阻元件、稳压二极管",
+  "starred": false
+ },
+ "RB": {
+  "cn": "稳定电能流动",
+  "en": "Stabilizing a flow of electrical energy",
+  "note": "不间断电源(UPS)",
+  "starred": false
+ },
+ "RF": {
+  "cn": "稳定信号",
+  "en": "Stabilizing a signal",
+  "note": "有源滤波器(电气)、带通滤波器、阻尼装置(电气)、阻尼电阻、可变电阻器、电力滤波器、均衡器(电气)、滤波器(电气)、高通滤波器、晶体滤波器、L/C 滤波器、电机操作电位器、电位器、R/C 滤波器、调节电阻、信号拦截器、变阻器、低通滤波器",
+  "starred": false
+ },
+ "RL": {
+  "cn": "限制未授权操作或运动(机械)",
+  "en": "Restricting an unauthorized operation or movement (mechanical)",
+  "note": "光电屏障、锁存器、闭锁装置、制转杆、闭锁机构",
+  "starred": false
+ },
+ "RM": {
+  "cn": "限制气态、液态和可流动物质的回流",
+  "en": "Restricting a return flow of gaseous, liquid and flowable substances",
+  "note": "逆止阀、管口盖板、封板、隔膜逆止阀、止回阀、止回蝶阀、阻尼、水锤消除器",
+  "starred": false
+ },
+ "RN": {
+  "cn": "限制液体和气态物质的流动",
+  "en": "Restricting a flow of liquid and gaseous substances",
+  "note": "流量限制器(非电气)、孔板、流量喷嘴、文丘里喷嘴、文丘里管、扩散器、节流阀(用于液体和气体的物质)、可调节孔板、流量限制器喷嘴、节流阀(非电气)、挡板、流量限制器(如不可调节阀门、封板)、流量限制器(非阀门)、流量限制器(阀门)、喷头、喷嘴",
+  "starred": false
+ },
+ "RP": {
+  "cn": "限制声传播",
+  "en": "Restricting a sound propagation",
+  "note": "屏障(屏蔽噪声)、吸收式消声器、噪声隔离、干扰消声器、消声器、隔声罩、隔音墙",
+  "starred": false
+ },
+ "RQ": {
+  "cn": "限制热流量",
+  "en": "Restricting a thermal flow",
+  "note": "屏障(屏蔽热量)、护套(隔冷/热)、保温套(隔冷/热)、衬套(隔冷/热)、砖衬(隔冷/热)、隔冷/热、保温材料(隔冷/热)、散热孔/防冷隔热、绝缘层材料(隔冷/热)、热绝缘",
+  "starred": false
+ },
+ "RR": {
+  "cn": "限制机械效应",
+  "en": "Restricting a mechanical effect",
+  "note": "砖衬(对机械效应)、抑制、轴向补偿器、阻尼设备(机械)、阻尼元件(机械)、波纹管膨胀节(管道)、减振器、减震器、缓冲器",
+  "starred": false
+ },
+ "RS": {
+  "cn": "限制化学效应",
+  "en": "Restricting a chemical effect",
+  "note": "砖衬(对化学反应)、化学效应绝缘、防溅装置(针对化学反应)",
+  "starred": false
+ },
+ "RT": {
+  "cn": "限制光效应",
+  "en": "Restricting a light propagation",
+  "note": "防眩光、光隔离、百叶窗(防光)、屏幕、窗帘",
+  "starred": false
+ },
+ "RU": {
+  "cn": "区域访问限制",
+  "en": "Restricting access to an area",
+  "note": "围栏(限制)",
+  "starred": false
+ },
+ "RZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "SF": {
+  "cn": "提供电气信号",
+  "en": "Providing an electrical signal",
+  "note": "就地控制站、就地控制开关、差速控制开关、旋转开关、瞬时接触旋转开关、设定值电位计、设定值设定器、设定值调节器、不对位控制开关、控制开关、键盘、瞬间接触按钮、选择器、选择开关、摇杆开关、摇杆按钮",
+  "starred": false
+ },
+ "SG": {
+  "cn": "提供电磁、光学或声学信号",
+  "en": "Providing an electromagnetic, optical or acoustical signal",
+  "note": "无线鼠标、锣、调光器",
+  "starred": false
+ },
+ "SH": {
+  "cn": "提供机械信号",
+  "en": "Providing a mechanical signal",
+  "note": "扳手",
+  "starred": false
+ },
+ "SJ": {
+  "cn": "提供流体或气动信号",
+  "en": "Providing a fluid or pneumatic signal",
+  "note": "按钮阀",
+  "starred": false
+ },
+ "SZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "TA": {
+  "cn": "电能转换，同时保留能量类型和能量形式",
+  "en": "Converting electrical energy while retaining the energy type and energy form",
+  "note": "DC/DC 整流器、旋转变压器、三绕组变压器、变频器、直流变换器、直流测量传感器、电力变压器、线路变压器、汞弧整流器、隔离变压器、自耦变压器、静态换流器、滑动变压器、控制电源变压器、电源转换器、变流器设备、整流变压器、变压器、干式变压器",
+  "starred": false
+ },
+ "TB": {
+  "cn": "电能转换，保留能量的类型但改变能量的形式",
+  "en": "Converting electrical energy while retaining the energy type and changing the energy form",
+  "note": "AC/DC 整流器、整流桥、整流器、整流二极管、整流装置、整流模块、充电器、供电单元、静止变流器、电源模块AC/DC、供电设备AC/DC、闸流管、晶闸管整流器、逆变器",
+  "starred": false
+ },
+ "TF": {
+  "cn": "转换信号(信息内容保留)",
+  "en": "Converting signals (retention of information content)",
+  "note": "标准介质转换器、触发设备、辐射传感器、电流匹配变压器、电流频率整流器、交换式介质转换器、话机、温度传感器、热敏电阻电机保护跳闸单元、隔离膜片、缓冲放大器、隔离变压器、浊度传感器、隧道二极管、U/I 整流器、超声波流量变送器、反相放大器、放大器、放大管、角度传感器、时间转换器",
+  "starred": false
+ },
+ "TL": {
+  "cn": "将转速、扭矩、力转换为相同类型",
+  "en": "Converting speed of rotation, torque, force into the same kind",
+  "note": "自动变速箱、自动变速器、液力变矩器、变速齿轮、压力放大器、齿轮、离合器、调节传动装置、耦合器(主要任务为速度变化)、分度齿轮、流体传动齿轮、流体耦合器、减速齿轮",
+  "starred": false
+ },
+ "TM": {
+  "cn": "通过加工转换机械形状",
+  "en": "Converting a mechanical form by machining",
+  "note": "钻孔机、火焰切割机、车床(机床)、铣床、刨床、开槽机、卷带冲床、垃圾粉碎机、切割装置(过程的一部分)、焊接机、冲压机、成型机",
+  "starred": false
+ },
+ "TN": {
+  "cn": "未使用",
+  "en": "Not used",
+  "note": "—",
+  "starred": false
+ },
+ "TP": {
+  "cn": "通过冷成型转换机械形状(无屑变形)",
+  "en": "Converting a mechanical form by cold forming (chipless deforming)",
+  "note": "磨边机、折弯机(冷)、滑动研磨机(无切削表面处理)、成型机(无屑,冷)、冷轧设备、冷拉设备、轧制设备、机床(无屑成型,冷)、平衡机",
+  "starred": false
+ },
+ "TQ": {
+  "cn": "通过热成型转换机械形状(无屑变形)",
+  "en": "Converting a mechanical form by hot forming (chipless deforming)",
+  "note": "折弯机(热)、电弧焊机(固定式)、铸造机、成型机(无屑,热)、热轧设备、热拉伸设备、机床(无屑成型,热)",
+  "starred": false
+ },
+ "TR": {
+  "cn": "保持能量形式的辐射能量转换",
+  "en": "Converting radiation energy while retaining energy form",
+  "note": "凸透镜、抛物面反射镜",
+  "starred": false
+ },
+ "TZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "UA": {
+  "cn": "保持和支撑电能设备",
+  "en": "Holding and supporting electrical energy equipment",
+  "note": "支撑结构(电气部分)、基本框架、支撑",
+  "starred": false
+ },
+ "UB": {
+  "cn": "保持和支撑电能电缆和导体",
+  "en": "Holding and supporting electrical energy cables and conductors",
+  "note": "绝缘体、电缆通道、电缆桥架、电缆直梯、灯柱、塔、铁塔、门户、柱形绝缘体",
+  "starred": false
+ },
+ "UC": {
+  "cn": "封闭及支撑电能设备",
+  "en": "Enclosing and supporting electrical energy equipment",
+  "note": "灯饰配件、附件、机壳（电能设备的外壳）、套管、机壳（电能设备外壳）、电弧防护箱、电机接线盒、开关柜、保险丝盒、封闭和配套电能设备、壁挂安装盒",
+  "starred": false
+ },
+ "UF": {
+  "cn": "保持及支撑仪器仪表,控制和通信设备",
+  "en": "Holding and supporting instrumentation, control and communication equipment",
+  "note": "模块框架、印刷电路板、仪器架、变送器机架",
+  "starred": false
+ },
+ "UG": {
+  "cn": "保持及支撑仪器仪表,控制和通信电缆及导管",
+  "en": "Holding and supporting instrumentation, control and communication cables and conductors",
+  "note": "控制电缆的电缆通道、控制电缆的电缆桥架",
+  "starred": false
+ },
+ "UH": {
+  "cn": "封闭和支撑仪表,控制和通信设备",
+  "en": "Enclosing and supporting instrumentation, control and communication equipment",
+  "note": "控制站、操纵台、控制柜、控制板",
+  "starred": false
+ },
+ "UL": {
+  "cn": "保持和支撑机械",
+  "en": "Holding and supporting machinery",
+  "note": "机器底座、可调底座",
+  "starred": false
+ },
+ "UM": {
+  "cn": "保持和支撑结构对象",
+  "en": "Holding and supporting structural objects",
+  "note": "建筑地基、龙骨（结构件）、地板支撑、吊梁（结构件）、门楣（结构件）、龙骨（结构件）",
+  "starred": false
+ },
+ "UN": {
+  "cn": "保持和支撑管型对象",
+  "en": "Holding and supporting piping objects",
+  "note": "吊架（服务管道）、管道支撑架、管道安装架、吊架、恒力吊架、管道贯穿件、横梁",
+  "starred": false
+ },
+ "UP": {
+  "cn": "保持和支撑轴和转子",
+  "en": "Holding and guiding of shafts and rotors",
+  "note": "推力轴承、导向轴承、滑动轴承、球轴承、轴承、滚动轴承、轴承支撑",
+  "starred": false
+ },
+ "UQ": {
+  "cn": "保持和支撑制造或安装的对象",
+  "en": "Holding and guiding objects for manufacturing or erection",
+  "note": "过滤转换设备、夹紧机构",
+  "starred": false
+ },
+ "UR": {
+  "cn": "紧固和锚定机械",
+  "en": "Fastening and anchoring machinery",
+  "note": "锚定板、设备机架、支撑结构（为机械部分）、支架、安装架、安装板、阀箱",
+  "starred": false
+ },
+ "US": {
+  "cn": "空间对象,容纳和支持其他对象",
+  "en": "Spatial objects, housing and supporting other objects",
+  "note": "大厅、通道（作为建筑设备；电缆沟见UB或UG）、走廊、房间、管桥、楼梯间、工作大厅",
+  "starred": false
+ },
+ "UT": {
+  "cn": "固态燃料的持有和支持",
+  "en": "Holding and supporting of solid fuels",
+  "note": "炉排、主炉篦、延迟燃烧炉排、固定炉排、篦(燃烧设备)、滑动炉排、层燃、规模化回转篦排、辊式篦条、回转篦",
+  "starred": false
+ },
+ "UZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "VL": {
+  "cn": "材料填充",
+  "en": "Filling material",
+  "note": "装瓶设备、装桶设备、装袋设备、道路油罐车灌装设备",
+  "starred": false
+ },
+ "VM": {
+  "cn": "产品包装",
+  "en": "Packaging product",
+  "note": "打包机、码垛机、包装机",
+  "starred": false
+ },
+ "VN": {
+  "cn": "表面处理",
+  "en": "Treating surface",
+  "note": "喷涂设备、喷漆机、上色机",
+  "starred": false
+ },
+ "VP": {
+  "cn": "材料或产品处理",
+  "en": "Treating material or product",
+  "note": "热处理炉、高炉、热处理热备、退火炉",
+  "starred": false
+ },
+ "VQ": {
+  "cn": "材料、产品或设施清洗",
+  "en": "Cleaning material, product or facility",
+  "note": "喷雾设备、带式清洗设备、刷洗设备、淋浴、建筑物清洗设备、空气吹灰器(用于清洗)、喷洗设备、冲洗设备、洗衣机、水吹灰器、水喷射器、水喷射枪",
+  "starred": false
+ },
+ "VZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "WA": {
+  "cn": "高压电能分配(>1000V 交流或>1500V 直流)",
+  "en": "Distributing high voltage electrical energy (>1000V a.c. or >1500V d.c.)",
+  "note": "母线(>1000V)",
+  "starred": false
+ },
+ "WB": {
+  "cn": "高压电能传输(>1000V 交流或>1500V 直流)",
+  "en": "Transporting high voltage electrical energy(>1000V a.c. or >1500V d.c.)",
+  "note": "套管(>1000V)、能源电缆(>1000V)、电缆(>1000V)、电缆接头(>1000V)、电力电缆(>1000V)、导线(>1000V)",
+  "starred": false
+ },
+ "WC": {
+  "cn": "低压电能分配(≤1000V 交流或≤1500V 直流)",
+  "en": "Distributing low voltage electrical energy (≤1000V a.c. or ≤1500V d.c.)",
+  "note": "建筑工地的低压开关设备和控制设备组件、母线(≤1000V)",
+  "starred": false
+ },
+ "WD": {
+  "cn": "低压电能传输(≤1000V 交流或≤1500V 直流)",
+  "en": "Transporting low voltage electrical energy (≤1000V a.c. or ≤1500V d.c.)",
+  "note": "套管(≤1000V)、能源电缆(≤1000V)、电缆(≤1000V)、电缆接头(≤1000V)、电力电缆(≤1000V)、导体(≤1000V)",
+  "starred": false
+ },
+ "WE": {
+  "cn": "引导接地电位或参考电位",
+  "en": "Conducting earth potential or reference potential",
+  "note": "接地棒、接地电缆、传导接地电位或参考电位",
+  "starred": false
+ },
+ "WF": {
+  "cn": "分配电气或电子信号",
+  "en": "Distributing electrical or electronic signal",
+  "note": "数据总线、二极管矩阵、集线器、交叉分配器、电缆分线箱、推接插头分配器、星形耦合器",
+  "starred": false
+ },
+ "WG": {
+  "cn": "传输电气或电子信号",
+  "en": "Transporting electrical or electronic signal",
+  "note": "均压导体、数据线、通信电缆，铜导线、空心导体、混合电缆、同轴电缆、仪表电缆、互连线、连接电缆、控制电缆、双绞线电缆、导波器",
+  "starred": false
+ },
+ "WH": {
+  "cn": "传输和引导光信号",
+  "en": "Transporting and routing optical signal",
+  "note": "光纤通信电缆、光缆、光纤导体、光波导",
+  "starred": false
+ },
+ "WL": {
+  "cn": "运输材料或产品（无驱动）",
+  "en": "Transporting material or product (not driven)",
+  "note": "斜面",
+  "starred": false
+ },
+ "WM": {
+  "cn": "传导或引导开放式存储设备中的物质流动",
+  "en": "Conducting or guiding flow of substance in open enclosure",
+  "note": "排水沟、灰漏斗、沟、岔溜槽、通道（主导和引导流动物质和液体的开放式系统）、通道部分（开放式系统）、溜槽（倒角、槽）、滑道（运输）、漏斗",
+  "starred": false
+ },
+ "WN": {
+  "cn": "在封闭容器内用于传导或引导物质流动的柔性连接",
+  "en": "Conducting or guiding flow of substance in flexible, closed enclosure",
+  "note": "软管",
+  "starred": false
+ },
+ "WP": {
+  "cn": "在封闭容器内用于传导或引导物质流动的刚性连接",
+  "en": "Conducting or guiding flow of substance in rigid, closed enclosure",
+  "note": "测量管、出口(管道组件)、入口(管道组件)、下水管、沟、管道部分(封闭系统,风管)、挡板(导流)、风管、燃油喷枪、减压器、弯管、弯头、管道、管接头、喷水喷枪",
+  "starred": false
+ },
+ "WQ": {
+  "cn": "机械能传递",
+  "en": "Transporting mechanical energy",
+  "note": "铰接轴、万向轴、风扇皮带、三角带、链传动、伺服机构(非电气)、伺服机构设备、转子、连杆、传动轴",
+  "starred": false
+ },
+ "WR": {
+  "cn": "传导或引导有轨运输设备",
+  "en": "Conducting or guiding trackbound transport equipment",
+  "note": "转盘(为铁路车辆)、铁路引导输送机、轨道、起重机轨道、铁路、轨道道岔设备",
+  "starred": false
+ },
+ "WS": {
+  "cn": "传导或引导者(接入设备)",
+  "en": "Conducting or guiding persons (access equipment)",
+  "note": "传动齿轮、轻便栈桥、平台、地板格栅、锅炉平台、自动扶梯、楼梯",
+  "starred": false
+ },
+ "WT": {
+  "cn": "传导或引导移动运输设备",
+  "en": "Conducting or guiding mobile transport equipment",
+  "note": "沟渠、路、运输路线、道路",
+  "starred": false
+ },
+ "WZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ },
+ "XB": {
+  "cn": "连接高压对象(>1000V 交流或>1500V 直流)",
+  "en": "Connecting high voltage objects (>1000V a.c. or >1500V d.c.)",
+  "note": "接头(>1000V)",
+  "starred": false
+ },
+ "XD": {
+  "cn": "连接低压对象(≤1000V 交流或≤1500V 直流)",
+  "en": "Connecting low voltage objects (≤1000V a.c. or ≤1500V d.c.)",
+  "note": "组件接线盒、直通式接线端子、终端(≤1000V)、能源端子排(≤1000V)、接头(≤1000V)、模块化终端、接地终端盒",
+  "starred": false
+ },
+ "XE": {
+  "cn": "连接接地电位或参考电位",
+  "en": "Connecting to earth potential or reference potential",
+  "note": "接地端子、接地点、屏蔽夹",
+  "starred": false
+ },
+ "XF": {
+  "cn": "连接数据网络载体",
+  "en": "Connecting data network carriers",
+  "note": "D-Sub 型连接器、RJ 型连接器",
+  "starred": false
+ },
+ "XG": {
+  "cn": "连接电气信号载体",
+  "en": "Connecting electrical signal carriers",
+  "note": "电信号端子盒、插座连接器、信号端子排标记条、同轴插头、焊料标记条、测量插头、编程适配器、测试插件、编组机架的连接器元件、机柜接线端子、信号连接器、插头连接器、插入式连接器",
+  "starred": false
+ },
+ "XH": {
+  "cn": "连接光信号载波",
+  "en": "Connecting optical signal carriers",
+  "note": "光信号载波的端子、卡口式光纤连接器、连接光信号载波",
+  "starred": false
+ },
+ "XL": {
+  "cn": "实现物质流的刚性连接",
+  "en": "Connecting rigid enclosures for flows of substances",
+  "note": "压力测试回路、刚性管道连接器、法兰、管接头、RT型管接头(管型连接)、斜槽、喷嘴",
+  "starred": false
+ },
+ "XM": {
+  "cn": "实现物质流的柔性连接",
+  "en": "Connecting flexible enclosures for flows of substances",
+  "note": "波纹管、RT型管接头(连接的软管)、软管连接、软管接头",
+  "starred": false
+ },
+ "XN": {
+  "cn": "传递机械能的连接设备,不可拆卸",
+  "en": "Connecting objects for transport of mechanical energy, non-detachable",
+  "note": "钢板弹簧离合器、螺栓联轴器、柱销联轴器、抗剪螺栓联轴器、套筒联轴器、表面联轴器、填充离合器、爪形离合器、离合器、离合器、金属-金属离合器、螺旋弹簧离合器、固定联轴器、齿形联轴器、适配离合器",
+  "starred": false
+ },
+ "XP": {
+  "cn": "传递机械能的连接设备, 可拆卸",
+  "en": "Connecting objects for transport of mechanical energy, detachable",
+  "note": "联轴器(传递机械能)、摩擦离合器、换挡离合器、法兰联轴器、棘轮力矩限制器、超越离合器",
+  "starred": false
+ },
+ "XQ": {
+  "cn": "连接对象不可逆",
+  "en": "Connecting objects irreversible",
+  "note": "粘结剂粘结(胶接接头)、焊锡条、焊接连接、焊接接头",
+  "starred": false
+ },
+ "XR": {
+  "cn": "连接对象可逆",
+  "en": "Connecting objects reversible",
+  "note": "钩、孔眼",
+  "starred": false
+ },
+ "XZ": {
+  "cn": "组合任务",
+  "en": "Combined tasks",
+  "note": "—",
+  "starred": false
+ }
+}

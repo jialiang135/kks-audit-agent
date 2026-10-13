@@ -1,0 +1,4467 @@
+{
+ "gb_sys_total": 3372,
+ "gb_dev_total": 222,
+ "proj_sys_total": 3414,
+ "proj_dev_total": 238,
+ "sys_only_zm": [
+  "CAD",
+  "CAE",
+  "CBB",
+  "CBC",
+  "CBD",
+  "CPB",
+  "CQB",
+  "CQC",
+  "CQD",
+  "CRE",
+  "CTB",
+  "CTC",
+  "CTD",
+  "CTE",
+  "CTF",
+  "CTG",
+  "CTH",
+  "CUB",
+  "CUC",
+  "CUD",
+  "CUE",
+  "CUF",
+  "CUG",
+  "CUH",
+  "CUJ",
+  "CUK",
+  "CUL",
+  "CUM",
+  "CUN",
+  "CUP",
+  "CUQ",
+  "CUR",
+  "CUS",
+  "CUT",
+  "CUU",
+  "UYC",
+  "UYE",
+  "UYG",
+  "UYH",
+  "UYM",
+  "UYN",
+  "UYP"
+ ],
+ "dev_only_zm": [
+  "KB",
+  "KC",
+  "KD",
+  "PA",
+  "PB",
+  "PC",
+  "PD",
+  "PE",
+  "PL",
+  "PM",
+  "PN",
+  "PP",
+  "PR",
+  "PT",
+  "PU",
+  "PV"
+ ],
+ "sys_excluded_jk": [
+  "J",
+  "JA",
+  "JAA",
+  "JAB",
+  "JAC",
+  "JAD",
+  "JAE",
+  "JAF",
+  "JAG",
+  "JAH",
+  "JAJ",
+  "JAK",
+  "JAT",
+  "JAU",
+  "JAV",
+  "JAW",
+  "JAX",
+  "JAY",
+  "JAZ",
+  "JB",
+  "JBA",
+  "JBB",
+  "JBQ",
+  "JBV",
+  "JC",
+  "JD",
+  "JDA",
+  "JDB",
+  "JDC",
+  "JDD",
+  "JDE",
+  "JDF",
+  "JDG",
+  "JDH",
+  "JDJ",
+  "JDK",
+  "JDL",
+  "JDM",
+  "JDN",
+  "JDP",
+  "JDQ",
+  "JDT",
+  "JDU",
+  "JDV",
+  "JDW",
+  "JDX",
+  "JDY",
+  "JDZ",
+  "JE",
+  "JEA",
+  "JEB",
+  "JEC",
+  "JEE",
+  "JEF",
+  "JEG",
+  "JEH",
+  "JET",
+  "JEU",
+  "JEV",
+  "JEW",
+  "JEX",
+  "JEY",
+  "JEZ",
+  "JF",
+  "JFA",
+  "JFB",
+  "JFC",
+  "JFD",
+  "JFE",
+  "JFF",
+  "JFG",
+  "JFH",
+  "JFT",
+  "JFU",
+  "JFV",
+  "JFW",
+  "JFX",
+  "JFY",
+  "JFZ",
+  "JG",
+  "JGA",
+  "JGB",
+  "JGC",
+  "JGD",
+  "JGF",
+  "JGG",
+  "JGH",
+  "JGT",
+  "JGU",
+  "JGV",
+  "JGW",
+  "JGX",
+  "JGY",
+  "JGZ",
+  "JH",
+  "JJ",
+  "JK",
+  "JKA",
+  "JKQ",
+  "JKR",
+  "JKS",
+  "JKT",
+  "JKU",
+  "JKV",
+  "JL",
+  "JM",
+  "JMA",
+  "JMB",
+  "JMC",
+  "JMD",
+  "JME",
+  "JMF",
+  "JMG",
+  "JMH",
+  "JMJ",
+  "JMK",
+  "JML",
+  "JMM",
+  "JMN",
+  "JMP",
+  "JMQ",
+  "JMR",
+  "JMS",
+  "JMT",
+  "JMU",
+  "JMV",
+  "JMW",
+  "JMX",
+  "JMY",
+  "JMZ",
+  "JN",
+  "JNA",
+  "JNB",
+  "JNC",
+  "JND",
+  "JNE",
+  "JNG",
+  "JNH",
+  "JNK",
+  "JNL",
+  "JNM",
+  "JNN",
+  "JNP",
+  "JNQ",
+  "JNV",
+  "JNW",
+  "JNX",
+  "JNY",
+  "JNZ",
+  "JP",
+  "JQ",
+  "JQA",
+  "JQB",
+  "JQQ",
+  "JQV",
+  "JR",
+  "JRA",
+  "JRB",
+  "JRQ",
+  "JRV",
+  "JS",
+  "JSA",
+  "JSB",
+  "JSQ",
+  "JSV",
+  "JT",
+  "JTA",
+  "JTB",
+  "JTQ",
+  "JTV",
+  "JU",
+  "JV",
+  "JVA",
+  "JVB",
+  "JVQ",
+  "JVV",
+  "JW",
+  "JWA",
+  "JWB",
+  "JWQ",
+  "JWV",
+  "JX",
+  "JXA",
+  "JXB",
+  "JXQ",
+  "JXV",
+  "JY",
+  "JYA",
+  "JYC",
+  "JYD",
+  "JYE",
+  "JYF",
+  "JYG",
+  "JYH",
+  "JYJ",
+  "JYK",
+  "JYL",
+  "JYM",
+  "JYN",
+  "JYP",
+  "JYQ",
+  "JYV",
+  "JYW",
+  "JZ",
+  "K",
+  "KA",
+  "KAA",
+  "KAB",
+  "KAC",
+  "KAD",
+  "KAE",
+  "KAG",
+  "KAV",
+  "KAW",
+  "KAX",
+  "KAY",
+  "KAZ",
+  "KB",
+  "KBA",
+  "KBB",
+  "KBC",
+  "KBD",
+  "KBE",
+  "KBF",
+  "KBG",
+  "KBH",
+  "KBJ",
+  "KBK",
+  "KBN",
+  "KBV",
+  "KBW",
+  "KBX",
+  "KBY",
+  "KBZ",
+  "KC",
+  "KD",
+  "KE",
+  "KF",
+  "KFA",
+  "KFB",
+  "KFC",
+  "KFE",
+  "KFF",
+  "KFH",
+  "KFW",
+  "KFX",
+  "KFY",
+  "KFZ",
+  "KG",
+  "KGA",
+  "KGB",
+  "KGC",
+  "KGD",
+  "KGE",
+  "KGF",
+  "KGK",
+  "KGV",
+  "KGW",
+  "KGX",
+  "KGY",
+  "KGZ",
+  "KH",
+  "KHA",
+  "KHB",
+  "KHC",
+  "KHD",
+  "KHW",
+  "KHX",
+  "KHY",
+  "KHZ",
+  "KJ",
+  "KJA",
+  "KJB",
+  "KJC",
+  "KJL",
+  "KJM",
+  "KJN",
+  "KJR",
+  "KJW",
+  "KJX",
+  "KJY",
+  "KJZ",
+  "KK",
+  "KL",
+  "KLA",
+  "KLB",
+  "KLC",
+  "KLD",
+  "KLE",
+  "KLF",
+  "KLG",
+  "KLL",
+  "KLM",
+  "KLQ",
+  "KLV",
+  "KLW",
+  "KLX",
+  "KLY",
+  "KLZ",
+  "KM",
+  "KMA",
+  "KMB",
+  "KMD",
+  "KME",
+  "KMF",
+  "KMQ",
+  "KMV",
+  "KMW",
+  "KMX",
+  "KMY",
+  "KMZ",
+  "KN",
+  "KNA",
+  "KNC",
+  "KND",
+  "KNF",
+  "KNG",
+  "KNK",
+  "KNL",
+  "KNQ",
+  "KNV",
+  "KNW",
+  "KNX",
+  "KNY",
+  "KNZ",
+  "KP",
+  "KPA",
+  "KPL",
+  "KPM",
+  "KPQ",
+  "KPR",
+  "KPV",
+  "KPW",
+  "KPX",
+  "KPY",
+  "KPZ",
+  "KQ",
+  "KR",
+  "KRA",
+  "KRB",
+  "KRJ",
+  "KRK",
+  "KRP",
+  "KRV",
+  "KRW",
+  "KRX",
+  "KRY",
+  "KRZ",
+  "KS",
+  "KT",
+  "KTA",
+  "KTB",
+  "KTQ",
+  "KTV",
+  "KTX",
+  "KTY",
+  "KTZ",
+  "KU",
+  "KUA",
+  "KUB",
+  "KUC",
+  "KUF",
+  "KUG",
+  "KUK",
+  "KUL",
+  "KUM",
+  "KUX",
+  "KUY",
+  "KUZ",
+  "KV",
+  "KVA",
+  "KVB",
+  "KVQ",
+  "KVV",
+  "KW",
+  "KWA",
+  "KWB",
+  "KWQ",
+  "KWV",
+  "KWX",
+  "KWY",
+  "KWZ",
+  "KX",
+  "KXA",
+  "KXB",
+  "KXQ",
+  "KXV",
+  "KY",
+  "KYA",
+  "KYB",
+  "KYQ",
+  "KYV",
+  "KZ"
+ ],
+ "sys_name_diff": [
+  {
+   "code": "AAD",
+   "gb": "后续标准预留(AAD至AAE)",
+   "zm": "后续标准预留（AAD至AAE）"
+  },
+  {
+   "code": "AAH",
+   "gb": "后续标准预留(AAH至AAJ)",
+   "zm": "后续标准预留（AAH至AAJ）"
+  },
+  {
+   "code": "AAT",
+   "gb": "可用 (AAT 至 AAU)",
+   "zm": "可用(AAT至AAU)"
+  },
+  {
+   "code": "AAV",
+   "gb": "后续标准预留 (AAV 至 AAZ)",
+   "zm": "后续标准预留（AAV至AAZ）"
+  },
+  {
+   "code": "AB",
+   "gb": "Un > 420kV 系统",
+   "zm": "Un>420kV系统"
+  },
+  {
+   "code": "ABA",
+   "gb": "Un ≥ 1000kV 输电",
+   "zm": "Un≥1000kV输电"
+  },
+  {
+   "code": "ABC",
+   "gb": "765kV ≤ Un < 1000kV 输电",
+   "zm": "765kV≤Un<1000kV输电"
+  },
+  {
+   "code": "ABE",
+   "gb": "525kV ≤ Un < 765kV 输电",
+   "zm": "525kV≤Un<765kV输电"
+  },
+  {
+   "code": "ABG",
+   "gb": "420kV < Un < 525kV 输电",
+   "zm": "420kV<Un<525kV输电"
+  },
+  {
+   "code": "ABH",
+   "gb": "后续标准预留 (ABH 至 ABP)",
+   "zm": "后续标准预留（ABH至ABP）"
+  },
+  {
+   "code": "ABQ",
+   "gb": "可用 (ABQ 至 ABR)",
+   "zm": "可用(ABQ至ABR)"
+  },
+  {
+   "code": "ABS",
+   "gb": "Un > 420kV 系统高层级任务的装置系统",
+   "zm": "Un>420kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "ABT",
+   "gb": "可用 (ABT 至 ABU)",
+   "zm": "可用(ABT至ABU)"
+  },
+  {
+   "code": "ABV",
+   "gb": "后续标准预留 (ABV 至 ABZ)",
+   "zm": "后续标准预留（ABV至ABZ）"
+  },
+  {
+   "code": "AC",
+   "gb": "380kV ≤ Un ≤ 420kV 系统",
+   "zm": "380kV≤Un≤420kV系统"
+  },
+  {
+   "code": "ACA",
+   "gb": "380kV ≤ Un ≤ 420kV 输电",
+   "zm": "380kV≤Un≤420kV输电"
+  },
+  {
+   "code": "ACB",
+   "gb": "后续标准预留 (ACB 至 ACP)",
+   "zm": "后续标准预留（ACB至ACP）"
+  },
+  {
+   "code": "ACQ",
+   "gb": "可用 (ACQ 至 ACR)",
+   "zm": "可用(ACQ至ACR)"
+  },
+  {
+   "code": "ACS",
+   "gb": "380kV ≤ Un ≤ 420kV 系统高层级任务的装置系统",
+   "zm": "380kV≤Un≤420kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "ACT",
+   "gb": "可用 (ACT 至 ACU)",
+   "zm": "可用(ACT至ACU)"
+  },
+  {
+   "code": "ACV",
+   "gb": "后续标准预留(ACV 至 ACZ)",
+   "zm": "后续标准预留（ACV至ACZ）"
+  },
+  {
+   "code": "AD",
+   "gb": "220kV ≤ Un < 380kV 系统",
+   "zm": "220kV≤Un<380kV系统"
+  },
+  {
+   "code": "ADA",
+   "gb": "300kV ≤ Un < 380kV 输电",
+   "zm": "300kV≤Un<380kV输电"
+  },
+  {
+   "code": "ADC",
+   "gb": "250kV ≤ Un < 300kV 输电",
+   "zm": "250kV≤Un<300kV输电"
+  },
+  {
+   "code": "ADE",
+   "gb": "220kV ≤ Un < 250kV 输电",
+   "zm": "220kV≤Un<250kV输电"
+  },
+  {
+   "code": "ADF",
+   "gb": "后续标准预留(ADF 至 ADP)",
+   "zm": "后续标准预留（ADF至ADP）"
+  },
+  {
+   "code": "ADQ",
+   "gb": "可用(ADQ 至 ADR)",
+   "zm": "可用(ADQ至ADR)"
+  },
+  {
+   "code": "ADS",
+   "gb": "220kV ≤ Un < 380kV 系统高层级任务的装置系统",
+   "zm": "220kV≤Un<380kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "ADT",
+   "gb": "可用(ADT 至 ADU)",
+   "zm": "可用(ADT至ADU)"
+  },
+  {
+   "code": "ADV",
+   "gb": "后续标准预留 (ADV 至 ADZ)",
+   "zm": "后续标准预留（ADV至ADZ）"
+  },
+  {
+   "code": "AE",
+   "gb": "110kV ≤ Un < 220kV 系统",
+   "zm": "110kV≤Un<220kV系统"
+  },
+  {
+   "code": "AEA",
+   "gb": "180kV ≤ Un < 220kV 输电",
+   "zm": "180kV≤Un<220kV输电"
+  },
+  {
+   "code": "AEC",
+   "gb": "150kV ≤ Un < 180kV 输电 [标准电压 150(154)kV]",
+   "zm": "150kV≤Un<180kV输电[标准电压150(154)kV]"
+  },
+  {
+   "code": "AEE",
+   "gb": "132kV ≤ Un < 150kV 输电 [标准电压 132(138)kV]",
+   "zm": "132kV≤Un<150kV输电[标准电压132(138)kV]"
+  },
+  {
+   "code": "AEG",
+   "gb": "110kV ≤ Un < 132kV 输电 [标准电压 110(115)kV]",
+   "zm": "110kV≤Un<132kV输电[标准电压110(115)kV]"
+  },
+  {
+   "code": "AEH",
+   "gb": "后续标准预留(AEH 至 AEP)",
+   "zm": "后续标准预留（AEH至AEP）"
+  },
+  {
+   "code": "AEQ",
+   "gb": "可用 (AEQ 至 AER)",
+   "zm": "可用(AEQ至AER)"
+  },
+  {
+   "code": "AES",
+   "gb": "110kV ≤ Un < 220kV 系统高层级任务的装置系统",
+   "zm": "110kV≤Un<220kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "AET",
+   "gb": "可用 (AET 至 AEU)",
+   "zm": "可用(AET至AEU)"
+  },
+  {
+   "code": "AEV",
+   "gb": "后续标准预留(AEV 至 AEZ)",
+   "zm": "后续标准预留（AEV至AEZ）"
+  },
+  {
+   "code": "AF",
+   "gb": "60kV ≤ Un < 110kV 系统",
+   "zm": "60kV≤Un<110kV系统"
+  },
+  {
+   "code": "AFA",
+   "gb": "60kV ≤ Un < 110kV 输电",
+   "zm": "60kV≤Un<110kV输电"
+  },
+  {
+   "code": "AFB",
+   "gb": "后续标准预留(AFB 至 AFP)",
+   "zm": "后续标准预留（AFB至AFP）"
+  },
+  {
+   "code": "AFQ",
+   "gb": "可用 (AFQ 至 AFR)",
+   "zm": "可用(AFQ至AFR)"
+  },
+  {
+   "code": "AFS",
+   "gb": "60kV ≤ Un < 110kV 系统高层级任务的装置系统",
+   "zm": "60kV≤Un<110kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "AFT",
+   "gb": "可用 ( AFT 至 AFU)",
+   "zm": "可用(AFT至AFU)"
+  },
+  {
+   "code": "AFV",
+   "gb": "后续标准预留 (AFV 至 AFZ)",
+   "zm": "后续标准预留（AFV至AFZ）"
+  },
+  {
+   "code": "AG",
+   "gb": "45kV ≤ Un < 60kV 系统",
+   "zm": "45kV≤Un<60kV系统"
+  },
+  {
+   "code": "AGA",
+   "gb": "45kV ≤ Un < 60kV 输电",
+   "zm": "45kV≤Un<60kV输电"
+  },
+  {
+   "code": "AGB",
+   "gb": "后续标准预留 (AGB 至 AGP)",
+   "zm": "后续标准预留（AGB至AGP）"
+  },
+  {
+   "code": "AGQ",
+   "gb": "可用 ( AGQ 至 AGR)",
+   "zm": "可用(AGQ至AGR)"
+  },
+  {
+   "code": "AGS",
+   "gb": "45kV ≤ Un < 60kV 系统高层级任务的装置系统",
+   "zm": "45kV≤Un<60kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "AGU",
+   "gb": "后续标准预留 (AGU 至 AGZ)",
+   "zm": "后续标准预留（AGU至AGZ）"
+  },
+  {
+   "code": "AH",
+   "gb": "30kV ≤ Un < 45kV 系统",
+   "zm": "30kV≤Un<45kV系统"
+  },
+  {
+   "code": "AHA",
+   "gb": "30kV ≤ Un < 45kV 输电",
+   "zm": "30kV≤Un<45kV输电"
+  },
+  {
+   "code": "AHB",
+   "gb": "后续标准预留(AHB 至 AHP)",
+   "zm": "后续标准预留（AHB至AHP）"
+  },
+  {
+   "code": "AHQ",
+   "gb": "可用(AHQ 至 AHR)",
+   "zm": "可用(AHQ至AHR)"
+  },
+  {
+   "code": "AHS",
+   "gb": "30kV ≤ Un < 45kV 系统高层级任务的装置系统",
+   "zm": "30kV≤Un<45kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "AHU",
+   "gb": "后续标准预留(AHU 至 AHZ)",
+   "zm": "后续标准预留（AHU至AHZ）"
+  },
+  {
+   "code": "AJ",
+   "gb": "20kV ≤ Un < 30kV 系统",
+   "zm": "20kV≤Un<30kV系统"
+  },
+  {
+   "code": "AJA",
+   "gb": "20kV ≤ Un < 30kV 配电",
+   "zm": "20kV≤Un<30kV配电"
+  },
+  {
+   "code": "AJB",
+   "gb": "后续标准预留(AJB 至 AJP)",
+   "zm": "后续标准预留（AJB至AJP）"
+  },
+  {
+   "code": "AJQ",
+   "gb": "可用(AJQ 至 AJR)",
+   "zm": "可用(AJQ至AJR)"
+  },
+  {
+   "code": "AJS",
+   "gb": "20kV ≤ Un < 30kV 系统高层级任务的装置系统",
+   "zm": "20kV≤Un<30kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "AJU",
+   "gb": "后续标准预留(AJU 至 AJZ)",
+   "zm": "后续标准预留（AJU至AJZ）"
+  },
+  {
+   "code": "AK",
+   "gb": "10kV ≤ Un < 20kV 系统",
+   "zm": "10kV≤Un<20kV系统"
+  },
+  {
+   "code": "AKA",
+   "gb": "10kV ≤ Un < 20kV 配电",
+   "zm": "10kV≤Un<20kV配电"
+  },
+  {
+   "code": "AKB",
+   "gb": "后续标准预留(AKB 至 AKP)",
+   "zm": "后续标准预留（AKB至AKP）"
+  },
+  {
+   "code": "AKQ",
+   "gb": "可用(AKQ 至 AKR)",
+   "zm": "可用(AKQ至AKR)"
+  },
+  {
+   "code": "AKS",
+   "gb": "10kV ≤ Un < 20kV 系统高层级任务的装置系统",
+   "zm": "10kV≤Un<20kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "AKU",
+   "gb": "后续标准预留(AKU 至 AKZ)",
+   "zm": "后续标准预留（AKU至AKZ）"
+  },
+  {
+   "code": "AL",
+   "gb": "6kV ≤ Un < 10kV 系统",
+   "zm": "6kV≤Un<10kV系统"
+  },
+  {
+   "code": "ALA",
+   "gb": "6kV ≤ Un < 10kV 配电",
+   "zm": "6kV≤Un<10kV配电"
+  },
+  {
+   "code": "ALB",
+   "gb": "后续标准预留(ALB 至 ALP)",
+   "zm": "后续标准预留（ALB至ALP）"
+  },
+  {
+   "code": "ALQ",
+   "gb": "可用 (ALQ 至 ALR)",
+   "zm": "可用(ALQ至ALR)"
+  },
+  {
+   "code": "ALS",
+   "gb": "6kV ≤ Un < 10kV 系统高层级任务的装置系统",
+   "zm": "6kV≤Un<10kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "ALU",
+   "gb": "后续标准预留 (ALU 至 ALZ)",
+   "zm": "后续标准预留（ALU至ALZ）"
+  },
+  {
+   "code": "AM",
+   "gb": "1kV<Un<6kV 系统",
+   "zm": "1kV<Un<6kV系统"
+  },
+  {
+   "code": "AMA",
+   "gb": "1kV<Un<6kV 配电",
+   "zm": "1kV<Un<6kV配电"
+  },
+  {
+   "code": "AMB",
+   "gb": "后续标准预留 (AMB 至 AMP)",
+   "zm": "后续标准预留（AMB至AMP）"
+  },
+  {
+   "code": "AMQ",
+   "gb": "可用 (AMQ 至 AMR)",
+   "zm": "可用(AMQ至AMR)"
+  },
+  {
+   "code": "AMS",
+   "gb": "1kV<Un<6kV 系统高层级任务的装置系统",
+   "zm": "1kV<Un<6kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "AMU",
+   "gb": "后续标准预留 (AMU 至 AMZ)",
+   "zm": "后续标准预留（AMU至AMZ）"
+  },
+  {
+   "code": "AN",
+   "gb": "Un≤1kV 系统",
+   "zm": "Un≤1kV系统"
+  },
+  {
+   "code": "ANA",
+   "gb": "400V < Un ≤ 1000V 交流配电系统",
+   "zm": "400V<Un≤1000V交流配电系统"
+  },
+  {
+   "code": "ANB",
+   "gb": "400V < Un ≤ 1000V 安全应用交流配电系统",
+   "zm": "400V<Un≤1000V安全应用交流配电系统"
+  },
+  {
+   "code": "ANC",
+   "gb": "400V < Un ≤ 1000V 安全应用交流电源系统",
+   "zm": "400V<Un≤1000V安全应用交流电源系统"
+  },
+  {
+   "code": "AND",
+   "gb": "400V < Un ≤ 1000V 交流变压器系统",
+   "zm": "400V<Un≤1000V交流变压器系统"
+  },
+  {
+   "code": "ANE",
+   "gb": "Un≤400V 交流配电系统",
+   "zm": "Un≤400V交流配电系统"
+  },
+  {
+   "code": "ANF",
+   "gb": "Un≤400V 安全应用交流配电系统",
+   "zm": "Un≤400V安全应用交流配电系统"
+  },
+  {
+   "code": "ANG",
+   "gb": "Un≤400V 安全应用交流电源系统",
+   "zm": "Un≤400V安全应用交流电源系统"
+  },
+  {
+   "code": "ANH",
+   "gb": "Un≤ 400V 交流 变压器系统",
+   "zm": "Un≤400V交流变压器系统"
+  },
+  {
+   "code": "ANJ",
+   "gb": "Un ≤ 400V UPS 交流系统",
+   "zm": "Un≤400VUPS交流系统"
+  },
+  {
+   "code": "ANK",
+   "gb": "110V ≤ Un ≤ 1500V 直流配电系统",
+   "zm": "110V≤Un≤1500V直流配电系统"
+  },
+  {
+   "code": "ANL",
+   "gb": "110V ≤ Un ≤ 1500V 安全应用直流配电系统",
+   "zm": "110V≤Un≤1500V安全应用直流配电系统"
+  },
+  {
+   "code": "ANM",
+   "gb": "110V ≤ Un ≤ 1500V 直流蓄电池系统",
+   "zm": "110V≤Un≤1500V直流蓄电池系统"
+  },
+  {
+   "code": "ANN",
+   "gb": "110V ≤ Un ≤ 1500V 直流转换系统",
+   "zm": "110V≤Un≤1500V直流转换系统"
+  },
+  {
+   "code": "ANP",
+   "gb": "110V ≤ Un ≤ 1500V UPS 直流系统",
+   "zm": "110V≤Un≤1500V UPS直流系统"
+  },
+  {
+   "code": "ANQ",
+   "gb": "Un< 110V 直流配电系统",
+   "zm": "Un<110V直流配电系统"
+  },
+  {
+   "code": "ANR",
+   "gb": "Un<110V 安全应用直流配电系统",
+   "zm": "Un<110V安全应用直流配电系统"
+  },
+  {
+   "code": "ANS",
+   "gb": "Un<110V 直流蓄电池系统",
+   "zm": "Un<110V直流蓄电池系统"
+  },
+  {
+   "code": "ANT",
+   "gb": "Un<110V 直流转换系统",
+   "zm": "Un<110V直流转换系统"
+  },
+  {
+   "code": "ANU",
+   "gb": "Un<110V 直流 UPS 系统",
+   "zm": "Un<110V直流UPS系统"
+  },
+  {
+   "code": "ANV",
+   "gb": "Un≤1kV 系统高层级任务的装置系统",
+   "zm": "Un≤1kV系统高层级任务的装置系统"
+  },
+  {
+   "code": "ANW",
+   "gb": "后续标准预留 (ANW 至 ANZ)",
+   "zm": "后续标准预留（ANW至ANZ）"
+  },
+  {
+   "code": "AP",
+   "gb": "等电位连接系统 (如接地、防雷保护)",
+   "zm": "等电位连接系统（如接地、防雷保护）"
+  },
+  {
+   "code": "APE",
+   "gb": "后续标准预留(APE至 APF)",
+   "zm": "后续标准预留（APE至APF）"
+  },
+  {
+   "code": "APH",
+   "gb": "后续标准预留(APH至 APP)",
+   "zm": "后续标准预留（APH至APP）"
+  },
+  {
+   "code": "APQ",
+   "gb": "可用(APQ至 APR)",
+   "zm": "可用(APQ至APR)"
+  },
+  {
+   "code": "APU",
+   "gb": "后续标准预留(APU至 APZ)",
+   "zm": "后续标准预留（APU至APZ）"
+  },
+  {
+   "code": "ASC",
+   "gb": "后续标准预留(ASC 至 ASE)",
+   "zm": "后续标准预留（ASC至ASE）"
+  },
+  {
+   "code": "ASG",
+   "gb": "后续标准预留(ASG 至 ASJ)",
+   "zm": "后续标准预留（ASG至ASJ）"
+  },
+  {
+   "code": "ASL",
+   "gb": "后续标准预留(ASL 至 ASN)",
+   "zm": "后续标准预留（ASL至ASN）"
+  },
+  {
+   "code": "ASQ",
+   "gb": "可用 (ASQ 至 APU)",
+   "zm": "可用(ASQ至APU)"
+  },
+  {
+   "code": "ASX",
+   "gb": "后续标准预留 (ASX 至 ASZ)",
+   "zm": "后续标准预留（ASX至ASZ）"
+  },
+  {
+   "code": "ATB",
+   "gb": "后续标准预留 (ATB 至 ATC)",
+   "zm": "后续标准预留（ATB至ATC）"
+  },
+  {
+   "code": "ATE",
+   "gb": "后续标准预留 (ATE 至 ATF)",
+   "zm": "后续标准预留（ATE至ATF）"
+  },
+  {
+   "code": "ATH",
+   "gb": "后续标准预留 (ATH 至 ATP)",
+   "zm": "后续标准预留（ATH至ATP）"
+  },
+  {
+   "code": "ATQ",
+   "gb": "可用 (ATQ 至 ATU)",
+   "zm": "可用(ATQ至ATU)"
+  },
+  {
+   "code": "ATV",
+   "gb": "后续标准预留(ATV 至 ATZ)",
+   "zm": "后续标准预留（ATV至ATZ）"
+  },
+  {
+   "code": "AVB",
+   "gb": "后续标准预留(AVB 至 AVP)",
+   "zm": "后续标准预留（AVB至AVP）"
+  },
+  {
+   "code": "AVQ",
+   "gb": "可用(AVQ 至 AVU)",
+   "zm": "可用(AVQ至AVU)"
+  },
+  {
+   "code": "AVV",
+   "gb": "后续标准预留(AVV 至 AVZ)",
+   "zm": "后续标准预留（AVV至AVZ）"
+  },
+  {
+   "code": "AWC",
+   "gb": "后续标准预留(AWC 至 AWP)",
+   "zm": "后续标准预留（AWC至AWP）"
+  },
+  {
+   "code": "AWQ",
+   "gb": "可用(AWQ 至 AWU)",
+   "zm": "可用(AWQ至AWU)"
+  },
+  {
+   "code": "AWV",
+   "gb": "后续标准预留(AWV至AWZ)",
+   "zm": "后续标准预留 (AWV至AWZ)"
+  },
+  {
+   "code": "AX",
+   "gb": "用于实现辅助目的或任务而无需过程的系统",
+   "zm": "用于实现辅助目的或任务而无需 过程的系统"
+  },
+  {
+   "code": "AXL",
+   "gb": "后续标准预留(AXL 至 AXN)",
+   "zm": "后续标准预留 (AXL至AXN)"
+  },
+  {
+   "code": "AXV",
+   "gb": "后续标准预留(AXV 至 AXW)",
+   "zm": "后续标准预留 (AXV至AXW)"
+  },
+  {
+   "code": "AXY",
+   "gb": "后续标准预留(AXY 至 AXZ)",
+   "zm": "后续标准预留 (AXY至AXZ)"
+  },
+  {
+   "code": "AYC",
+   "gb": "IT 系统",
+   "zm": "IT系统"
+  },
+  {
+   "code": "AYF",
+   "gb": "后续标准预留 (AYF 至 AYP)",
+   "zm": "后续标准预留 (AYF至AYP)"
+  },
+  {
+   "code": "AYQ",
+   "gb": "可用 (AYQ 至 AYU)",
+   "zm": "可用(AYQ至AYU)"
+  },
+  {
+   "code": "AYV",
+   "gb": "后续标准预留 (AYV 至 AVZ)",
+   "zm": "后续标准预留 (AYV至AVZ)"
+  },
+  {
+   "code": "AZC",
+   "gb": "区域 (如果不是 AZF 或 AZG)",
+   "zm": "区域(如果不是AZF或AZG)"
+  },
+  {
+   "code": "AZD",
+   "gb": "后续标准预留 (AZD 至 AZE)",
+   "zm": "后续标准预留 (AZD至AZE)"
+  },
+  {
+   "code": "AZH",
+   "gb": "后续标准预留 (AZH 至 AZP)",
+   "zm": "后续标准预留 (AZH至AZP)"
+  },
+  {
+   "code": "AZQ",
+   "gb": "可用 (AZQ 至 AZU)",
+   "zm": "可用(AZQ至AZU)"
+  },
+  {
+   "code": "AZV",
+   "gb": "后续标准预留 (AZV 至 AZZ)",
+   "zm": "后续标准预留 (AZV至AZZ)"
+  },
+  {
+   "code": "BB",
+   "gb": "中压主供电系统 1",
+   "zm": "中压主供电系统1"
+  },
+  {
+   "code": "BBA",
+   "gb": "中压主供电系统 1, 电压等级 1",
+   "zm": "中压主供电系统1,电压等级1"
+  },
+  {
+   "code": "BBB",
+   "gb": "中压主供电系统 1, 电压等级 2",
+   "zm": "中压主供电系统1,电压等级2"
+  },
+  {
+   "code": "BBC",
+   "gb": "后续标准预留 (BBC 至 BBR)",
+   "zm": "后续标准预留 (BBC至BBR)"
+  },
+  {
+   "code": "BBS",
+   "gb": "中压主供电系统 1 高层级任务的装置系统",
+   "zm": "中压主供电系统1高层级任务的装置系统"
+  },
+  {
+   "code": "BBU",
+   "gb": "后续标准预留 (BBU 至 BBW)",
+   "zm": "后续标准预留 (BBU至BBW)"
+  },
+  {
+   "code": "BC",
+   "gb": "中压主供电系统 2",
+   "zm": "中压主供电系统2"
+  },
+  {
+   "code": "BCA",
+   "gb": "中压主供电系统 2, 电压等级 1",
+   "zm": "中压主供电系统2,电压等级1"
+  },
+  {
+   "code": "BCB",
+   "gb": "中压主供电系统 2, 电压等级 2",
+   "zm": "中压主供电系统2,电压等级2"
+  },
+  {
+   "code": "BCC",
+   "gb": "后续标准预留 (BCC 至 BCR)",
+   "zm": "后续标准预留 (BCC至BCR)"
+  },
+  {
+   "code": "BCS",
+   "gb": "中压主供电系统 2 高层级任务的装置系统",
+   "zm": "中压主供电系统2高层级任务的装置系统"
+  },
+  {
+   "code": "BCV",
+   "gb": "后续标准预留 (BCV 至 BCW)",
+   "zm": "后续标准预留 (BCV至BCW)"
+  },
+  {
+   "code": "BDA",
+   "gb": "用于安全服务的中压供电系统，电压等级 1",
+   "zm": "用于安全服务的中压供电系统，电压等级1"
+  },
+  {
+   "code": "BDB",
+   "gb": "用于安全服务的中压供电系统，电压等级 2",
+   "zm": "用于安全服务的中压供电系统，电压等级2"
+  },
+  {
+   "code": "BDC",
+   "gb": "后续标准预留（BDC 至 BDR）",
+   "zm": "后续标准预留 (BDC至BDR)"
+  },
+  {
+   "code": "BF",
+   "gb": "低压主供电系统 1",
+   "zm": "低压主供电系统1"
+  },
+  {
+   "code": "BFA",
+   "gb": "低压主供电系统 1, 电压等级 1",
+   "zm": "低压主供电系统1,电压等级1"
+  },
+  {
+   "code": "BFB",
+   "gb": "低压主供电系统 1, 电压等级 2",
+   "zm": "低压主供电系统1,电压等级2"
+  },
+  {
+   "code": "BFC",
+   "gb": "低压主供电系统 1, 电压等级 3",
+   "zm": "低压主供电系统1,电压等级3"
+  },
+  {
+   "code": "BFD",
+   "gb": "后续标准预留 (BFD 至 BFR)",
+   "zm": "后续标准预留 (BFD至BFR)"
+  },
+  {
+   "code": "BFS",
+   "gb": "低压主供电系统 1 高层级任务的装置系统",
+   "zm": "低压主供电系统1高层级任务的装置系统"
+  },
+  {
+   "code": "BFU",
+   "gb": "后续标准预留 (BFU 至 BFW)",
+   "zm": "后续标准预留 (BFU至BFW)"
+  },
+  {
+   "code": "BG",
+   "gb": "低压主供电系统 2",
+   "zm": "低压主供电系统2"
+  },
+  {
+   "code": "BGA",
+   "gb": "低压主供电系统 2, 电压等级 1",
+   "zm": "低压主供电系统2,电压等级1"
+  },
+  {
+   "code": "BGB",
+   "gb": "低压主供电系统 2, 电压等级 2",
+   "zm": "低压主供电系统2,电压等级2"
+  },
+  {
+   "code": "BGC",
+   "gb": "低压主供电系统 2, 电压等级 3",
+   "zm": "低压主供电系统2,电压等级3"
+  },
+  {
+   "code": "BGD",
+   "gb": "后续标准预留(BGD 至 BGR)",
+   "zm": "后续标准预留 (BGD至BGR)"
+  },
+  {
+   "code": "BGS",
+   "gb": "低压主供电系统 2 高层级任务的装置系统",
+   "zm": "低压主供电系统2高层级任务的装置系统"
+  },
+  {
+   "code": "BGU",
+   "gb": "后续标准预留(BGU 至 BGW)",
+   "zm": "后续标准预留 (BGU至BGW)"
+  },
+  {
+   "code": "BH",
+   "gb": "低压主供电系统 3",
+   "zm": "低压主供电系统3"
+  },
+  {
+   "code": "BHA",
+   "gb": "低压主供电系统 3, 电压等级 1",
+   "zm": "低压主供电系统3,电压等级1"
+  },
+  {
+   "code": "BHB",
+   "gb": "低压主供电系统 3, 电压等级 2",
+   "zm": "低压主供电系统3,电压等级2"
+  },
+  {
+   "code": "BHC",
+   "gb": "低压主供电系统 3, 电压等级 3",
+   "zm": "低压主供电系统3,电压等级3"
+  },
+  {
+   "code": "BHD",
+   "gb": "后续标准预留(BHD 至 BHR)",
+   "zm": "后续标准预留 (BHD至BHR)"
+  },
+  {
+   "code": "BHS",
+   "gb": "低压主供电系统 3 高层级任务的装置系统",
+   "zm": "低压主供电系统3高层级任务的装置系统"
+  },
+  {
+   "code": "BHU",
+   "gb": "后续标准预留(BHU 至 BHW)",
+   "zm": "后续标准预留 (BHU至BHW)"
+  },
+  {
+   "code": "BK",
+   "gb": "用于安全服务的低压供电系统 1",
+   "zm": "用于安全服务的低压供电系统1"
+  },
+  {
+   "code": "BKA",
+   "gb": "用于安全服务的低压供电系统 1, 电压等级 1",
+   "zm": "用于安全服务的低压供电系统1,电压等级1"
+  },
+  {
+   "code": "BKB",
+   "gb": "用于安全服务的低压供电系统 1, 电压等级 2",
+   "zm": "用于安全服务的低压供电系统1,电压等级2"
+  },
+  {
+   "code": "BKC",
+   "gb": "用于安全服务的低压供电系统 1, 电压等级 3",
+   "zm": "用于安全服务的低压供电系统1,电压等级3"
+  },
+  {
+   "code": "BKD",
+   "gb": "后续标准预留 (BKD 至 BKR)",
+   "zm": "后续标准预留 (BKD至BKR)"
+  },
+  {
+   "code": "BKS",
+   "gb": "用于安全服务的低压供电系统 1 高层级任务的装置系统",
+   "zm": "用于安全服务的低压供电系统1高层级任务的装置系统"
+  },
+  {
+   "code": "BKV",
+   "gb": "用于安全服务的电源 1",
+   "zm": "用于安全服务的电源1"
+  },
+  {
+   "code": "BL",
+   "gb": "用于安全服务的低压供电系统 2",
+   "zm": "用于安全服务的低压供电系统2"
+  },
+  {
+   "code": "BLA",
+   "gb": "用于安全服务的低压供电系统 2, 电压等级 1",
+   "zm": "用于安全服务的低压供电系统2,电压等级1"
+  },
+  {
+   "code": "BLB",
+   "gb": "用于安全服务的低压供电系统 2, 电压等级 2",
+   "zm": "用于安全服务的低压供电系统2,电压等级2"
+  },
+  {
+   "code": "BLC",
+   "gb": "用于安全服务的低压供电系统 2, 电压等级 3",
+   "zm": "用于安全服务的低压供电系统2,电压等级3"
+  },
+  {
+   "code": "BLD",
+   "gb": "后续标准预留(BLD 至 BLR)",
+   "zm": "后续标准预留 (BLD至BLR)"
+  },
+  {
+   "code": "BLS",
+   "gb": "用于安全服务的低压供电系统 2 高层级任务的装置系统",
+   "zm": "用于安全服务的低压供电系统2高层级任务的装置系统"
+  },
+  {
+   "code": "BLV",
+   "gb": "用于安全服务的电源 2",
+   "zm": "用于安全服务的电源2"
+  },
+  {
+   "code": "BMD",
+   "gb": "后续标准预留(BMD至BMR)",
+   "zm": "后续标准预留 (BMD至BMR)"
+  },
+  {
+   "code": "BMV",
+   "gb": "后续标准预留(BMV 至 BMX)",
+   "zm": "后续标准预留 (BMV至BMX)"
+  },
+  {
+   "code": "BPA",
+   "gb": "低压直流主供电系统, 电压等级 1",
+   "zm": "低压直流主供电系统，电压等级1"
+  },
+  {
+   "code": "BPB",
+   "gb": "低压直流主供电系统, 电压等级 2",
+   "zm": "低压直流主供电系统，电压等级2"
+  },
+  {
+   "code": "BPC",
+   "gb": "低压直流主供电系统, 电压等级 3",
+   "zm": "低压直流主供电系统，电压等级3"
+  },
+  {
+   "code": "BPD",
+   "gb": "后续标准预留(BPD 至 BPR)",
+   "zm": "后续标准预留 (BPD至BPR)"
+  },
+  {
+   "code": "BPW",
+   "gb": "后续标准预留(BPW 至 BPX)",
+   "zm": "后续标准预留 (BPW至BPX)"
+  },
+  {
+   "code": "BQ",
+   "gb": "用于安全服务的低压直流供电系统 1",
+   "zm": "用于安全服务的低压直流供电系统1"
+  },
+  {
+   "code": "BQA",
+   "gb": "用于安全服务的低压直流供电系统 1, 电压等级 1",
+   "zm": "用于安全服务的低压直流供电系统1,电压等级1"
+  },
+  {
+   "code": "BQB",
+   "gb": "用于安全服务的低压直流供电系统 1, 电压等级 2",
+   "zm": "用于安全服务的低压直流供电系统1,电压等级2"
+  },
+  {
+   "code": "BQC",
+   "gb": "用于安全服务的低压直流供电系统 1,电压等级 3",
+   "zm": "用于安全服务的低压直流供电系统1,电压等级3"
+  },
+  {
+   "code": "BQD",
+   "gb": "后续标准预留(BQD 至 BQR)",
+   "zm": "后续标准预留 (BQD至BQR)"
+  },
+  {
+   "code": "BQS",
+   "gb": "用于安全服务的低压直流供电系统 1 高层级任务的装置系统",
+   "zm": "用于安全服务的低压直流供电系统1高层级任务的装置系统"
+  },
+  {
+   "code": "BQW",
+   "gb": "后续标准预留(BQW,BQX)",
+   "zm": "后续标准预留 (BQW、BQX)"
+  },
+  {
+   "code": "BR",
+   "gb": "用于安全服务的低压直流供电系统 2",
+   "zm": "用于安全服务的低压直流供电系统2"
+  },
+  {
+   "code": "BRA",
+   "gb": "用于安全服务的低压直流供电系统 2,电压等级 1",
+   "zm": "用于安全服务的低压直流供电系统2,电压等级1"
+  },
+  {
+   "code": "BRB",
+   "gb": "用于安全服务的低压直流供电系统 2,电压等级 2",
+   "zm": "用于安全服务的低压直流供电系统2,电压等级2"
+  },
+  {
+   "code": "BRC",
+   "gb": "用于安全服务的低压直流供电系统 2,电压等级 3",
+   "zm": "用于安全服务的低压直流供电系统2,电压等级3"
+  },
+  {
+   "code": "BRD",
+   "gb": "后续标准预留(BRD 至 BRR)",
+   "zm": "后续标准预留 (BRD至BRR)"
+  },
+  {
+   "code": "BRS",
+   "gb": "用于安全服务的低压直流供电系统 2 高层级任务的装置系统",
+   "zm": "用于安全服务的低压直流供电系统2高层级任务的装置系统"
+  },
+  {
+   "code": "BRW",
+   "gb": "后续标准预留(BRW 至 BRX)",
+   "zm": "后续标准预留 (BRW至BRX)"
+  },
+  {
+   "code": "BSC",
+   "gb": "后续标准预留(BSC 至 BSE)",
+   "zm": "后续标准预留 (BSC至BSE)"
+  },
+  {
+   "code": "BSG",
+   "gb": "后续标准预留(BSG 至 BSJ)",
+   "zm": "后续标准预留 (BSG至BSJ)"
+  },
+  {
+   "code": "BSL",
+   "gb": "后续标准预留(BSL 至 BSN)",
+   "zm": "后续标准预留 (BSL至BSN)"
+  },
+  {
+   "code": "BSQ",
+   "gb": "可用(BSQ 至 BSU)",
+   "zm": "可用(BSQ至BSU)"
+  },
+  {
+   "code": "BSX",
+   "gb": "后续标准预留(BSX 至 BSZ)",
+   "zm": "后续标准预留 (BSX至BSZ)"
+  },
+  {
+   "code": "BXB",
+   "gb": "后续标准预留(BXB 至 BXP)",
+   "zm": "后续标准预留 (BXB至BXP)"
+  },
+  {
+   "code": "BXQ",
+   "gb": "可用(BXQ 至 BXU)",
+   "zm": "可用(BXQ至BXU)"
+  },
+  {
+   "code": "BXV",
+   "gb": "后续标准预留(BXV 至 BXZ)",
+   "zm": "后续标准预留 (BXV至BXZ)"
+  },
+  {
+   "code": "BYB",
+   "gb": "后续标准预留(BYB 至 BYP)",
+   "zm": "后续标准预留 (BYB至BYP)"
+  },
+  {
+   "code": "BYQ",
+   "gb": "可用(BYQ 至 BYU)",
+   "zm": "可用(BYQ至BYU)"
+  },
+  {
+   "code": "BYV",
+   "gb": "后续标准预留(BYV 至 BYZ)",
+   "zm": "后续标准预留 (BYV至BYZ)"
+  },
+  {
+   "code": "C",
+   "gb": "控制和管理系统",
+   "zm": "储能及物资储备系统"
+  },
+  {
+   "code": "CAA",
+   "gb": "过程自动化(CAA 至 CAP)",
+   "zm": "过程自动化 (CAA至CAP)"
+  },
+  {
+   "code": "CAQ",
+   "gb": "可用(CAQ 至 CAR)",
+   "zm": "可用(CAQ至CAR)"
+  },
+  {
+   "code": "CAT",
+   "gb": "可用(CAT 至 CAU)",
+   "zm": "可用(CAT至CAU)"
+  },
+  {
+   "code": "CAV",
+   "gb": "后续标准预留(CAV 至 CAZ)",
+   "zm": "后续标准预留 (CAV至CAZ)"
+  },
+  {
+   "code": "CBA",
+   "gb": "操作和监控(CBA 至 CBP)",
+   "zm": "DCS、DEH 操作员站 /辅网操作员站/电 气操作员站/值长 站等"
+  },
+  {
+   "code": "CBQ",
+   "gb": "可用(CBQ 至 CBR)",
+   "zm": "可用(CBQ至CBR)"
+  },
+  {
+   "code": "CBT",
+   "gb": "可用 (CBT 至 CBU)",
+   "zm": "可用(CBT至CBU)"
+  },
+  {
+   "code": "CBV",
+   "gb": "后续标准预留 (CBV 至 CBZ)",
+   "zm": "后续标准预留 (CBV至CBZ)"
+  },
+  {
+   "code": "CCA",
+   "gb": "自动化系统 (CCA 至 CCP)",
+   "zm": "锅炉火检机柜/炉 管泄漏/飞灰含碳/ 风粉在线机柜等"
+  },
+  {
+   "code": "CCQ",
+   "gb": "可用 (CCQ 至 CCR)",
+   "zm": "可用(CCQ至CCR)"
+  },
+  {
+   "code": "CCT",
+   "gb": "可用 (CCT 至 CCU)",
+   "zm": "可用(CCT至CCU)"
+  },
+  {
+   "code": "CCV",
+   "gb": "后续标准预留 (CCV 至 CCZ)",
+   "zm": "后续标准预留 (CCV至CCZ)"
+  },
+  {
+   "code": "CDA",
+   "gb": "诊断系统 (CDA 至 CDP)",
+   "zm": "诊断系统(CDA至CDP)"
+  },
+  {
+   "code": "CDQ",
+   "gb": "可用 (CDQ 至 CDR)",
+   "zm": "可用(CDQ至CDR)"
+  },
+  {
+   "code": "CDT",
+   "gb": "可用 (CDT 至 CDU)",
+   "zm": "可用(CDT至CDU)"
+  },
+  {
+   "code": "CDV",
+   "gb": "后续标准预留 (CDV 至 CDZ)",
+   "zm": "后续标准预留 (CDV至CDZ)"
+  },
+  {
+   "code": "CEA",
+   "gb": "工程系统 (CEA 至 CEP)",
+   "zm": "工程系统(CEA至CEP)"
+  },
+  {
+   "code": "CEQ",
+   "gb": "可用 (CEQ 至 CER)",
+   "zm": "可用(CEQ至CER)"
+  },
+  {
+   "code": "CET",
+   "gb": "可用 (CET 至 CEU)",
+   "zm": "可用(CET至CEU)"
+  },
+  {
+   "code": "CEV",
+   "gb": "后续标准预留 (CEV 至 CEZ)",
+   "zm": "后续标准预留 (CEV至CEZ)"
+  },
+  {
+   "code": "CFA",
+   "gb": "数据传输 (CFA 至 CFR)",
+   "zm": "数据传输(CFA至CFR)"
+  },
+  {
+   "code": "CFU",
+   "gb": "远程控制系统 (包含远程测量) (CFU 至 CFW)",
+   "zm": "远程控制系统(包含远程测量)(CFU至CFW)"
+  },
+  {
+   "code": "CFX",
+   "gb": "后续标准预留 (CFX 至 CFZ)",
+   "zm": "后续标准预留 (CFX至CFZ)"
+  },
+  {
+   "code": "CJA",
+   "gb": "优化 ( CJA 至 CJP)",
+   "zm": "优化(CJA至CJP)"
+  },
+  {
+   "code": "CJQ",
+   "gb": "可用 ( CJQ 至 CJR)",
+   "zm": "可用(CJQ至CJR)"
+  },
+  {
+   "code": "CJT",
+   "gb": "可用 ( CJT 至 CJU)",
+   "zm": "可用(CJT至CJU)"
+  },
+  {
+   "code": "CJV",
+   "gb": "后续标准预留 (CJV 至 CJZ)",
+   "zm": "后续标准预留 (CJV至CJZ)"
+  },
+  {
+   "code": "CKA",
+   "gb": "火警系统",
+   "zm": "火灾报警控制盘"
+  },
+  {
+   "code": "CKB",
+   "gb": "气体报警系统",
+   "zm": "气体报警系统机柜"
+  },
+  {
+   "code": "CKC",
+   "gb": "视频监控",
+   "zm": "视频安防机柜"
+  },
+  {
+   "code": "CKD",
+   "gb": "报警系统（声/光）",
+   "zm": "报警系统(声/光)"
+  },
+  {
+   "code": "CKE",
+   "gb": "后续标准预留(CKE 至 CKG)",
+   "zm": "后续标准预留 (CKE至CKG)"
+  },
+  {
+   "code": "CKK",
+   "gb": "后续标准预留(CKK 至 CKP)",
+   "zm": "后续标准预留 (CKK至CKP)"
+  },
+  {
+   "code": "CKQ",
+   "gb": "可用（CKQ 至 CKR）",
+   "zm": "可用(CKQ至CKR)"
+  },
+  {
+   "code": "CKT",
+   "gb": "可用（CKT 至 CKU）",
+   "zm": "可用(CKT至CKU)"
+  },
+  {
+   "code": "CKV",
+   "gb": "后续标准预留(CKV 至 CKZ)",
+   "zm": "后续标准预留 (CKV至CKZ)"
+  },
+  {
+   "code": "CM",
+   "gb": "操作系统",
+   "zm": "操作管理系统"
+  },
+  {
+   "code": "CMA",
+   "gb": "操作系统(CMA 至 CMP)",
+   "zm": "操作管理系统 (CMA至CMP)"
+  },
+  {
+   "code": "CMQ",
+   "gb": "可用(CMQ 至 CMR)",
+   "zm": "可用(CMQ至CMR)"
+  },
+  {
+   "code": "CMT",
+   "gb": "可用(CMT 至 CMU)",
+   "zm": "可用(CMT至CMU)"
+  },
+  {
+   "code": "CMV",
+   "gb": "后续标准预留(CMV 至 CMZ)",
+   "zm": "后续标准预留 (CMV至CMZ)"
+  },
+  {
+   "code": "CPA",
+   "gb": "企业管理系统(CPA 至 CPP)",
+   "zm": "企业管理系统 (CPA至CPP)"
+  },
+  {
+   "code": "CPQ",
+   "gb": "可用(CPQ 至 CPR)",
+   "zm": "可用(CPQ至CPR)"
+  },
+  {
+   "code": "CPT",
+   "gb": "可用 (CPT 至 CPU)",
+   "zm": "可用(CPT至CPU)"
+  },
+  {
+   "code": "CPV",
+   "gb": "后续标准预留 (CPV 至 CPZ)",
+   "zm": "后续标准预留 (CPV至CPZ)"
+  },
+  {
+   "code": "CQA",
+   "gb": "可用 (CQA 至 CQZ)",
+   "zm": "可用(CQA至CQZ)"
+  },
+  {
+   "code": "CRA",
+   "gb": "可用 (CRA 至 CRZ)",
+   "zm": "可用(CRA至CRZ)"
+  },
+  {
+   "code": "CSB",
+   "gb": "可用 (CSB 至 CSD)",
+   "zm": "可用(CSB至CSD)"
+  },
+  {
+   "code": "CSF",
+   "gb": "可用 (CSF 至 CSZ)",
+   "zm": "可用(CSF至CSZ)"
+  },
+  {
+   "code": "CTA",
+   "gb": "可用 (CTA 至 CTZ)",
+   "zm": "可用(CTA至CTZ)"
+  },
+  {
+   "code": "CUA",
+   "gb": "可用 (CUA 至 CUZ)",
+   "zm": "空调、采暖通风制 冷系统"
+  },
+  {
+   "code": "DAE",
+   "gb": "后续标准预留(DAE 至 DAZ)",
+   "zm": "后续标准预留 (DAE至DAZ)"
+  },
+  {
+   "code": "DBE",
+   "gb": "后续标准预留(DBE 至 DBZ)",
+   "zm": "后续标准预留 (DBE至DBZ)"
+  },
+  {
+   "code": "DCE",
+   "gb": "后续标准预留(DCE 至 DCZ)",
+   "zm": "后续标准预留 (DCE至DCZ)"
+  },
+  {
+   "code": "DUE",
+   "gb": "后续标准预留(DUE 至 DUQ)",
+   "zm": "后续标准预留 (DUE至DUQ)"
+  },
+  {
+   "code": "DUR",
+   "gb": "可用 (DUR 至 DUU)",
+   "zm": "可用(DUR至DUU)"
+  },
+  {
+   "code": "DUV",
+   "gb": "后续标准预留 (DUV 至 DUZ)",
+   "zm": "后续标准预留 (DUV至DUZ)"
+  },
+  {
+   "code": "E",
+   "gb": "化石能源及可再生能源(包括残余物处理)的处理和供应",
+   "zm": "化石能源及可再生能源(包括残余物处理在内)的处理和供应"
+  },
+  {
+   "code": "EAE",
+   "gb": "燃料库系统,贮存区",
+   "zm": "燃料库系统，贮存区"
+  },
+  {
+   "code": "EAG",
+   "gb": "后续标准预留(EAG 至 EAU)",
+   "zm": "后续标准预留 (EAG至EAU)"
+  },
+  {
+   "code": "EB",
+   "gb": "固体燃料处理 (包括残余物处理)",
+   "zm": "固体燃料处理(包括残余物处理)"
+  },
+  {
+   "code": "EBJ",
+   "gb": "干燃料（包括后冷却）输送系统",
+   "zm": "干燃料(包括后冷却)输送系统"
+  },
+  {
+   "code": "EBN",
+   "gb": "后续标准预留(EBN 至 EBP)",
+   "zm": "后续标准预留 (EBN至EBP)"
+  },
+  {
+   "code": "EBS",
+   "gb": "后续标准预留(EAS 至 EAU)",
+   "zm": "后续标准预留 (EAS至EAU)"
+  },
+  {
+   "code": "ECF",
+   "gb": "后续标准预留(ECF至ECS)",
+   "zm": "后续标准预留 (ECF至ECS)"
+  },
+  {
+   "code": "ECT",
+   "gb": "后续标准预留(ECT至ECU)",
+   "zm": "后续标准预留 (ECT至ECU)"
+  },
+  {
+   "code": "EFC",
+   "gb": "后续标准预留(EFC至EFU)",
+   "zm": "后续标准预留 (EFC至EFU)"
+  },
+  {
+   "code": "EG",
+   "gb": "液体燃料的供应 (包括残余物处理)",
+   "zm": "液体燃料的供应(包括残余物处理)"
+  },
+  {
+   "code": "EGA",
+   "gb": "传递系统 (包含管道)",
+   "zm": "传递系统(包含管道)"
+  },
+  {
+   "code": "EGF",
+   "gb": "临时贮存 (例如日用箱)",
+   "zm": "临时贮存(例如日用箱)"
+  },
+  {
+   "code": "EGH",
+   "gb": "后续标准预留 (EGH 至 EGQ)",
+   "zm": "后续标准预留 (EGH至EGQ)"
+  },
+  {
+   "code": "EH",
+   "gb": "液体燃料的处理 (包括残余物处理)",
+   "zm": "液体燃料的处理(包括残余物处理)"
+  },
+  {
+   "code": "EHB",
+   "gb": "后续标准预留 (EHB 至 EHP)",
+   "zm": "后续标准预留(EHB至EHP)"
+  },
+  {
+   "code": "EHQ",
+   "gb": "可用 (EHQ 至 EHU)",
+   "zm": "可用(EHQ至EHU)"
+  },
+  {
+   "code": "EK",
+   "gb": "气体燃料的供应 (包括残余物处理)",
+   "zm": "气体燃料的供应(包括残余物处理)"
+  },
+  {
+   "code": "EKE",
+   "gb": "机械清洗,洗涤",
+   "zm": "机械清洗，洗涤"
+  },
+  {
+   "code": "EKJ",
+   "gb": "后续标准预留(EKJ 至 EKQ)",
+   "zm": "后续标准预留(EKJ至EKQ)"
+  },
+  {
+   "code": "EL",
+   "gb": "气体燃料处理 (包括残余物处理)",
+   "zm": "气体燃料处理(包括残余物处理)"
+  },
+  {
+   "code": "ELC",
+   "gb": "水解 (如“COS” 水解/“HCN”水解) (包括预加热)",
+   "zm": "水解(如“COS”水解/“HCN”水解)(包括预加热)"
+  },
+  {
+   "code": "ELD",
+   "gb": "一氧化碳转换 (包括预加热)",
+   "zm": "一氧化碳转换(包括预加热)"
+  },
+  {
+   "code": "ELF",
+   "gb": "分离系统 (包括 $ \\mathrm{H}_{2}\\mathrm{S} $预冷)",
+   "zm": "分离系统(包括H₂S预冷)"
+  },
+  {
+   "code": "ELG",
+   "gb": "分离系统 (包括 $ \\mathrm{CO}_{2} $预冷)",
+   "zm": "分离系统(包括CO₂预冷)"
+  },
+  {
+   "code": "ELH",
+   "gb": "后续标准预留 (ELH 至 ELU)",
+   "zm": "后续标准预留(ELH至ELU)"
+  },
+  {
+   "code": "EN",
+   "gb": "$ CO_2 $ 调节",
+   "zm": "CO₂调节"
+  },
+  {
+   "code": "ENA",
+   "gb": "$ CO_2 $ 预清洗",
+   "zm": "CO₂预清洗"
+  },
+  {
+   "code": "ENB",
+   "gb": "可燃元素的氧化 (如 $ CO $, $ H_2 $)",
+   "zm": "可燃元素的氧化(如CO、H₂)"
+  },
+  {
+   "code": "ENC",
+   "gb": "$ CO_2 $ 原气压缩",
+   "zm": "CO₂原气压缩"
+  },
+  {
+   "code": "END",
+   "gb": "$ CO_2 $ 原气冷却和清洗(包括再生)",
+   "zm": "CO₂原气冷却和清洗(包括再生)"
+  },
+  {
+   "code": "ENG",
+   "gb": "后续标准预留(ENG 至 ENT)",
+   "zm": "后续标准预留(ENG至ENT)"
+  },
+  {
+   "code": "ENU",
+   "gb": "$ CO_{{2}} $ 储罐/缓冲系统",
+   "zm": "CO₂储罐/缓冲系统"
+  },
+  {
+   "code": "EQA",
+   "gb": "可用 (EQA 至 EQZ)",
+   "zm": "可用(EQA至EQZ)"
+  },
+  {
+   "code": "ERD",
+   "gb": "后续标准预留(ERD 至 ERU)",
+   "zm": "后续标准预留(ERD至ERU)"
+  },
+  {
+   "code": "ESA",
+   "gb": "可用（ESA 至 ESZ）",
+   "zm": "可用(ESA至ESZ)"
+  },
+  {
+   "code": "ET",
+   "gb": "燃烧产热后残余物排除（灰渣系统）",
+   "zm": "燃烧产热后残余物排除(灰渣系统)"
+  },
+  {
+   "code": "ETQ",
+   "gb": "输送空气的产生和分配",
+   "zm": "输送空气的产生和分配 系统"
+  },
+  {
+   "code": "ETR",
+   "gb": "后续标准预留(ETR 至 ETU)",
+   "zm": "后续标准预留(ETR至ETU)"
+  },
+  {
+   "code": "EUG",
+   "gb": "后续标准预留(EUG 至 EUQ)",
+   "zm": "后续标准预留(EUG至EUQ)"
+  },
+  {
+   "code": "EUR",
+   "gb": "后续标准预留(EUR 至 EUU)",
+   "zm": "后续标准预留(EUR至EUU)"
+  },
+  {
+   "code": "FAH",
+   "gb": "可重复使用的活化系统的临时贮存,如果与 FAB 分设",
+   "zm": "可重复使用的活化系统的临时贮存，如果与FAB分设"
+  },
+  {
+   "code": "FAM",
+   "gb": "燃料组件贮存部件表面污染物去除系统(参见用于净化系统的 FK )",
+   "zm": "燃料组件贮存部件表面污染物去除系统(参见用于净化系统的FK)"
+  },
+  {
+   "code": "FB",
+   "gb": "燃料组件（包括增殖组件和反射层组件）和其他反应堆堆芯内部构件的处理",
+   "zm": "燃料组件(包括增殖组件和反射层组件)和其他反应堆堆芯内部构件的处理"
+  },
+  {
+   "code": "FBA",
+   "gb": "燃料组件的检测系统（还包括增殖组件和反射层组件）",
+   "zm": "燃料组件的检测系统(还包括增殖组件和反射层组件)"
+  },
+  {
+   "code": "FBC",
+   "gb": "燃料组件的清洗系统（还包括增殖组件和反射层组件）(参见用于净化系统的FK)",
+   "zm": "燃料组件的清洗系统(还包括增殖组件和反射层组件)(参见用于净化系统的FK)"
+  },
+  {
+   "code": "FBD",
+   "gb": "其他反应堆堆芯内部构件的检测系统（参见关于燃料、增殖和反射层组件的FBA）",
+   "zm": "其他反应堆堆芯内部构件的检测系统(参见关于燃料、增殖和反射层组件的FBA)"
+  },
+  {
+   "code": "FBE",
+   "gb": "其他反应堆堆芯内部构件检修系统(燃料、增殖和反射层组件见 FBB)",
+   "zm": "其他反应堆堆芯内部构件检修系统(燃料、增殖和反射层组件见FBB)"
+  },
+  {
+   "code": "FBF",
+   "gb": "其他反应堆堆芯内部构件清洗系统(燃料、增殖和反射层组件见 FBC,净化系统见 FK)",
+   "zm": "其他反应堆堆芯内部构件清洗系统(燃料、增殖和反射层组件见FBC,净化系统见FK)"
+  },
+  {
+   "code": "FBG",
+   "gb": "后续标准预留(FBG 至 FBP)",
+   "zm": "后续标准预留(FBG至FBP)"
+  },
+  {
+   "code": "FCC",
+   "gb": "反应堆堆内构件的更换系统(这是从 FCA 和 FCB 中独立分出的)",
+   "zm": "反应堆堆内构件的更换系统(这是从FCA和FCB中独立分出的)"
+  },
+  {
+   "code": "FCD",
+   "gb": "乏燃料/辐照过的燃料组件及其他放射性部件贮存处理系统（这是从FCA、FCB和FCC中独立分出的）",
+   "zm": "乏燃料/辐照过的燃料组件及其他放射性部件贮存处理系统(这是从FCA、FCB和FCC中独立分出的)"
+  },
+  {
+   "code": "FCM",
+   "gb": "后续标准预留(FCM 至 FCP)",
+   "zm": "后续标准预留(FCM至FCP)"
+  },
+  {
+   "code": "FDM",
+   "gb": "用于清除乏燃料组件的外部临时存储中的部件（包括燃料组件和燃料组件容器）上的表面污染物的清洁系统",
+   "zm": "用于清除乏燃料组件的外部临时存储中的部件(包括燃料组件和燃料组件容器)上的表面污染物的清洁系统"
+  },
+  {
+   "code": "FDN",
+   "gb": "后续标准预留(FDN 至 FDP)",
+   "zm": "后续标准预留(FDN至FDP)"
+  },
+  {
+   "code": "FEM",
+   "gb": "用于去除辐照增殖装置组件外部临时贮存中组件（包括燃料组件和燃料组件桶）表面污染物的清洁系统",
+   "zm": "用于去除辐照增殖装置组件外部临时贮存中组件(包括燃料组件和燃料组件桶)表面污染物的清洁系统"
+  },
+  {
+   "code": "FEN",
+   "gb": "后续标准预留（FEN 至 FEP）",
+   "zm": "后续标准预留(FEN至FEP)"
+  },
+  {
+   "code": "FHA",
+   "gb": "可用（FHA 至 FHF）",
+   "zm": "可用(FHA至FHF)"
+  },
+  {
+   "code": "FHK",
+   "gb": "后续标准预留(FHK 至 FHL)",
+   "zm": "后续标准预留(FHK至FHL)"
+  },
+  {
+   "code": "FHN",
+   "gb": "后续标准预留(FHN 至 FHP)",
+   "zm": "后续标准预留(FHN至FHP)"
+  },
+  {
+   "code": "FJA",
+   "gb": "反应堆容器的工具和安装系统（包括封头）",
+   "zm": "反应堆容器的工具和安装系统(包括封头)"
+  },
+  {
+   "code": "FJC",
+   "gb": "反应堆容器（和封头）的在役检查系统",
+   "zm": "反应堆容器(和封头)的在役检查系统"
+  },
+  {
+   "code": "FJG",
+   "gb": "后续标准预留(FJG 至 FJK)",
+   "zm": "后续标准预留(FJG至FJK)"
+  },
+  {
+   "code": "FJP",
+   "gb": "后续标准预留(FJP 至 FJZ)",
+   "zm": "后续标准预留(FJP至FJZ)"
+  },
+  {
+   "code": "FK",
+   "gb": "净化系统 (不包括用于排除燃料组件储存装置上表面污染的系统 FAM 和燃料组件清洁系统 FBC)",
+   "zm": "净化系统(不包括用于排除燃料组件储存装置上表面污染的系统FAM和燃料组件清洁系统FBC)"
+  },
+  {
+   "code": "FKA",
+   "gb": "可用 (FKA 至 FKP)",
+   "zm": "可用(FKA至FKP)"
+  },
+  {
+   "code": "FQA",
+   "gb": "可用（FQA 至 FQD）",
+   "zm": "可用(FQA至FQD)"
+  },
+  {
+   "code": "FQE",
+   "gb": "后续标准预留（FQE 至 FQQ）",
+   "zm": "后续标准预留(FQE至FQQ)"
+  },
+  {
+   "code": "FRA",
+   "gb": "可用（FRA 至 FRD）",
+   "zm": "可用(FRA至FRD)"
+  },
+  {
+   "code": "FRE",
+   "gb": "后续标准预留（FRE 至 FRP）",
+   "zm": "后续标准预留(FRE至FRP)"
+  },
+  {
+   "code": "FSA",
+   "gb": "可用（FSA 至 FSD）",
+   "zm": "可用(FSA至FSD)"
+  },
+  {
+   "code": "FSE",
+   "gb": "后续标准预留（FSE 至 FST）",
+   "zm": "后续标准预留(FSE至FST)"
+  },
+  {
+   "code": "FTA",
+   "gb": "可用 (FTA 至 FTD)",
+   "zm": "可用(FTA至FTD)"
+  },
+  {
+   "code": "FTE",
+   "gb": "后续标准预留 (FTE 至 FTT)",
+   "zm": "后续标准预留(FTE至FTT)"
+  },
+  {
+   "code": "FUA",
+   "gb": "可用（FUA 至 FUD）",
+   "zm": "可用(FUA至FUD)"
+  },
+  {
+   "code": "FUE",
+   "gb": "后续标准预留（FUE 至 FUU）",
+   "zm": "后续标准预留(FUE至FUU)"
+  },
+  {
+   "code": "FVA",
+   "gb": "可用（FVA 至 FVD）",
+   "zm": "可用(FVA至FVD)"
+  },
+  {
+   "code": "FVE",
+   "gb": "后续标准预留（FVE 至 FVV）",
+   "zm": "后续标准预留(FVE至FVV)"
+  },
+  {
+   "code": "FWA",
+   "gb": "可用（FWA 至 FWD）",
+   "zm": "可用(FWA至FWD)"
+  },
+  {
+   "code": "FWE",
+   "gb": "后续标准预留（FWE 至 FWU）",
+   "zm": "后续标准预留(FWE至FWU)"
+  },
+  {
+   "code": "FXA",
+   "gb": "可用（FXA 至 FXD）",
+   "zm": "可用(FXA至FXD)"
+  },
+  {
+   "code": "FXE",
+   "gb": "后续标准预留（FXE 至 FXZ）",
+   "zm": "后续标准预留(FXE至FXZ)"
+  },
+  {
+   "code": "FYA",
+   "gb": "可用（FYA 至 FYU）",
+   "zm": "可用(FYA至FYU)"
+  },
+  {
+   "code": "FYV",
+   "gb": "后续标准预留（FYV 至 FYZ）",
+   "zm": "后续标准预留(FYV至FYZ)"
+  },
+  {
+   "code": "G",
+   "gb": "水供应和处理",
+   "zm": "风力发电机组、光伏发电方阵"
+  },
+  {
+   "code": "GAA",
+   "gb": "抽取,机械清洗",
+   "zm": "抽取，机械清洗"
+  },
+  {
+   "code": "GAG",
+   "gb": "后续标准预留(GAG 至 GAP)",
+   "zm": "后续标准预留（GAG至GAP）"
+  },
+  {
+   "code": "GAQ",
+   "gb": "可用(GAQ 至 GAU)",
+   "zm": "可用(GAQ至GAU)"
+  },
+  {
+   "code": "GHE",
+   "gb": "后续标准预留(GHE 至 GHP)",
+   "zm": "后续标准预留（GHE至GHP）"
+  },
+  {
+   "code": "GHQ",
+   "gb": "可用(GHQ 至 GHU)",
+   "zm": "可用(GHQ至GHU)"
+  },
+  {
+   "code": "GHX",
+   "gb": "后续标准预留(GHX 至 GHZ)",
+   "zm": "后续标准预留（GHX至GHZ）"
+  },
+  {
+   "code": "GMB",
+   "gb": "可用(和结构相关)(GMB 至 GMZ)",
+   "zm": "可用(和结构相关)(GMB至GMZ)"
+  },
+  {
+   "code": "GTA",
+   "gb": "废水回收(可自由用到 GTU)",
+   "zm": "废水回收(可自由用到GTU)"
+  },
+  {
+   "code": "HAE",
+   "gb": "后续标准预留(HAE 至 HAF)",
+   "zm": "后续标准预留(HAE至HAF)"
+  },
+  {
+   "code": "HB",
+   "gb": "钢架,护板,蒸汽发生器内部",
+   "zm": "钢架，护板，蒸汽发生器内部"
+  },
+  {
+   "code": "HBF",
+   "gb": "后续标准预留(HBF 至 HBJ)",
+   "zm": "后续标准预留(HBF至HBJ)"
+  },
+  {
+   "code": "HBL",
+   "gb": "后续标准预留(HBL 至 HBP)",
+   "zm": "后续标准预留(HBL至HBP)"
+  },
+  {
+   "code": "HBQ",
+   "gb": "可用(HBQ 至 HBU)",
+   "zm": "可用(HBQ至HBU)"
+  },
+  {
+   "code": "HBV",
+   "gb": "后续标准预留(HBV 至 HBZ)",
+   "zm": "后续标准预留(HBV至HBZ)"
+  },
+  {
+   "code": "HF",
+   "gb": "煤仓,给煤机和制粉系统",
+   "zm": "煤仓，给煤机和制粉系统"
+  },
+  {
+   "code": "HFH",
+   "gb": "后续标准预留(HFH 至 HFR)",
+   "zm": "后续标准预留(HFH至HFR)"
+  },
+  {
+   "code": "HFS",
+   "gb": "可用(HFS 至 HFU)",
+   "zm": "可用(HFS至HFU)"
+  },
+  {
+   "code": "HHE",
+   "gb": "煤粉仓,煤粉输送和分配系统",
+   "zm": "煤粉仓，煤粉输送和分配系统"
+  },
+  {
+   "code": "HHH",
+   "gb": "其他燃料 1 的临时贮存、输送与分配系统",
+   "zm": "其他燃料1的临时贮存、输送与分配系统"
+  },
+  {
+   "code": "HJB",
+   "gb": "后续标准预留(HJB 至 HJD)",
+   "zm": "后续标准预留(HJB至HJD)"
+  },
+  {
+   "code": "HJE",
+   "gb": "煤粉仓,煤粉输送和分配系统",
+   "zm": "煤粉仓，煤粉输送和分配系统"
+  },
+  {
+   "code": "HJH",
+   "gb": "后续标准预留(HJH 至 HJK)",
+   "zm": "后续标准预留(HJH至HJK)"
+  },
+  {
+   "code": "HKB",
+   "gb": "后续标准预留(HKB 至 HKD)",
+   "zm": "后续标准预留(HKB至HKD)"
+  },
+  {
+   "code": "HKE",
+   "gb": "煤粉仓,煤粉输送和分配系统",
+   "zm": "煤粉仓，煤粉输送和分配系统"
+  },
+  {
+   "code": "HKH",
+   "gb": "后续标准预留(HKH 至 HKK)",
+   "zm": "后续标准预留(HKH至HKK)"
+  },
+  {
+   "code": "HLJ",
+   "gb": "后续标准预留(HLJ 至 HLP)",
+   "zm": "后续标准预留(HLJ至HLP)"
+  },
+  {
+   "code": "HLQ",
+   "gb": "可用 (HLQ 至 HLU)",
+   "zm": "可用(HLQ至HLU)"
+  },
+  {
+   "code": "HM",
+   "gb": "气体加热系统 (气体代替蒸汽作为加热介质)",
+   "zm": "气体加热系统(气体代替蒸汽作为加热介质)"
+  },
+  {
+   "code": "HMA",
+   "gb": "一级加热系统 (一级对流段)",
+   "zm": "一级加热系统(一级对流段)"
+  },
+  {
+   "code": "HMC",
+   "gb": "二级加热系统 (二级对流段)",
+   "zm": "二级加热系统(二级对流段)"
+  },
+  {
+   "code": "HME",
+   "gb": "后续标准预留(HME至 HMP)",
+   "zm": "后续标准预留(HME至HMP)"
+  },
+  {
+   "code": "HMQ",
+   "gb": "可用(HMQ至 HMU)",
+   "zm": "可用(HMQ至HMU)"
+  },
+  {
+   "code": "HQQ",
+   "gb": "可用 (HQQ 至 HQU)",
+   "zm": "可用(HQQ至HQU)"
+  },
+  {
+   "code": "J",
+   "gb": "核产热",
+   "zm": "核产热（省略）"
+  },
+  {
+   "code": "K",
+   "gb": "反应堆辅助系统",
+   "zm": "反应堆辅助系统（省略）"
+  },
+  {
+   "code": "LAA",
+   "gb": "给水贮存,除氧",
+   "zm": "给水贮存，除氧"
+  },
+  {
+   "code": "LAG",
+   "gb": "后续标准预留(LAG 至 LAU)",
+   "zm": "后续标准预留(LAG至LAU)"
+  },
+  {
+   "code": "LBM",
+   "gb": "后续标准预留(LBM 至 LBP)",
+   "zm": "后续标准预留(LBM至LBP)"
+  },
+  {
+   "code": "LCP",
+   "gb": "制冷冷凝水系统 (包括贮存和输送)",
+   "zm": "制冷冷凝水系统(包括贮存和输送)"
+  },
+  {
+   "code": "LCS",
+   "gb": "再热器疏水系统 (水分离器/再热器)",
+   "zm": "再热器疏水系统(水分离器/再热器)"
+  },
+  {
+   "code": "LE",
+   "gb": "低温朗肯循环 (典型循环)",
+   "zm": "低温朗肯循环(典型循环)"
+  },
+  {
+   "code": "LEE",
+   "gb": "后续标准预留(LEE 至 LEP)",
+   "zm": "后续标准预留(LEE至LEP)"
+  },
+  {
+   "code": "LEQ",
+   "gb": "可用(LEQ 至 LEU)",
+   "zm": "可用(LEQ至LEU)"
+  },
+  {
+   "code": "LJA",
+   "gb": "核蒸汽发生器事故给水系统 1",
+   "zm": "核蒸汽发生器事故给水系统1"
+  },
+  {
+   "code": "LJB",
+   "gb": "核蒸汽发生器事故给水系统 2",
+   "zm": "核蒸汽发生器事故给水系统2"
+  },
+  {
+   "code": "LJC",
+   "gb": "核蒸汽发生器事故给水系统 3",
+   "zm": "核蒸汽发生器事故给水系统3"
+  },
+  {
+   "code": "LJD",
+   "gb": "核蒸汽发生器事故给水系统 4",
+   "zm": "核蒸汽发生器事故给水系统4"
+  },
+  {
+   "code": "LJE",
+   "gb": "后续标准预留(LJE 至 LJJ)",
+   "zm": "后续标准预留(LJE至LJJ)"
+  },
+  {
+   "code": "LJK",
+   "gb": "核电蒸汽发生器给水侧事故给水系统 1",
+   "zm": "核电蒸汽发生器给水侧事故给水系统1"
+  },
+  {
+   "code": "LJL",
+   "gb": "核电蒸汽发生器给水侧事故给水系统 2",
+   "zm": "核电蒸汽发生器给水侧事故给水系统2"
+  },
+  {
+   "code": "LJM",
+   "gb": "核电蒸汽发生器给水侧事故给水系统 3",
+   "zm": "核电蒸汽发生器给水侧事故给水系统3"
+  },
+  {
+   "code": "LJN",
+   "gb": "核电蒸汽发生器给水侧事故给水系统 4",
+   "zm": "核电蒸汽发生器给水侧事故给水系统4"
+  },
+  {
+   "code": "LJP",
+   "gb": "后续标准预留(LJP 至 LJU)",
+   "zm": "后续标准预留(LJP至LJU)"
+  },
+  {
+   "code": "LNB",
+   "gb": "首级清洗、拦污系统（从上游水和尾水分离和收集杂物）",
+   "zm": "首级清洗、拦污系统(从上游水和尾水分离和收集杂物)"
+  },
+  {
+   "code": "LNJ",
+   "gb": "后续标准预留(LNJ 至 LNU)",
+   "zm": "后续标准预留(LNJ至LNU)"
+  },
+  {
+   "code": "LQH",
+   "gb": "后续标准预留(LQH 至 LQU)",
+   "zm": "后续标准预留(LQH至LQU)"
+  },
+  {
+   "code": "LRD",
+   "gb": "后续标准预留(LRD 至 LRF)",
+   "zm": "后续标准预留（LRD至LRF）"
+  },
+  {
+   "code": "LRH",
+   "gb": "后续标准预留(LRH 至 LRP)",
+   "zm": "后续标准预留（LRH至LRP）"
+  },
+  {
+   "code": "LRQ",
+   "gb": "可用(LRQ 至 LRU)",
+   "zm": "可用(LRQ至LRU)"
+  },
+  {
+   "code": "LSE",
+   "gb": "后续标准预留(LSE 至 LSK)",
+   "zm": "后续标准预留（LSE至LSK）"
+  },
+  {
+   "code": "LSM",
+   "gb": "后续标准预留(LSM 至 LSN)",
+   "zm": "后续标准预留（LSM至LSN）"
+  },
+  {
+   "code": "LSQ",
+   "gb": "可用(LSQ 至 LSU)",
+   "zm": "可用(LSQ至LSU)"
+  },
+  {
+   "code": "LSV",
+   "gb": "后续标准预留(LSV 至 LSZ)",
+   "zm": "后续标准预留（LSV至LSZ）"
+  },
+  {
+   "code": "LXA",
+   "gb": "后续标准预留(LXA 至 LXP)",
+   "zm": "后续标准预留（LXA至LXP）"
+  },
+  {
+   "code": "LXQ",
+   "gb": "可用(LXQ 至 LXU)",
+   "zm": "可用(LXQ至LXU)"
+  },
+  {
+   "code": "LXV",
+   "gb": "后续标准预留(LXV 至 LXZ)",
+   "zm": "后续标准预留（LXV至LXZ）"
+  },
+  {
+   "code": "LYA",
+   "gb": "后续标准预留(LYA 至 LYP)",
+   "zm": "后续标准预留（LYA至LYP）"
+  },
+  {
+   "code": "LYQ",
+   "gb": "可用(LYQ 至 LYU)",
+   "zm": "可用(LYQ至LYU)"
+  },
+  {
+   "code": "LYV",
+   "gb": "后续标准预留(LYV 至 LYZ)",
+   "zm": "后续标准预留（LYV至LYZ）"
+  },
+  {
+   "code": "MAE",
+   "gb": "后续标准预留(MAE 至 MAF)",
+   "zm": "后续标准预留（MAE至MAF）"
+  },
+  {
+   "code": "MAM",
+   "gb": "泄漏蒸汽系统(如果与 MAW 分设)",
+   "zm": "泄漏蒸汽系统（如果与MAW分设）"
+  },
+  {
+   "code": "MAN",
+   "gb": "汽机旁路系统(包括喷淋减温系统)",
+   "zm": "汽机旁路系统（包括喷淋减温系统）"
+  },
+  {
+   "code": "MAQ",
+   "gb": "排气系统(如果与 MAL 分设)",
+   "zm": "排气系统(如果与MAL分设)"
+  },
+  {
+   "code": "MAR",
+   "gb": "后续标准预留 (MAR 至 MAU)",
+   "zm": "后续标准预留（MAR至MAU）"
+  },
+  {
+   "code": "MBF",
+   "gb": "后续标准预留(MBF 至 MBG)",
+   "zm": "后续标准预留（MBF至MBG）"
+  },
+  {
+   "code": "MBN",
+   "gb": "燃料供应系统(液体)",
+   "zm": "燃料供应系统（液体）"
+  },
+  {
+   "code": "MBP",
+   "gb": "燃料供应系统(气体)",
+   "zm": "燃料供应系统（气体）"
+  },
+  {
+   "code": "MBT",
+   "gb": "燃气发生装置(含燃烧室)",
+   "zm": "燃气发生装置（含燃烧室）"
+  },
+  {
+   "code": "MDB",
+   "gb": "后续标准预留(MDB至MDJ)",
+   "zm": "后续标准预留（MDB至MDJ）"
+  },
+  {
+   "code": "MDM",
+   "gb": "后续标准预留(MDM 至 MDU)",
+   "zm": "后续标准预留（MDM至MDU）"
+  },
+  {
+   "code": "MEE",
+   "gb": "后续标准预留(MEE 至 MEF)",
+   "zm": "后续标准预留（ME至MEF）"
+  },
+  {
+   "code": "MEH",
+   "gb": "后续标准预留(MEH 至 MEJ)",
+   "zm": "后续标准预留（MEH至MEJ）"
+  },
+  {
+   "code": "MEM",
+   "gb": "后续标准预留(MEM 至 MER)",
+   "zm": "后续标准预留（MEM至MER）"
+  },
+  {
+   "code": "MET",
+   "gb": "后续标准预留(MET 至 MEU)",
+   "zm": "后续标准预留（MET至MEU）"
+  },
+  {
+   "code": "MFE",
+   "gb": "后续标准预留(MFE 至 MFF)",
+   "zm": "后续标准预留（MFE至MFF）"
+  },
+  {
+   "code": "MFH",
+   "gb": "后续标准预留(MFH 至 MFJ)",
+   "zm": "后续标准预留（MFH至MFJ）"
+  },
+  {
+   "code": "MFN",
+   "gb": "后续标准预留(MFN 至 MFR)",
+   "zm": "后续标准预留（MFN至MFR）"
+  },
+  {
+   "code": "MFT",
+   "gb": "后续标准预留(MFT 至 MFU)",
+   "zm": "后续标准预留（MFT至MFU）"
+  },
+  {
+   "code": "MGE",
+   "gb": "后续标准预留(MGE至MGF)",
+   "zm": "后续标准预留（MGE至MGF）"
+  },
+  {
+   "code": "MGH",
+   "gb": "后续标准预留(MGH 至 MGJ)",
+   "zm": "后续标准预留（MGH至MGJ）"
+  },
+  {
+   "code": "MGN",
+   "gb": "后续标准预留(MGN 至 MGR)",
+   "zm": "后续标准预留（MGN至MGR）"
+  },
+  {
+   "code": "MGT",
+   "gb": "后续标准预留(MGT 至 MGU)",
+   "zm": "后续标准预留（MGT至MGU）"
+  },
+  {
+   "code": "MJ",
+   "gb": "柴油发电机系统（用于安全服务的电力供应系统，见 B）",
+   "zm": "柴油发电机系统（用于安全服务的电力供应系统，见B）"
+  },
+  {
+   "code": "MJB",
+   "gb": "后续标准预留（MJB 至 MJD）",
+   "zm": "后续标准预留（MJB至MJD）"
+  },
+  {
+   "code": "MJF",
+   "gb": "后续标准预留（MJF 至 MJJ）",
+   "zm": "后续标准预留（MJF至MJJ）"
+  },
+  {
+   "code": "MJL",
+   "gb": "后续标准预留(MJL 至 MJM)",
+   "zm": "后续标准预留（MJL至MJM）"
+  },
+  {
+   "code": "MJQ",
+   "gb": "可用(MJQ 至 MJU)",
+   "zm": "可用(MJQ至MJU)"
+  },
+  {
+   "code": "MKA",
+   "gb": "发电机本体（包括发电机套管，包括定子，转子和整套冷却系统）",
+   "zm": "发电机本体(包括发电机套管，包括定子，转子和整套冷却系统)"
+  },
+  {
+   "code": "MKF",
+   "gb": "定子/转子主冷却系统（水作冷却剂）",
+   "zm": "定子/转子主冷却系统(水作冷却剂)"
+  },
+  {
+   "code": "MKL",
+   "gb": "后续标准预留(MKL 至 MKP)",
+   "zm": "后续标准预留(MKL至MKP)"
+  },
+  {
+   "code": "MKQ",
+   "gb": "排气系统(如果与 MKG 和 MKH 分设)",
+   "zm": "排气系统(如果与MKG和MKH分设)"
+  },
+  {
+   "code": "MKR",
+   "gb": "可用(MKR 至 MKU)",
+   "zm": "可用(MKR至MKU)"
+  },
+  {
+   "code": "MLA",
+   "gb": "电动机缸体,发电机缸体(包括定子、叶片和整套冷却系统)",
+   "zm": "电动机缸体，发电机缸体(包括定子、叶片和整套冷却系统)"
+  },
+  {
+   "code": "MLG",
+   "gb": "后续标准预留(MLG 至 MLH)",
+   "zm": "后续标准预留(MLG至MLH)"
+  },
+  {
+   "code": "MLK",
+   "gb": "后续标准预留(MLK 至 MLP)",
+   "zm": "后续标准预留(MLK至MLP)"
+  },
+  {
+   "code": "MLQ",
+   "gb": "抽气系统(如果与 MLJ 分设)",
+   "zm": "抽气系统(如果与MLJ分设)"
+  },
+  {
+   "code": "MLR",
+   "gb": "可用(MLR 至 MLU)",
+   "zm": "可用(MLR至MLU)"
+  },
+  {
+   "code": "MNA",
+   "gb": "后续标准预留(MNA 至 MNP)",
+   "zm": "后续标准预留(MNA至MNP)"
+  },
+  {
+   "code": "MNQ",
+   "gb": "可用(MNQ 至 MNU)",
+   "zm": "可用(MNQ至MNU)"
+  },
+  {
+   "code": "MNV",
+   "gb": "后续标准预留(MNV 至 MNW)",
+   "zm": "后续标准预留(MNV至MNW)"
+  },
+  {
+   "code": "MQB",
+   "gb": "后续标准预留(MQB 至 MQP)",
+   "zm": "后续标准预留(MQB至MQP)"
+  },
+  {
+   "code": "MQQ",
+   "gb": "可用(MQQ 至 MQU)",
+   "zm": "可用(MQQ至MQU)"
+  },
+  {
+   "code": "MQV",
+   "gb": "后续标准预留(MQV 至 MQW)",
+   "zm": "后续标准预留(MQV至MQW)"
+  },
+  {
+   "code": "MRA",
+   "gb": "发动机(包括涡轮增压器, 风箱, 中压空气冷却系统)",
+   "zm": "发动机(包括涡轮增压器，风箱，中压空气冷却系统)"
+  },
+  {
+   "code": "MRB",
+   "gb": "后续标准预留(MRB 至 MRD)",
+   "zm": "后续标准预留(MRB至MRD)"
+  },
+  {
+   "code": "MRF",
+   "gb": "后续标准预留(MRF 至 MRJ)",
+   "zm": "后续标准预留(MRF至MRJ)"
+  },
+  {
+   "code": "MRL",
+   "gb": "后续标准预留(MRL 至 MRM)",
+   "zm": "后续标准预留(MRL至MRM)"
+  },
+  {
+   "code": "MRQ",
+   "gb": "可用(MRQ 至 MRU)",
+   "zm": "可用(MRQ至MRU)"
+  },
+  {
+   "code": "MSF",
+   "gb": "后续标准预留(MSF 至 MSP)",
+   "zm": "后续标准预留(MSF至MSP)"
+  },
+  {
+   "code": "MSQ",
+   "gb": "可用(MSQ 至 MSR)",
+   "zm": "可用(MSQ至MSR)"
+  },
+  {
+   "code": "MSV",
+   "gb": "后续标准预留(MSV 至 MSW)",
+   "zm": "后续标准预留(MSV至MSW)"
+  },
+  {
+   "code": "MU",
+   "gb": "能量转换系统（不含热产生装置）和电能传递的公共系统",
+   "zm": "能量转换系统(不含热产生装置)和电能传递的公共系统"
+  },
+  {
+   "code": "MUE",
+   "gb": "后续标准预留（MUE 至 MUF）",
+   "zm": "后续标准预留(MUE至MUF)"
+  },
+  {
+   "code": "MUH",
+   "gb": "后续标准预留（MUH 至 MUP）",
+   "zm": "后续标准预留(MUH至MUP)"
+  },
+  {
+   "code": "MUT",
+   "gb": "可用 (MUT 至 MUU)",
+   "zm": "可用(MUT至MUU)"
+  },
+  {
+   "code": "MUV",
+   "gb": "后续标准预留 (MUV 至 MUZ)",
+   "zm": "后续标准预留(MUV至MUZ)"
+  },
+  {
+   "code": "MVB",
+   "gb": "后续标准预留 (MVB 至 MVP)",
+   "zm": "后续标准预留(MVB至MVP)"
+  },
+  {
+   "code": "MVQ",
+   "gb": "可用 (MVQ 至 MVU)",
+   "zm": "可用(MVQ至MVU)"
+  },
+  {
+   "code": "MVV",
+   "gb": "后续标准预留 (MVV 至 MVZ)",
+   "zm": "后续标准预留(MVV至MVZ)"
+  },
+  {
+   "code": "MWB",
+   "gb": "后续标准预留 (MWB 至 MWP)",
+   "zm": "后续标准预留(MWB至MWP)"
+  },
+  {
+   "code": "MWQ",
+   "gb": "可用 (MWQ 至 MWU)",
+   "zm": "可用(MWQ至MWU)"
+  },
+  {
+   "code": "MWV",
+   "gb": "后续标准预留 (MWV 至 MWZ)",
+   "zm": "后续标准预留(MWV至MWZ)"
+  },
+  {
+   "code": "MXB",
+   "gb": "后续标准预留 (MXB 至 MXP)",
+   "zm": "后续标准预留(MXB至MXP)"
+  },
+  {
+   "code": "MXQ",
+   "gb": "可用 (MXQ 至 MXU)",
+   "zm": "可用(MXQ至MXU)"
+  },
+  {
+   "code": "MXV",
+   "gb": "后续标准预留 (MXV 至 MXZ)",
+   "zm": "后续标准预留(MXV至MXZ)"
+  },
+  {
+   "code": "MYB",
+   "gb": "后续标准预留 (MYB 至 MYP)",
+   "zm": "后续标准预留(MYB至MYP)"
+  },
+  {
+   "code": "MYQ",
+   "gb": "可用 (MYQ 至 MYU)",
+   "zm": "可用(MYQ至MYU)"
+  },
+  {
+   "code": "MYV",
+   "gb": "后续标准预留(MYV 至 MYZ)",
+   "zm": "后续标准预留(MYV至MYZ)"
+  },
+  {
+   "code": "N",
+   "gb": "供外部用户使用的介质供应系统，能源贮存系统",
+   "zm": "供外部用户使用的介质供应系统， 能源贮存系统"
+  },
+  {
+   "code": "NA",
+   "gb": "蒸汽系统（包括凝结水回收）",
+   "zm": "蒸汽系统(包括凝结水回收)"
+  },
+  {
+   "code": "NAB",
+   "gb": "管道系统（凝结水）",
+   "zm": "管道系统(凝结水)"
+  },
+  {
+   "code": "NAF",
+   "gb": "后续标准预留(NAF 至 NAP)",
+   "zm": "后续标准预留(NAF至NAP)"
+  },
+  {
+   "code": "NAQ",
+   "gb": "可用(MAQ 至 MAU)",
+   "zm": "可用(MAQ至MAU)"
+  },
+  {
+   "code": "NDG",
+   "gb": "后续标准预留(NDG 至 NDJ)",
+   "zm": "后续标准预留(NDG至NDJ)"
+  },
+  {
+   "code": "NDL",
+   "gb": "后续标准预留(NDL 至 NDP)",
+   "zm": "后续标准预留(NDL至NDP)"
+  },
+  {
+   "code": "NDQ",
+   "gb": "可用(MDQ 至 MDU)",
+   "zm": "可用(MDQ至MDU)"
+  },
+  {
+   "code": "NEG",
+   "gb": "后续标准预留(NEG 至 NEJ)",
+   "zm": "后续标准预留(NEG至NEJ)"
+  },
+  {
+   "code": "NEL",
+   "gb": "后续标准预留(NEL 至 NEP)",
+   "zm": "后续标准预留(NEL至NEP)"
+  },
+  {
+   "code": "NEQ",
+   "gb": "可用(NEQ 至 NEU)",
+   "zm": "可用(NEQ至NEU)"
+  },
+  {
+   "code": "NQC",
+   "gb": "势能贮存 (如贮存在洞穴中的压缩空气)",
+   "zm": "势能贮存(如贮存在洞穴中的压缩空气)"
+  },
+  {
+   "code": "NQD",
+   "gb": "混凝土/固体材料热储存系统 (如果压力等级不同于NQA)",
+   "zm": "混凝土/固体材料热储存系统(如果压力等级不同于NQA)"
+  },
+  {
+   "code": "NQH",
+   "gb": "后续标准预留 (NQH 至 NQP)",
+   "zm": "后续标准预留(NQH至NQP)"
+  },
+  {
+   "code": "NQQ",
+   "gb": "可用 (NQQ 至 NQU)",
+   "zm": "可用(NQQ至NQU)"
+  },
+  {
+   "code": "PA",
+   "gb": "主过程冷却水系统 1",
+   "zm": "主过程冷却水系统1"
+  },
+  {
+   "code": "PAB",
+   "gb": "管道和涵洞系统",
+   "zm": "循环冷却水管道系统"
+  },
+  {
+   "code": "PAE",
+   "gb": "后续标准预留(PAE 至 PAG)",
+   "zm": "后续标准预留(PAE至PAG)"
+  },
+  {
+   "code": "PAJ",
+   "gb": "后续标准预留(PAJ 至 PAP)",
+   "zm": "后续标准预留(PAJ至PAP)"
+  },
+  {
+   "code": "PB",
+   "gb": "主过程冷却水系统 2",
+   "zm": "主过程冷却水系统2"
+  },
+  {
+   "code": "PBA",
+   "gb": "抽取系统 (包括机械清洗和残余物过滤)",
+   "zm": "抽取系统(包括机械清洗和残余物过滤)"
+  },
+  {
+   "code": "PBD",
+   "gb": "再循环冷却系统、排水冷却系统（冷却塔）",
+   "zm": "再循环冷却系统、排水冷却系统(冷却塔)"
+  },
+  {
+   "code": "PBE",
+   "gb": "后续标准预留（PBE 至 PBG）",
+   "zm": "后续标准预留(PBE至PBG)"
+  },
+  {
+   "code": "PBH",
+   "gb": "主流程热交换器清洗系统（凝汽器管道）",
+   "zm": "主流程热交换器清洗系统(凝汽器管道)"
+  },
+  {
+   "code": "PBJ",
+   "gb": "后续标准预留（PBJ 至 PBP）",
+   "zm": "后续标准预留(PBJ至PBP)"
+  },
+  {
+   "code": "PBT",
+   "gb": "可用（PBT 至 PBU）",
+   "zm": "可用(PBT至PBU)"
+  },
+  {
+   "code": "PE",
+   "gb": "辅助和二次过程冷却水系统 1",
+   "zm": "辅助和二次过程冷却水系统1"
+  },
+  {
+   "code": "PEA",
+   "gb": "抽取系统（包括机械清洗和残余物过滤）",
+   "zm": "抽取系统(包括机械清洗和残余物过滤)"
+  },
+  {
+   "code": "PEB",
+   "gb": "管道和涵洞系统",
+   "zm": "辅机开式循环冷却水 管道系统"
+  },
+  {
+   "code": "PED",
+   "gb": "再循环冷却系统、排水冷却系统（冷却塔）",
+   "zm": "再循环冷却系统、排水冷却系统(冷却塔)"
+  },
+  {
+   "code": "PEE",
+   "gb": "后续标准预留(PEE 至 PEG)",
+   "zm": "后续标准预留(PEE至PEG)"
+  },
+  {
+   "code": "PEJ",
+   "gb": "后续标准预留(PEJ 至 PEP)",
+   "zm": "后续标准预留(PEJ至PEP)"
+  },
+  {
+   "code": "PF",
+   "gb": "辅助和二次过程冷却水系统 2",
+   "zm": "辅助和二次过程冷却水系统2"
+  },
+  {
+   "code": "PFB",
+   "gb": "管道和涵洞系统",
+   "zm": "工业冷却水管道系统"
+  },
+  {
+   "code": "PFE",
+   "gb": "后续标准预留(PEE 至 PEG)",
+   "zm": "后续标准预留(PEE至PEG)"
+  },
+  {
+   "code": "PFJ",
+   "gb": "后续标准预留(PEJ 至 PEP)",
+   "zm": "后续标准预留(PEJ至PEP)"
+  },
+  {
+   "code": "PG",
+   "gb": "辅助和二次过程冷却水系统 3",
+   "zm": "辅助和二次过程冷却水系统3"
+  },
+  {
+   "code": "PGA",
+   "gb": "抽取系统 (包括机械清洗和残余物过滤)",
+   "zm": "抽取系统(包括机械清洗和残余物过滤)"
+  },
+  {
+   "code": "PGB",
+   "gb": "管道和涵洞系统",
+   "zm": "辅机闭式循环冷却水 管道系统"
+  },
+  {
+   "code": "PGD",
+   "gb": "间接冷却系统 (包括排水和排气)",
+   "zm": "间接冷却系统(包括排水和排气)"
+  },
+  {
+   "code": "PGF",
+   "gb": "后续标准预留(PGF 至 PGG)",
+   "zm": "后续标准预留(PGF至PGG)"
+  },
+  {
+   "code": "PGJ",
+   "gb": "后续标准预留(PGJ 至 PGP)",
+   "zm": "后续标准预留(PGJ至PGP)"
+  },
+  {
+   "code": "PH",
+   "gb": "辅助和二次过程冷却水系统 4",
+   "zm": "辅助和二次过程冷却水系统4"
+  },
+  {
+   "code": "PHD",
+   "gb": "间接冷却系统 (包括排水和排气)",
+   "zm": "间接冷却系统(包括排水和排气)"
+  },
+  {
+   "code": "PHE",
+   "gb": "增压系统 (包括排水和排气)",
+   "zm": "增压系统(包括排水和排气)"
+  },
+  {
+   "code": "PHF",
+   "gb": "后续标准预留 (PHF 至 PFP)",
+   "zm": "后续标准预留(PHF至PFP)"
+  },
+  {
+   "code": "PHQ",
+   "gb": "可用 (PHQ 至 PFT)",
+   "zm": "可用(PHQ至PFT)"
+  },
+  {
+   "code": "PJ",
+   "gb": "辅助和二次过程冷却水系统 5",
+   "zm": "辅助和二次过程冷却水系统5"
+  },
+  {
+   "code": "PJD",
+   "gb": "间接冷却系统 (包括排水和排气)",
+   "zm": "间接冷却系统(包括排水和排气)"
+  },
+  {
+   "code": "PKD",
+   "gb": "间接冷却系统 (包括排水和排气)",
+   "zm": "间接冷却系统(包括排水和排气)"
+  },
+  {
+   "code": "PKF",
+   "gb": "后续标准预留 (PJF 至 PJP)",
+   "zm": "后续标准预留(PJF至PJP)"
+  },
+  {
+   "code": "PKQ",
+   "gb": "可用 (PJQ 至 PJT)",
+   "zm": "可用(PJQ至PJT)"
+  },
+  {
+   "code": "PUL",
+   "gb": "冷却水杀菌处理 (包含杀菌剂产生)",
+   "zm": "冷却水杀菌处理(包含杀菌剂产生)"
+  },
+  {
+   "code": "PUQ",
+   "gb": "可用 (PUQ 至 PUU)",
+   "zm": "可用(PUQ至PUU)"
+  },
+  {
+   "code": "PUV",
+   "gb": "后续标准预留 (PUV 至 PUZ)",
+   "zm": "后续标准预留(PUV至PUZ)"
+  },
+  {
+   "code": "PVA",
+   "gb": "后续标准预留 (PVA 至 PVP)",
+   "zm": "后续标准预留(PVA至PVP)"
+  },
+  {
+   "code": "PVQ",
+   "gb": "可用 (PVQ 至 PVU)",
+   "zm": "可用(PVQ至PVU)"
+  },
+  {
+   "code": "PVV",
+   "gb": "后续标准预留 (PVV 至 PVZ)",
+   "zm": "后续标准预留(PVV至PVZ)"
+  },
+  {
+   "code": "PWA",
+   "gb": "后续标准预留 (PWA 至 PWP)",
+   "zm": "后续标准预留(PWA至PWP)"
+  },
+  {
+   "code": "PWQ",
+   "gb": "可用 (PWQ 至 PWU)",
+   "zm": "可用(PWQ至PWU)"
+  },
+  {
+   "code": "PWV",
+   "gb": "后续标准预留 (PWV 至 PWZ)",
+   "zm": "后续标准预留(PWV至PWZ)"
+  },
+  {
+   "code": "PXA",
+   "gb": "后续标准预留 (PXA 至 PXP)",
+   "zm": "后续标准预留(PXA至PXP)"
+  },
+  {
+   "code": "PXQ",
+   "gb": "可用 (PXQ 至 PXU)",
+   "zm": "可用(PXQ至PXU)"
+  },
+  {
+   "code": "PXV",
+   "gb": "后续标准预留 (PXV 至 PXZ)",
+   "zm": "后续标准预留(PXV至PXZ)"
+  },
+  {
+   "code": "PYA",
+   "gb": "后续标准预留 (PYA 至 PYP)",
+   "zm": "后续标准预留(PYA至PYP)"
+  },
+  {
+   "code": "PYQ",
+   "gb": "可用 (PYQ 至 PYU)",
+   "zm": "可用(PYQ至PYU)"
+  },
+  {
+   "code": "PYV",
+   "gb": "后续标准预留 (PYV 至 PYZ)",
+   "zm": "后续标准预留(PYV至PYZ)"
+  },
+  {
+   "code": "QCL",
+   "gb": "后续标准预留(QCL 至 QCP)",
+   "zm": "后续标准预留(QCL至QCP)"
+  },
+  {
+   "code": "QCQ",
+   "gb": "可用(QCQ 至 QCU)",
+   "zm": "可用(QCQ至QCU)"
+  },
+  {
+   "code": "QCV",
+   "gb": "后续标准预留(QCV 至 QCZ)",
+   "zm": "后续标准预留(QCV至QCZ)"
+  },
+  {
+   "code": "QEA",
+   "gb": "压缩空气和输送用气集中产生系统",
+   "zm": "集中压缩空气和运载空 气生成系统"
+  },
+  {
+   "code": "QEC",
+   "gb": "后续标准预留(QEC 至 QEP)",
+   "zm": "后续标准预留(QEC至QEP)"
+  },
+  {
+   "code": "QEQ",
+   "gb": "可用(QEQ 至 QEU)",
+   "zm": "可用(QEQ至QEU)"
+  },
+  {
+   "code": "QEV",
+   "gb": "后续标准预留(QEV 至 QEZ)",
+   "zm": "后续标准预留(QEV至QEZ)"
+  },
+  {
+   "code": "QGA",
+   "gb": "进气系统,空气供应",
+   "zm": "进气系统，空气供应"
+  },
+  {
+   "code": "QGN",
+   "gb": "后续标准预留(QGN 至 QGP)",
+   "zm": "后续标准预留(QGN至QGP)"
+  },
+  {
+   "code": "QGQ",
+   "gb": "可用(QGQ 至 QGU)",
+   "zm": "可用(QGQ至QGU)"
+  },
+  {
+   "code": "QHH",
+   "gb": "主燃烧系统（也含电锅炉）",
+   "zm": "主燃烧系统(也含电锅炉)"
+  },
+  {
+   "code": "QHJ",
+   "gb": "点火燃烧系统（如果是独立系统）",
+   "zm": "点火燃烧系统(如果是独立系统)"
+  },
+  {
+   "code": "QHM",
+   "gb": "后续标准预留 (QHM 至 QHP)",
+   "zm": "后续标准预留(QHM至QHP)"
+  },
+  {
+   "code": "QHQ",
+   "gb": "可用 (QHQ 至 QHU)",
+   "zm": "可用(QHQ至QHU)"
+  },
+  {
+   "code": "QJL",
+   "gb": "后续标准预留(QJL 至 QJP)",
+   "zm": "后续标准预留 (QJL至QJP)"
+  },
+  {
+   "code": "QJQ",
+   "gb": "可用(QJQ 至 QJU)",
+   "zm": "可用(QJQ至QJU)"
+  },
+  {
+   "code": "QJV",
+   "gb": "后续标准预留(QJV 至 QJZ)",
+   "zm": "后续标准预留 (QJV至QJZ)"
+  },
+  {
+   "code": "QLD",
+   "gb": "后续标准预留(QLD 至 QLE)",
+   "zm": "后续标准预留 (QLD至QLE)"
+  },
+  {
+   "code": "QLG",
+   "gb": "后续标准预留(QLG 至 QLP)",
+   "zm": "后续标准预留 (QLG至QLP)"
+  },
+  {
+   "code": "QLQ",
+   "gb": "可用(QLQ 至 QLU)",
+   "zm": "可用(QLQ至QLU)"
+  },
+  {
+   "code": "QLV",
+   "gb": "后续标准预留(QLV 至 QLZ)",
+   "zm": "后续标准预留 (QLV至QLZ)"
+  },
+  {
+   "code": "QRC",
+   "gb": "后续标准预留(QRC 至 QRP)",
+   "zm": "后续标准预留 (QRC至QRP)"
+  },
+  {
+   "code": "QRQ",
+   "gb": "可用(QRQ 至 QRU)",
+   "zm": "可用(QRQ至QRU)"
+  },
+  {
+   "code": "QSA",
+   "gb": "后续标准预留 (QSA 至 QSP)",
+   "zm": "后续标准预留 (QSA至QSP)"
+  },
+  {
+   "code": "QSQ",
+   "gb": "可用 (QSQ 至 QSU)",
+   "zm": "可用(QSQ至QSU)"
+  },
+  {
+   "code": "QU",
+   "gb": "取样系统 (不包括核电)",
+   "zm": "取样系统(不包括核电)"
+  },
+  {
+   "code": "QUA",
+   "gb": "后续标准预留(QUA 至 QUD)",
+   "zm": "后续标准预留 (QUA至QUD)"
+  },
+  {
+   "code": "QUJ",
+   "gb": "后续标准预留(QUJ 至 QUK)",
+   "zm": "后续标准预留 (QUJ至QUK)"
+  },
+  {
+   "code": "QUR",
+   "gb": "可用 (QUR 至 QUU)",
+   "zm": "可用(QUR至QUU)"
+  },
+  {
+   "code": "QUV",
+   "gb": "后续标准预留 (QUV 至 QUW)",
+   "zm": "后续标准预留 (QUV至QUW)"
+  },
+  {
+   "code": "QUY",
+   "gb": "后续标准预留 (QUY 至 QUZ)",
+   "zm": "后续标准预留 (QUY至QUZ)"
+  },
+  {
+   "code": "RAH",
+   "gb": "后续标准预留(RAH至RAP)",
+   "zm": "后续标准预留 (RAH至RAP)"
+  },
+  {
+   "code": "RAQ",
+   "gb": "可用 (RAQ 至 RAT)",
+   "zm": "可用(RAQ至RAT)"
+  },
+  {
+   "code": "RBD",
+   "gb": "后续标准预留(RBD至RBP)",
+   "zm": "后续标准预留 (RBD至RBP)"
+  },
+  {
+   "code": "RCF",
+   "gb": "后续标准预留(RCF 至 RCG)",
+   "zm": "后续标准预留 (RCF至RCG)"
+  },
+  {
+   "code": "RCS",
+   "gb": "后续标准预留(RCS 至 RCU)",
+   "zm": "后续标准预留 (RCS至RCU)"
+  },
+  {
+   "code": "RD",
+   "gb": "烟气化学催化工艺处理（包括残余物排除）",
+   "zm": "烟气化学催化工艺处理(包括残余物排除)"
+  },
+  {
+   "code": "RDA",
+   "gb": "在 RD 范围内的烟气管道系统",
+   "zm": "在RD范围内的烟气管道系统"
+  },
+  {
+   "code": "RDB",
+   "gb": "烟气侧热交换器、气体预热（不是RU）",
+   "zm": "烟气侧热交换器、气体预热(不是RU)"
+  },
+  {
+   "code": "RE",
+   "gb": "烟气化学吸收工艺处理(包括残余物排除，不包括 $ ext{CO}_2 $分离)",
+   "zm": "烟气化学吸收工艺处理(包括残余物排除，不包括CO₂分离)"
+  },
+  {
+   "code": "REA",
+   "gb": "在 RE 范围内的烟气管道系统",
+   "zm": "在RE范围内的烟气管道系统"
+  },
+  {
+   "code": "REL",
+   "gb": "用于固体排放物的管道系统(包括排水与回收,不包括固体浓缩和脱水系统)",
+   "zm": "用于固体排放物的管道系统(包括排水与回收，不包括固体浓缩和脱水系统)"
+  },
+  {
+   "code": "RF",
+   "gb": "$ CO_{{2}} $分离",
+   "zm": "CO₂分离"
+  },
+  {
+   "code": "RFA",
+   "gb": "在 RF 范围内的烟气管道系统",
+   "zm": "在RF范围内的烟气管道系统"
+  },
+  {
+   "code": "RFE",
+   "gb": "$ CO_{{2}} $吸收",
+   "zm": "CO₂吸收"
+  },
+  {
+   "code": "RFG",
+   "gb": "净化剂中的 $ CO_{{2}} $ 脱除",
+   "zm": "净化剂中的CO₂脱除"
+  },
+  {
+   "code": "RFL",
+   "gb": "后续标准预留(RFL 至 RFP)",
+   "zm": "后续标准预留 (RFL至RFP)"
+  },
+  {
+   "code": "RFQ",
+   "gb": "可用(RFQ 至 RFU)",
+   "zm": "可用(RFQ至RFU)"
+  },
+  {
+   "code": "RT",
+   "gb": "$ CO_{{2}} $调节",
+   "zm": "CO₂调节"
+  },
+  {
+   "code": "RTA",
+   "gb": "$ CO_{{2}} $预清洗",
+   "zm": "CO₂预清洗"
+  },
+  {
+   "code": "RTB",
+   "gb": "$ CO_{{2}} $原气增压",
+   "zm": "CO₂原气增压"
+  },
+  {
+   "code": "RTC",
+   "gb": "$ CO_{{2}} $原气冷却和清洗(包含再生)",
+   "zm": "CO₂原气冷却和清洗(包含再生)"
+  },
+  {
+   "code": "RTF",
+   "gb": "后续标准预留(RTF至RTP)",
+   "zm": "后续标准预留 (RTF至RTP)"
+  },
+  {
+   "code": "RTU",
+   "gb": "$ CO_{{2}} $储罐/缓冲系统",
+   "zm": "CO₂储罐/缓冲系统"
+  },
+  {
+   "code": "RU",
+   "gb": "烟气再热,烟气干燥",
+   "zm": "烟气再热，烟气干燥"
+  },
+  {
+   "code": "RUA",
+   "gb": "蓄热式换热器,风扇位于冷净烟气侧(湿风机)",
+   "zm": "蓄热式换热器，风扇位于冷净烟气侧(湿风机)"
+  },
+  {
+   "code": "UAC",
+   "gb": "后续标准预留(UAC 至 UAP)",
+   "zm": "后续标准预留(UAC至UAP)"
+  },
+  {
+   "code": "UAQ",
+   "gb": "可用(UAQ 至 UAU)",
+   "zm": "可用(UAQ至UAU)"
+  },
+  {
+   "code": "UAV",
+   "gb": "后续标准预留(UAV 至 UAZ)",
+   "zm": "后续标准预留(UAV至UAZ)"
+  },
+  {
+   "code": "UBE",
+   "gb": "后续标准预留(UBE 至 UBL)",
+   "zm": "后续标准预留(UBE至UBL)"
+  },
+  {
+   "code": "UBN",
+   "gb": "后续标准预留(UBN 至 UBP)",
+   "zm": "后续标准预留(UBN至UBP)"
+  },
+  {
+   "code": "UBQ",
+   "gb": "可用(UBQ 至 UBU)",
+   "zm": "可用(UBQ至UBU)"
+  },
+  {
+   "code": "UBV",
+   "gb": "后续标准预留(UBV 至 UBX)",
+   "zm": "后续标准预留(UBV至UBX)"
+  },
+  {
+   "code": "UCD",
+   "gb": "后续标准预留(UCD 至 UCP)",
+   "zm": "后续标准预留(UCD至UCP)"
+  },
+  {
+   "code": "UCQ",
+   "gb": "可用(UCQ 至 UCU)",
+   "zm": "可用(UCQ至UCU)"
+  },
+  {
+   "code": "UCV",
+   "gb": "后续标准预留(UCV 至 UCX)",
+   "zm": "后续标准预留(UCV至UCX)"
+  },
+  {
+   "code": "UFA",
+   "gb": "燃料组件(如果与反应堆建筑 UJA 分设)内部储存的建(构)筑物",
+   "zm": "燃料组件(如果与反应堆建筑UJA分设)内部储存的建(构)筑物"
+  },
+  {
+   "code": "UFB",
+   "gb": "后续标准预留 (UFB 至 UFC)",
+   "zm": "后续标准预留(UFB至UFC)"
+  },
+  {
+   "code": "UFF",
+   "gb": "后续标准预留 (UFF 至 UFG)",
+   "zm": "后续标准预留(UFF至UFG)"
+  },
+  {
+   "code": "UFH",
+   "gb": "热室建(构)筑物 (如果是独立系统)",
+   "zm": "热室建(构)筑物(如果是独立系统)"
+  },
+  {
+   "code": "UFJ",
+   "gb": "后续标准预留 (UFJ 至 UFX)",
+   "zm": "后续标准预留(UFJ至UFX)"
+  },
+  {
+   "code": "UG",
+   "gb": "水供应和处理建 (构)筑物",
+   "zm": "水供应和处理建(构)筑物"
+  },
+  {
+   "code": "UGQ",
+   "gb": "可用 (UGQ 至 UGU)",
+   "zm": "可用(UGQ至UGU)"
+  },
+  {
+   "code": "UGV",
+   "gb": "后续标准预留 (UGV 至 UGX)",
+   "zm": "后续标准预留(UGV至UGX)"
+  },
+  {
+   "code": "UHB",
+   "gb": "后续标准预留 (UHB 至 UHC)",
+   "zm": "后续标准预留(UHB至UHC)"
+  },
+  {
+   "code": "UHG",
+   "gb": "后续标准预留 (UHG 至 UHK)",
+   "zm": "后续标准预留(UHG至UHK)"
+  },
+  {
+   "code": "UHM",
+   "gb": "后续标准预留 (UHM 至 UHN)",
+   "zm": "后续标准预留(UHM至UHN)"
+  },
+  {
+   "code": "UHR",
+   "gb": "可用(UHR 至 UHU)",
+   "zm": "可用(UHR至UHU)"
+  },
+  {
+   "code": "UHV",
+   "gb": "后续标准预留 (UHV 至 UHX)",
+   "zm": "后续标准预留(UHV至UHX)"
+  },
+  {
+   "code": "UJH",
+   "gb": "后续标准预留(UJH 至 UJP)",
+   "zm": "后续标准预留(UJH至UJP)"
+  },
+  {
+   "code": "UJJ",
+   "gb": "可用 (UJQ 至 UJU)",
+   "zm": "可用(UJQ至UJU)"
+  },
+  {
+   "code": "UJV",
+   "gb": "后续标准预留(UJV 至 UJX)",
+   "zm": "后续标准预留(UJV至UJX)"
+  },
+  {
+   "code": "UK",
+   "gb": "反应堆辅助系统 建(构)筑物",
+   "zm": "反应堆辅助系统建(构)筑物"
+  },
+  {
+   "code": "UKA",
+   "gb": "反应堆辅助建 (构)筑物",
+   "zm": "反应堆辅助建(构)筑物"
+  },
+  {
+   "code": "UKB",
+   "gb": "反应堆附属系统 建(构)筑物",
+   "zm": "反应堆附属系统建(构)筑物"
+  },
+  {
+   "code": "UKE",
+   "gb": "后续标准预留 (UKE 至 UKG)",
+   "zm": "后续标准预留(UKE至UKG)"
+  },
+  {
+   "code": "UKJ",
+   "gb": "氚提取系统建 (构)筑物",
+   "zm": "氚提取系统建(构)筑物"
+  },
+  {
+   "code": "UKK",
+   "gb": "后续标准预留 (UKK 至 UKP)",
+   "zm": "后续标准预留(UKK至UKP)"
+  },
+  {
+   "code": "UKQ",
+   "gb": "可用 (UKQ 至 UKR)",
+   "zm": "可用(UKQ至UKR)"
+  },
+  {
+   "code": "UKS",
+   "gb": "放射性废物处理 建(构)筑物",
+   "zm": "放射性废物处理建(构)筑物"
+  },
+  {
+   "code": "UKT",
+   "gb": "放射性废物贮存 建(构)筑物",
+   "zm": "放射性废物贮存建(构)筑物"
+  },
+  {
+   "code": "UKV",
+   "gb": "后续标准预留(UKV 至 UKX)",
+   "zm": "后续标准预留(UKV至UKX)"
+  },
+  {
+   "code": "UL",
+   "gb": "蒸汽、水、凝结水系统的建(构) 筑物",
+   "zm": "蒸汽、水、凝结水系统的建(构)筑物"
+  },
+  {
+   "code": "ULA",
+   "gb": "给水系统建(构) 筑物",
+   "zm": "给水系统建(构)筑物"
+  },
+  {
+   "code": "ULC",
+   "gb": "凝结水系统建(构) 筑物",
+   "zm": "凝结水系统建(构)筑物"
+  },
+  {
+   "code": "ULD",
+   "gb": "凝结水精处理车间的建(构) 筑物",
+   "zm": "凝结水精处理车间的建(构)筑物"
+  },
+  {
+   "code": "ULF",
+   "gb": "空气冷却系统建(构) 筑物",
+   "zm": "空气冷却系统建(构)筑物"
+  },
+  {
+   "code": "ULG",
+   "gb": "后续标准预留(ULG 至 ULH)",
+   "zm": "后续标准预留(ULG至ULH)"
+  },
+  {
+   "code": "ULJ",
+   "gb": "核蒸汽发生器给水供应建(构) 筑物",
+   "zm": "核蒸汽发生器给水供应建(构)筑物"
+  },
+  {
+   "code": "UMK",
+   "gb": "后续标准预留(UMK 至 UMM)",
+   "zm": "后续标准预留(UMK至UMM)"
+  },
+  {
+   "code": "UMT",
+   "gb": "可用 (UMT 至 UMU)",
+   "zm": "可用(UMT至UMU)"
+  },
+  {
+   "code": "UMV",
+   "gb": "后续标准预留 (UMV 至 UMX)",
+   "zm": "后续标准预留(UMV至UMX)"
+  },
+  {
+   "code": "UNA",
+   "gb": "后续标准预留 (UNA 至 UNP)",
+   "zm": "后续标准预留(UNA至UNP)"
+  },
+  {
+   "code": "UNR",
+   "gb": "可用 (UNR 至 UNU)",
+   "zm": "可用(UNR至UNU)"
+  },
+  {
+   "code": "UNV",
+   "gb": "后续标准预留(UNW 至 UNX)",
+   "zm": "后续标准预留(UNW至UNX)"
+  },
+  {
+   "code": "UPP",
+   "gb": "其他的冷却水系统建(构)筑物,例如空气中间冷却器(辅助和二次过程)",
+   "zm": "其他的冷却水系统建(构)筑物，例如空气中间冷却器(辅助和二次过程)"
+  },
+  {
+   "code": "UQF",
+   "gb": "仅控用压缩空气集中供应建(构)筑物",
+   "zm": "仪控用压缩空气集中供应建(构)筑物"
+  },
+  {
+   "code": "UQM",
+   "gb": "后续标准预留(UQM 至 UQP)",
+   "zm": "后续标准预留(UQM至UQP)"
+  },
+  {
+   "code": "UQQ",
+   "gb": "可用(UQQ 至 UQR)",
+   "zm": "可用(UQQ至UQR)"
+  },
+  {
+   "code": "UQT",
+   "gb": "可用 (UQT 至 UQU)",
+   "zm": "可用(UQT至UQU)"
+  },
+  {
+   "code": "UQV",
+   "gb": "后续标准预留 (UQV 至 UQX)",
+   "zm": "后续标准预留(UQV至UQX)"
+  },
+  {
+   "code": "URA",
+   "gb": "烟气排放 (不包括处理) 的建(构)筑物",
+   "zm": "烟气排放(不包括处理)的建(构)筑物"
+  },
+  {
+   "code": "URE",
+   "gb": "烟气化学吸收工艺处理建(构)筑物 (不包括 $ CO_{{2}} $ 分离)",
+   "zm": "烟气化学吸收工艺处理建(构)筑物(不包括CO₂分离)"
+  },
+  {
+   "code": "URG",
+   "gb": "后续标准预留(URG 至 URS)",
+   "zm": "后续标准预留(URG至URS)"
+  },
+  {
+   "code": "URV",
+   "gb": "后续标准预留(URV 至 URZ)",
+   "zm": "后续标准预留(URV至URZ)"
+  },
+  {
+   "code": "UUB",
+   "gb": "后续标准预留(UUB 至 UUP)",
+   "zm": "后续标准预留(UUB至UUP)"
+  },
+  {
+   "code": "UUQ",
+   "gb": "可用(UUQ 至 UUU)",
+   "zm": "可用(UUQ至UUU)"
+  },
+  {
+   "code": "UUV",
+   "gb": "后续标准预留(UUV 至 UUZ)",
+   "zm": "后续标准预留(UUV至UUZ)"
+  },
+  {
+   "code": "UYB",
+   "gb": "可用 (UYB 至 UYZ)",
+   "zm": "可用(UYB至UYZ)"
+  },
+  {
+   "code": "UZB",
+   "gb": "后续标准预留 (UZB 至 UZZ)",
+   "zm": "后续标准预留(UZB至UZZ)"
+  },
+  {
+   "code": "WAA",
+   "gb": "后续标准预留(WAA 至 WAQ)",
+   "zm": "后续标准预留(WAA至WAQ)"
+  },
+  {
+   "code": "WAR",
+   "gb": "可用(WAR 至 WAU)",
+   "zm": "可用(WAR至WAU)"
+  },
+  {
+   "code": "WAV",
+   "gb": "后续标准预留(WAV 至 WAZ)",
+   "zm": "后续标准预留(WAV至WAZ)"
+  },
+  {
+   "code": "WBC",
+   "gb": "后续标准预留(WBC 至 WBP)",
+   "zm": "后续标准预留(WBC至WBP)"
+  },
+  {
+   "code": "WBQ",
+   "gb": "可用(WBQ 至 WBU)",
+   "zm": "可用(WBQ至WBU)"
+  },
+  {
+   "code": "WBV",
+   "gb": "后续标准预留(WBV 至 WBZ)",
+   "zm": "后续标准预留(WBV至WBZ)"
+  },
+  {
+   "code": "XA",
+   "gb": "通风和空调系统 （不包括核控制和禁止区域）",
+   "zm": "通风和空调系统(不包括核控制和 禁止区域)"
+  },
+  {
+   "code": "XAB",
+   "gb": "电气辅助供电系统 建(构)筑物的通风和空调系统",
+   "zm": "电气辅助供电系统建(构)筑物的通风和空调系统"
+  },
+  {
+   "code": "XAC",
+   "gb": "控制和管理系统 建(构)筑物的通风和空调系统",
+   "zm": "控制和管理系统建(构)筑物的通风和空调系统"
+  },
+  {
+   "code": "XAE",
+   "gb": "化石燃料及可再生能源处理和供应系统 （包括残留物处理功能）建(构)筑物的通风和空调系统",
+   "zm": "化石燃料及可再生能源处理和供应系统(包括残留物处理功能)建(构)筑物的通风和空调系统"
+  },
+  {
+   "code": "XBS",
+   "gb": "后续标准预留(XBS 至 XBT)",
+   "zm": "后续标准预留(XBS至XBT)"
+  },
+  {
+   "code": "XCC",
+   "gb": "后续标准预留(XCC 至 XCP)",
+   "zm": "后续标准预留(XCC至XCP)"
+  },
+  {
+   "code": "XCQ",
+   "gb": "可用(XCQ 至 XCZ)",
+   "zm": "可用(XCQ至XCZ)"
+  },
+  {
+   "code": "XDA",
+   "gb": "后续标准预留(XDA 至 XDP)",
+   "zm": "后续标准预留(XDA至XDP)"
+  },
+  {
+   "code": "XDQ",
+   "gb": "可用(XDQ 至 XDU)",
+   "zm": "可用(XDQ至XDU)"
+  },
+  {
+   "code": "XDV",
+   "gb": "后续标准预留(XDV 至 XDZ)",
+   "zm": "后续标准预留(XDV至XDZ)"
+  },
+  {
+   "code": "XEA",
+   "gb": "后续标准预留(XEA 至 XEP)",
+   "zm": "后续标准预留(XEA至XEP)"
+  },
+  {
+   "code": "XEQ",
+   "gb": "可用(XEQ 至 XEU)",
+   "zm": "可用(XEQ至XEU)"
+  },
+  {
+   "code": "XEV",
+   "gb": "后续标准预留(XEV 至 XEZ)",
+   "zm": "后续标准预留(XEV至XEZ)"
+  },
+  {
+   "code": "XF",
+   "gb": "等电位连接系统（如接地、防雷保护）",
+   "zm": "等电位连接系统(如接地、防雷保护)"
+  },
+  {
+   "code": "XFE",
+   "gb": "后续标准预留（XFE至XFZ）",
+   "zm": "后续标准预留(XFE至XFZ)"
+  },
+  {
+   "code": "XGB",
+   "gb": "核控制和专有区域的灭火给水系统（如果是独立系统）",
+   "zm": "核控制和专有区域的灭火给水系统(如果是独立系统)"
+  },
+  {
+   "code": "XGD",
+   "gb": "用于核控制和专有区域的喷淋灭火系统（如果是独立系统）",
+   "zm": "用于核控制和专有区域的喷淋灭火系统(如果是独立系统)"
+  },
+  {
+   "code": "XGH",
+   "gb": "气体灭火系统(如不是 XGJ、XGK)",
+   "zm": "气体灭火系统(如果不是XGJ、XGK)"
+  },
+  {
+   "code": "XGN",
+   "gb": "后续标准预留 (XGN 至 XGP)",
+   "zm": "后续标准预留(XGN至XGP)"
+  },
+  {
+   "code": "XGQ",
+   "gb": "可用 (XGQ 至 XGU)",
+   "zm": "可用(XGQ至XGU)"
+  },
+  {
+   "code": "XGV",
+   "gb": "后续标准预留 (XGV 至 XGZ)",
+   "zm": "后续标准预留(XGV至XGZ)"
+  },
+  {
+   "code": "XHA",
+   "gb": "进水系统(上游) (不包括):闸门",
+   "zm": "进水系统(上游)(不包括闸门)"
+  },
+  {
+   "code": "XHF",
+   "gb": "排水系统(下游) (从:不包括闸门)",
+   "zm": "排水系统(下游)(从不包括闸门)"
+  },
+  {
+   "code": "XHG",
+   "gb": "后续标准预留 (XHG 至 XHH)",
+   "zm": "后续标准预留(XHG至XHH)"
+  },
+  {
+   "code": "XHN",
+   "gb": "后续标准预留 (XHN 至 XHP)",
+   "zm": "后续标准预留(XHN至XHP)"
+  },
+  {
+   "code": "XHQ",
+   "gb": "可用 (XHQ 至 XHR)",
+   "zm": "可用(XHQ至XHR)"
+  },
+  {
+   "code": "XKC",
+   "gb": "后续标准预留(XKC 至 XKP)",
+   "zm": "后续标准预留 (XKC至XKP)"
+  },
+  {
+   "code": "XKQ",
+   "gb": "可用(XKQ 至 XKU)",
+   "zm": "可用(XKQ至XKU)"
+  },
+  {
+   "code": "XKV",
+   "gb": "后续标准预留(XKV 至 XKZ)",
+   "zm": "后续标准预留 (XKV至XKZ)"
+  },
+  {
+   "code": "XLA",
+   "gb": "后续标准预留(XLA 至 XLP)",
+   "zm": "后续标准预留 (XLA至XLP)"
+  },
+  {
+   "code": "XLQ",
+   "gb": "可用(XLQ 至 XLU)",
+   "zm": "可用(XLQ至XLU)"
+  },
+  {
+   "code": "XLV",
+   "gb": "后续标准预留(XLV 至 XLZ)",
+   "zm": "后续标准预留 (XLV至XLZ)"
+  },
+  {
+   "code": "XNM",
+   "gb": "能量转换系统(无热量产生)和电能传递系统(构)筑物的电梯系统",
+   "zm": "能量转换系统(无热量产生)和电能传递系统建(构)筑物的电梯系统"
+  },
+  {
+   "code": "XNS",
+   "gb": "后续标准预留(XNS 至 XNT)",
+   "zm": "后续标准预留 (XNS至XNT)"
+  },
+  {
+   "code": "XPF",
+   "gb": "后续标准预留(XPF至XPP)",
+   "zm": "后续标准预留 (XPF至XPP)"
+  },
+  {
+   "code": "XPV",
+   "gb": "后续标准预留(XPV至XPX)",
+   "zm": "后续标准预留 (XPV至XPX)"
+  },
+  {
+   "code": "XQA",
+   "gb": "可用 (XQA 至 XQZ)",
+   "zm": "可用(XQA至XQZ)"
+  },
+  {
+   "code": "XRD",
+   "gb": "后续标准预留 (XRD 至 XRF)",
+   "zm": "后续标准预留 (XRD至XRF)"
+  },
+  {
+   "code": "XRJ",
+   "gb": "后续标准预留 (XRJ 至 XRP)",
+   "zm": "后续标准预留 (XRJ至XRP)"
+  },
+  {
+   "code": "XRQ",
+   "gb": "可用 (XRQ 至 XRU)",
+   "zm": "可用(XRQ至XRU)"
+  },
+  {
+   "code": "XRV",
+   "gb": "后续标准预留 (XRV 至 XRX)",
+   "zm": "后续标准预留 (XRV至XRX)"
+  },
+  {
+   "code": "XSB",
+   "gb": "视频监控系统",
+   "zm": "固定摄像机（枪机/半球）"
+  },
+  {
+   "code": "XSE",
+   "gb": "可用 (XSE 至 XSU)",
+   "zm": "可用(XSE至XSU)"
+  },
+  {
+   "code": "XSV",
+   "gb": "后续标准预留 (XSV 至 XSZ)",
+   "zm": "后续标准预留 (XSV至XSZ)"
+  },
+  {
+   "code": "XTB",
+   "gb": "后续标准预留 (XTB 至 XTD)",
+   "zm": "后续标准预留 (XTB至XTD)"
+  },
+  {
+   "code": "XTH",
+   "gb": "后续标准预留(XTH 至 XTP)",
+   "zm": "后续标准预留 (XTH至XTP)"
+  },
+  {
+   "code": "XTQ",
+   "gb": "可用(XTQ 至 XTU)",
+   "zm": "可用(XTQ至XTU)"
+  },
+  {
+   "code": "XTV",
+   "gb": "后续标准预留(XTV 至 XTZ)",
+   "zm": "后续标准预留 (XTV至XTZ)"
+  },
+  {
+   "code": "XUM",
+   "gb": "能量转换系统（无热量产生）和电能传递系统（构）筑物的生活污水系统",
+   "zm": "能量转换系统(无热量产生)和电能传递系统建(构)筑物的生活污水系统"
+  },
+  {
+   "code": "XUN",
+   "gb": "用于外部用户和能源储存系统的介质供应建（构）筑物的生活污水系统",
+   "zm": "用于外部用户和能源储存系统的介质供应建(构)筑物的生活污水系统"
+  },
+  {
+   "code": "XUP",
+   "gb": "冷却水系统建（构）筑物的生活污水系统",
+   "zm": "冷却水系统建(构)筑物的生活污水系统"
+  },
+  {
+   "code": "XUQ",
+   "gb": "辅助系统建（构）筑物的生活污水系统",
+   "zm": "辅助系统建(构)筑物的生活污水系统"
+  },
+  {
+   "code": "XUR",
+   "gb": "烟气排放和处理系统建（构）筑物的生活污水系统",
+   "zm": "烟气排放和处理系统建(构)筑物的生活污水系统"
+  },
+  {
+   "code": "XUS",
+   "gb": "后续标准预留（XNS 至 XNT）",
+   "zm": "后续标准预留 (XNS至XNT)"
+  },
+  {
+   "code": "XVA",
+   "gb": "后续标准预留(XVA 至 XVP)",
+   "zm": "后续标准预留 (XVA至XVP)"
+  },
+  {
+   "code": "XVQ",
+   "gb": "可用(XVQ 至 XVU)",
+   "zm": "可用(XVQ至XVU)"
+  },
+  {
+   "code": "XVV",
+   "gb": "后续标准预留(XVV 至 XVZ)",
+   "zm": "后续标准预留 (XVV至XVZ)"
+  },
+  {
+   "code": "YAB",
+   "gb": "无线电系统",
+   "zm": "无线电话系统"
+  },
+  {
+   "code": "YAE",
+   "gb": "后续标准预留 (YAE 至 YAP)",
+   "zm": "后续标准预留 (YAE至YAP)"
+  },
+  {
+   "code": "YAQ",
+   "gb": "可用 (YAQ 至 YAU)",
+   "zm": "可用(YAQ至YAU)"
+  },
+  {
+   "code": "YAV",
+   "gb": "后续标准预留 (YAV 至 YAZ)",
+   "zm": "后续标准预留 (YAV至YAZ)"
+  },
+  {
+   "code": "YBC",
+   "gb": "后续标准预留(YBC 至 YBP)",
+   "zm": "后续标准预留 (YBC至YBP)"
+  },
+  {
+   "code": "YBQ",
+   "gb": "可用(YBQ 至 YBU)",
+   "zm": "001：网络准入管理系统 002：工控漏洞扫描管理系统 003：上网行为审计系统 004：入侵检测系统 01 005：入"
+  },
+  {
+   "code": "YBV",
+   "gb": "后续标准预留(YBV 至 YBZ)",
+   "zm": "后续标准预留 (YBV至YBZ)"
+  },
+  {
+   "code": "YC",
+   "gb": "IT 网络",
+   "zm": "IT网络"
+  },
+  {
+   "code": "YCA",
+   "gb": "后续标准预留(YCA 至 YCP)",
+   "zm": "后续标准预留 (YCA至YCP)"
+  },
+  {
+   "code": "YCQ",
+   "gb": "可用(YCQ 至 YCU)",
+   "zm": "000~999 隔离网闸"
+  },
+  {
+   "code": "YCV",
+   "gb": "后续标准预留(YCV 至 YCZ)",
+   "zm": "后续标准预留 (YCV至YCZ)"
+  },
+  {
+   "code": "YQA",
+   "gb": "可用（YQA 至 YQZ）",
+   "zm": "可用(YQA至YQZ)"
+  },
+  {
+   "code": "YRA",
+   "gb": "可用（YRA 至 YRZ）",
+   "zm": "可用(YRA至YRZ)"
+  },
+  {
+   "code": "YSA",
+   "gb": "可用（YSA 至 YSZ）",
+   "zm": "可用(YSA至YSZ)"
+  },
+  {
+   "code": "YTA",
+   "gb": "可用 (YTA 至 YTZ)",
+   "zm": "可用(YTA至YTZ)"
+  },
+  {
+   "code": "YUA",
+   "gb": "可用 (YUA 至 YUZ)",
+   "zm": "可用(YUA至YUZ)"
+  },
+  {
+   "code": "ZWG",
+   "gb": "住宅楼,住宅区域",
+   "zm": "住宅楼，住宅区域"
+  },
+  {
+   "code": "ZXD",
+   "gb": "后续标准预留(ZXD 至 ZXF)",
+   "zm": "后续标准预留(ZXD至ZXF)"
+  },
+  {
+   "code": "ZXR",
+   "gb": "后续标准预留(ZXR 至 ZXS)",
+   "zm": "后续标准预留(ZXR至ZXS)"
+  },
+  {
+   "code": "ZXV",
+   "gb": "后续标准预留(ZXV 至 ZXX)",
+   "zm": "后续标准预留(ZXV至ZXX)"
+  },
+  {
+   "code": "ZYC",
+   "gb": "后续标准预留(ZYC 至 ZYP)",
+   "zm": "后续标准预留(ZYC至ZYP)"
+  },
+  {
+   "code": "ZYQ",
+   "gb": "可用(ZYQ 至 ZYU)",
+   "zm": "可用(ZYQ至ZYU)"
+  },
+  {
+   "code": "ZYV",
+   "gb": "后续标准预留(ZYV 至 ZYX)",
+   "zm": "后续标准预留(ZYV至ZYX)"
+  },
+  {
+   "code": "ZZN",
+   "gb": "户外区域,地块",
+   "zm": "户外区域，地块"
+  },
+  {
+   "code": "ZZR",
+   "gb": "可用 (ZZR 至 ZZU)",
+   "zm": "可用(ZZR至ZZU)"
+  }
+ ],
+ "dev_name_diff": [
+  {
+   "code": "A",
+   "gb": "两个或更多目的或任务",
+   "zm": "两个或更多目的或任务（说明：此类仅适于无法识别其使用目的或任务的对象）"
+  },
+  {
+   "code": "E",
+   "gb": "提供辐射能或热能",
+   "zm": "提供辐射能或热能（省略）"
+  },
+  {
+   "code": "EA",
+   "gb": "使用电能产生用于照明目的的电磁辐射",
+   "zm": "使用电能产生用于照明目的的 电磁辐射"
+  },
+  {
+   "code": "EL",
+   "gb": "通过化石燃料的燃烧产生用于照明目的的电磁辐射",
+   "zm": "通过化石燃料的燃烧产生用于 照明目的的电磁辐射"
+  },
+  {
+   "code": "FS",
+   "gb": "环境影响保护(例如天气,地球物理的影响)",
+   "zm": "环境影响保护(例如天气，地球物理的影响)"
+  },
+  {
+   "code": "G",
+   "gb": "触发能量或者物质流产生信号,作为信息载体或者参考信息源",
+   "zm": "触发能量或者物质流产生信号，作为信息载体或者参考信息源"
+  },
+  {
+   "code": "HM",
+   "gb": "通过离心力分离物质的混合物修订:这个过程涉及字母代码\"HN\"(机械过程)",
+   "zm": "通过离心力分离物质的混合物 修订：这个过程涉及字母代码“HN”(机械过程)"
+  },
+  {
+   "code": "K",
+   "gb": "处理(接收、处理和提供)信号或信息(不包括用于保护的目的或应用,见F类)",
+   "zm": "处理(接收、处理和提供)信号或信息(不包括用于保护的目的或应用，见F类)"
+  },
+  {
+   "code": "Q",
+   "gb": "控制或改变能量、信号或物质的流动(对于控制回路中的信号，参见 K 和 S类)",
+   "zm": "控制或改变能量、信号或物质的流动(对于控制回路中的信号，参见K和S类)"
+  },
+  {
+   "code": "TF",
+   "gb": "转换信号(信息内容保留)",
+   "zm": "001：网络准入管理系统 002：工控漏洞扫描管理系统 003：上网行为审计系统 004：入侵检测系统 01 005：入"
+  },
+  {
+   "code": "UF",
+   "gb": "保持及支撑仪器仪表,控制和通信设备",
+   "zm": "保持及支撑仪器仪表，控制和通信设备"
+  },
+  {
+   "code": "UG",
+   "gb": "保持及支撑仪器仪表,控制和通信电缆及导管",
+   "zm": "保持及支撑仪器仪表，控制和通信电缆及导管"
+  },
+  {
+   "code": "UH",
+   "gb": "封闭和支撑仪表,控制和通信设备",
+   "zm": "封闭和支撑仪表，控制和通信设备"
+  },
+  {
+   "code": "US",
+   "gb": "空间对象,容纳和支持其他对象",
+   "zm": "空间对象，容纳和支持其他对象"
+  },
+  {
+   "code": "WA",
+   "gb": "高压电能分配(>1000V 交流或>1500V 直流)",
+   "zm": "高压电能分配(>1000V交流或>1500V直流)"
+  },
+  {
+   "code": "WB",
+   "gb": "高压电能传输(>1000V 交流或>1500V 直流)",
+   "zm": "高压电能传输(>1000V交流或>1500V直流)"
+  },
+  {
+   "code": "WC",
+   "gb": "低压电能分配(≤1000V 交流或≤1500V 直流)",
+   "zm": "低压电能分配(≤1000V交流或≤1500V直流)"
+  },
+  {
+   "code": "WD",
+   "gb": "低压电能传输(≤1000V 交流或≤1500V 直流)",
+   "zm": "低压电能传输(≤1000V交流或≤1500V直流)"
+  },
+  {
+   "code": "WL",
+   "gb": "运输材料或产品（无驱动）",
+   "zm": "运输材料或产品(无驱动)"
+  },
+  {
+   "code": "XB",
+   "gb": "连接高压对象(>1000V 交流或>1500V 直流)",
+   "zm": "连接高压对象(>1000V交流或>1500V直流)"
+  },
+  {
+   "code": "XD",
+   "gb": "连接低压对象(≤1000V 交流或≤1500V 直流)",
+   "zm": "连接低压对象(≤1000V交流或≤1500V直流)"
+  },
+  {
+   "code": "XN",
+   "gb": "传递机械能的连接设备,不可拆卸",
+   "zm": "传递机械能的连接设备，不可拆卸"
+  },
+  {
+   "code": "XP",
+   "gb": "传递机械能的连接设备, 可拆卸",
+   "zm": "传递机械能的连接设备，可拆卸"
+  }
+ ]
+}

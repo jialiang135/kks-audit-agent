@@ -20,6 +20,7 @@ from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
 from typing import Any
+from audit_metrics import summary_metrics
 
 try:
     import openpyxl
@@ -39,7 +40,8 @@ PALE_RED = "FEF2F2"
 PALE_AMBER = "FFFBEB"
 PALE_GREEN = "F0FDF4"
 # 明细表里用等宽字体展示的列（编码类），HTML 与 Excel 共用同一口径
-_MONO_KINDS = ("kks_code", "parent_code", "old_code", "ai_suggested_code")
+_MONO_KINDS = ("kks_code", "parent_code", "old_code")
+_BLANK_DASH = "—（源表未填）"
 # HTML/CSS 与广元模板同款
 CSS = """
 :root{--bg:#f5f7fa;--card:#fff;--ink:#1f2d3d;--mut:#6b7a8d;--line:#e3e8ef;
@@ -154,33 +156,74 @@ def _read_aux_dup_sheet(source_path: str) -> dict[str, Any] | None:
     if not path.exists():
         return None
     try:
+        # ⚠️ 必须 try/finally 关闭：read_only 模式会一直持有文件句柄，
+        #    而这里此前在"没有重码表""重码表为空"等分支直接 return，
+        #    导致 runs/<run_id>/input/*.xlsx 审核完仍被占用（Windows WinError 32，
+        #    台账删除产物 / 移动 run 目录都会失败）。
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        for ws in wb.worksheets:
-            if "重码" not in ws.title and "待处理" not in ws.title:
-                continue
-            rows = list(ws.iter_rows(values_only=True))
-            if not rows:
-                continue
-            header = [str(v).strip() if v is not None else "" for v in rows[0]]
-            name_idx = next((i for i, h in enumerate(header) if "名称" in h), 0)
-            prof_idx = next((i for i, h in enumerate(header) if "专业" in h), None)
-            out: list[dict[str, str]] = []
-            for row in rows[1:]:
-                if not any(v not in (None, "") for v in row):
+        try:
+            for ws in wb.worksheets:
+                if "重码" not in ws.title and "待处理" not in ws.title:
                     continue
-                name = str(row[name_idx]).strip() if name_idx < len(row) and row[name_idx] is not None else ""
-                prof = ""
-                if prof_idx is not None and prof_idx < len(row) and row[prof_idx] is not None:
-                    prof = str(row[prof_idx]).strip()
-                if name:
-                    out.append({"name": name, "profession": prof, "status": "未编/待处理"})
-            wb.close()
-            if out:
-                return {"sheet": ws.title, "rows": out}
+                rows = list(ws.iter_rows(values_only=True))
+                if not rows:
+                    return None
+                header = [str(v).strip() if v is not None else "" for v in rows[0]]
+                name_idx = next((i for i, h in enumerate(header) if "名称" in h), 0)
+                prof_idx = next((i for i, h in enumerate(header) if "专业" in h), None)
+                out: list[dict[str, str]] = []
+                for row in rows[1:]:
+                    if not any(v not in (None, "") for v in row):
+                        continue
+                    name = str(row[name_idx]).strip() if name_idx < len(row) and row[name_idx] is not None else ""
+                    prof = ""
+                    if prof_idx is not None and prof_idx < len(row) and row[prof_idx] is not None:
+                        prof = str(row[prof_idx]).strip()
+                    if name:
+                        out.append({"name": name, "profession": prof, "status": "未编/待处理"})
+                if out:
+                    return {"sheet": ws.title, "rows": out}
+                return None
             return None
-        return None
+        finally:
+            wb.close()
     except Exception:
         return None
+
+
+def _item_rule_ids(item: dict[str, Any]) -> set[str]:
+    """取一行命中的规则号集合（兼容 'KKS-25/25b'、'KKS-13/16' 这类合并写法）。"""
+    raw = str(item.get("rule_id", "") or "")
+    return {part.strip() for part in re.split(r"[/~]", raw) if part.strip()}
+
+
+def cell_text(value: Any, *, column: str = "") -> str:
+    """把单元格值转成**永不为空**的展示文本。
+
+    用户要求：明细表每一行每一列都要有文字解释，不能出现空格子。
+    - 空值/占位符（None、""、"-"、"无"）→ 写明"源表为空"，而不是编造内容；
+    """
+    if value is None:
+        return _BLANK_DASH
+    text_value = str(value).strip()
+    if text_value in ("", "-", "—", "None", "nan", "无", "/"):
+        return _BLANK_DASH
+    return text_value
+
+
+def _blank_cell(value: Any) -> Any:
+    """Excel 单元格用的空值兜底（数字/布尔保持原类型，方便筛选与排序）。"""
+    if isinstance(value, (int, float, bool)):
+        return value
+    return cell_text(value)
+
+
+def row_key(item: dict[str, Any]) -> int:
+    """统一取行的 Excel 行号（模块级，构建与渲染两处共用同一口径）。"""
+    try:
+        return int(item.get("excel_row") or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 # ------------------------------------------------------------------ 业务分组构建
@@ -226,17 +269,15 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     p0_blocker_items: list[dict[str, Any]] = []
     other_items: list[dict[str, Any]] = []
 
-    def row_key(item: dict[str, Any]) -> int:
-        try:
-            return int(item.get("excel_row") or 0)
-        except (TypeError, ValueError):
-            return 0
+    # 行号口径由模块级 row_key() 统一提供（渲染层也用同一个，避免两处定义漂移）
 
     for item in issues:
         rule = str(item.get("rule_id", ""))
         category = str(item.get("category", ""))
-        row = row_key(item)
-        if rule == "KKS-28" and category == "机组三方不一致":
+        row = (item.get("sheet", ""), row_key(item))
+        if item.get("compliance_locked") or item.get("priority") == "P0":
+            p0_blocker_items.append(item)
+        elif rule == "KKS-28" and category == "机组三方不一致":
             unit_text_items.append(item)
         elif rule in {"KKS-D", "KKS-00"} and (category == "有码无名称" or (rule == "KKS-00")):
             empty_name_items.append(item)
@@ -256,7 +297,7 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
             dup_name_items.append(item)
         elif rule == "KKS-27" and category == "名称语义需人核":
             semantic_void_items.append(item)
-        elif rule in {"KKS-04", "KKS-04b", "KKS-05", "KKS-06", "KKS-07", "KKS-09", "KKS-10", "KKS-11", "KKS-12"}:
+        elif item.get("compliance_locked") or item.get("priority") == "P0" or rule in {"KKS-04", "KKS-04b", "KKS-05", "KKS-06", "KKS-07", "KKS-09", "KKS-10", "KKS-11", "KKS-12"}:
             p0_blocker_items.append(item)
         elif rule == "KKS-25c":   # 原KKS一对多：从 records 展开逐行列表，见下方
             pass
@@ -292,8 +333,8 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     code_hygiene_items = sort_rows(code_hygiene_items)
     dup_name_items = sort_rows(dup_name_items)
     # 空名行的"语义需人核"已由 KKS-D 覆盖，不再重复计入
-    empty_rows = {row_key(i) for i in empty_name_items}
-    semantic_void_items = sort_rows([i for i in semantic_void_items if row_key(i) not in empty_rows])
+    empty_rows = {(i.get("sheet", ""), row_key(i)) for i in empty_name_items}
+    semantic_void_items = sort_rows([i for i in semantic_void_items if (i.get("sheet", ""), row_key(i)) not in empty_rows])
     p0_blocker_items = sort_rows(p0_blocker_items)
     other_items = sort_rows(other_items)
 
@@ -340,17 +381,23 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     hygiene_n = len(hygiene_items)
     empty_n = len(empty_name_items)
 
+    shared_metrics = summary_metrics(result)
     kpis = [
-        {"label": "主表已编码行" + ("" if not missing_rows else f"（另有{missing_rows}行缺码）"),
-         "value": f"{data_rows:,}", "tone": "ok" if not missing_rows else "warn"},
-        {"label": "重复码/非法字符/O-I/超12位", "value": f"{zero_clean:,}", "tone": "ok" if zero_clean == 0 else "bad"},
-        {"label": "机组文本三方不一致(P1)", "value": f"{len(unit_text_items):,}", "tone": "warn" if unit_text_items else "ok"},
-        {"label": "名称卫生+空名(P2/P1)", "value": f"{hygiene_n + empty_n:,}", "tone": "warn" if hygiene_n + empty_n else "ok"},
+        {"key": key, "label": label, "value": f"{shared_metrics[key]:,}",
+         "tone": "ok" if key in {"effective_kks", "device_level_codes"} or not shared_metrics[key] else ("bad" if key == "p0" else "warn")}
+        for key, label in (("effective_kks", "有效KKS数量（非空编码行）"),
+            ("device_level_codes", "设备级编码（完整十二位格式）"), ("duplicate_codes", "重复编码（编码组数）"),
+            ("parent_errors", "父级问题（孤儿及前缀关系）"), ("p0", "已确认问题（P0）"),
+            ("p1", "已确认问题（P1）"), ("p2", "已确认问题（P2）"))
+    ] + [
+        {"label": label, "value": f"{shared_metrics[key]:,}", "tone": "warn" if shared_metrics[key] else "ok"}
+        for key, label in (("pending_review", "待人工确认"), ("suspected_false_positives", "疑似误报"), ("rule_hits", "规则命中条目"))
+    ] + [
         {"label": "AI 已复核" + (f"（候选{ai_candidate}）" if ai_candidate else ""),
          "value": f"{ai_reviewed:,}", "tone": "ok" if ai_reviewed else "warn"},
     ]
 
-    # ---- 八维卡片（六张，行内计数可回溯）
+    # ---- 八维卡片（八张，与 kks-audit/SKILL.md 的八维框架一一对应，行内计数可回溯）
     def rule_count_cell(items: list[dict[str, Any]], level: str = "p2") -> tuple[int, str]:
         return (len(items), "ok" if not items else level)
 
@@ -397,13 +444,52 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     ]
     unit_rows = [("机组文本↔编码前缀不一致", len(unit_text_items), "p1", "以 00/01/02/61 前缀为准")]
 
+    # ---- 维度七：跨厂/范围对比（KKS-19/20/21，仅当传入 --compare-file 时成立）
+    comparison = result.get("scope_comparison") if isinstance(result.get("scope_comparison"), dict) else None
+    compare_rows: list[tuple[str, Any, str, str]] = []
+    if comparison:
+        waterfall = comparison.get("quantity_waterfall", {}) or {}
+        coverage = comparison.get("professional_coverage", {}) or {}
+        depth = comparison.get("encoding_depth", {}) or {}
+        other_prof = list(coverage.get("primary_only") or []) + list(coverage.get("comparison_only") or [])
+        compare_rows = [
+            ("有效编码数量差(本文件−对比)", int(waterfall.get("primary_minus_comparison", 0) or 0), "p2", "总量差不等于质量差（KKS-19/20/21）"),
+            ("信号点号层增量", int(waterfall.get("signal_point_increment", 0) or 0), "p2", "扩展码深度差异（KKS-20）"),
+            ("部件级附加码增量", int(waterfall.get("component_increment", 0) or 0), "p2", "扩展码深度差异（KKS-20）"),
+            ("设备/系统级增量", int(waterfall.get("base_device_increment", 0) or 0), "p2", "设备级编码深度差异（KKS-20）"),
+            ("专业覆盖差异(仅一方有)", len(other_prof), "p2", "土建/信息/消防等非工艺专业是否纳入（KKS-19）"),
+            ("瀑布闭合", "闭合" if waterfall.get("closed") else f"未闭合(差 {waterfall.get('closure_delta', 0)})",
+             "ok" if waterfall.get("closed") else "p2", "增量之和须等于总量差（KKS-21）"),
+        ]
+    else:
+        compare_rows = [("跨厂/范围对比", "未提供对比文件", "p2", "上传第二份 Excel（--compare-file）后本维度才生效")]
+
+    # ---- 维度八：可导入性（达梦8 LOCATIONS，KKS-17/22/23）
+    import_gov = result.get("import_governance", {}) or {}
+    import_ready = bool(import_gov.get("direct_import_ready"))
+    needs_extension = bool(import_gov.get("long_code_requires_extension_model"))
+    import_rows = [
+        ("直接导入就绪", "就绪" if import_ready else "不建议直接导入", "ok" if import_ready else "p1",
+         f"目标库 {import_gov.get('target', 'DM8 LOCATIONS')}（KKS-22）"),
+        ("超12位需扩展模型", "需要" if needs_extension else "不需要", "p1" if needs_extension else "ok",
+         ">12 位无法原样套用 LOCATIONS 结构（KKS-17/22）"),
+        ("历史 KKS 禁止改写", "已冻结" if import_gov.get("historical_kks_rewrite_forbidden") else "未声明",
+         "ok" if import_gov.get("historical_kks_rewrite_forbidden") else "p2",
+         "两票/缺陷历史走映射层+双码共存（KKS-23）"),
+        ("真实库连通验证", "已执行" if import_gov.get("runtime_dm8_validation") else "未执行",
+         "ok" if import_gov.get("runtime_dm8_validation") else "p2", "导入前须在目标库实测"),
+    ]
+
     cards = [
         {"no": "①", "title": "结构/语法", "sub": "字符集 + 分段", "rows": syntax_rows, "group_ok": syntax_ok},
         {"no": "②", "title": "唯一性", "sub": "主键 + 身份键", "rows": uniq_rows, "group_ok": dup_groups == 0},
         {"no": "③", "title": "层级/树", "sub": "前缀一致性(本文件内)", "rows": hier_rows, "group_ok": prefix_mismatch == 0 and self_ref == 0 and parent_longer == 0},
         {"no": "④", "title": "迁移一致性", "sub": "旧格式/字母迁移", "rows": mig_rows, "group_ok": legacy_codes == 0},
-        {"no": "⑤", "title": "语义/可导入", "sub": "扩展码 + 文本", "rows": sem_rows, "group_ok": long_codes == 0 and hygiene_n == 0},
+        {"no": "⑤", "title": "语义/扩展码", "sub": "扩展码 + 文本", "rows": sem_rows, "group_ok": long_codes == 0 and hygiene_n == 0},
         {"no": "⑥", "title": "机组三方一致", "sub": "文本↔前缀", "rows": unit_rows, "group_ok": not unit_text_items},
+        {"no": "⑦", "title": "跨厂/范围对比", "sub": "覆盖 + 深度 + 瀑布", "rows": compare_rows,
+         "group_ok": bool(comparison) and bool((comparison.get("quantity_waterfall") or {}).get("closed"))},
+        {"no": "⑧", "title": "可导入性", "sub": "达梦8 LOCATIONS", "rows": import_rows, "group_ok": import_ready},
     ]
 
     # ---- P1/P2/P0 业务桶（供明细表/Excel sheet 使用）
@@ -441,9 +527,17 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     for row in hygiene_seen:
         pass
     for item in hygiene_items:
-        item["hygiene_reason"] = hygiene_seen.get(row_key(item), "全角符/其他")
+        item["hygiene_reason"] = hygiene_seen.get((item.get("sheet", ""), row_key(item)), "全角符/其他")
     for item in empty_name_items:
-        item["status"] = "空/空格占位"
+        item["name_status"] = "空/空格占位"
+    # 「类别」列兜底：部分规则（如 KKS-31）不写 category，留空会变成空格子；
+    # 用规则性质表补一句可读的归类说明。
+    for item in other_items:
+        if not str(item.get("category", "") or "").strip():
+            rules = _item_rule_ids(item)
+            item["category"] = "、".join(
+                sorted({{"KKS-31": "父子名称一致性", "KKS-28": "机组归属"}.get(rule, "数据/文本治理") for rule in rules})
+            ) or "其他提示"
 
     # AI 复核列：仅当 AI 实际复核过才注入；置于明细表末尾，避免挤占业务列
     if ai_active:
@@ -458,67 +552,34 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
                 item["ai_decision_label"] = _AI_DECISION_LABELS.get(decision, "需人工确认" if decision or item.get("ai_decision") else "")
                 item["ai_final_summary"] = str(item.get("final_summary", "") or "")
 
-    # ---- AI 建议编码（第十节 / Excel 独立 sheet 数据源）
-    # 只对「判定为有问题的行」生成；本地复核未通过的标为不可用，不写进建议值。
-    code_suggest = result.get("code_suggestions") if isinstance(result.get("code_suggestions"), dict) else {}
-    suggest_map: dict[str, dict[str, Any]] = code_suggest.get("suggestions") or {}
-    suggest_rows: list[dict[str, Any]] = []
-    for key in sorted(suggest_map, key=lambda x: (int(x) if str(x).isdigit() else 0)):
-        item = suggest_map[key]
-        if not isinstance(item, dict):
-            continue
-        code = str(item.get("suggested_code", "") or "").strip()
-        suggest_rows.append({
-            "excel_row": key,
-            "kks_code": "",
-            "name": "",
-            "suggested_code": code if item.get("valid") else "",
-            "changed": str(item.get("changed", "") or ""),
-            "basis": "；".join(item.get("basis") or []),
-            "reason": str(item.get("reason", "") or ""),
-            "valid": bool(item.get("valid")),
-            "invalid_reason": str(item.get("invalid_reason", "") or ""),
-            "confidence": item.get("confidence", 0),
-        })
-    if suggest_rows:
-        # 补齐行号对应的原编码/名称，便于在独立 sheet 里直接对照
-        by_row = {row_key(it): it for it in issues}
-        for item in suggest_rows:
-            src = by_row.get(int(item["excel_row"]) if str(item["excel_row"]).isdigit() else 0)
-            if src:
-                item["kks_code"] = str(src.get("kks_code", "") or "")
-                item["name"] = str(src.get("name", "") or "")
-        suggest_by_row = {str(it["excel_row"]): it for it in suggest_rows}
-        for bucket in buckets:
-            for item in bucket["items"]:
-                found = suggest_by_row.get(str(row_key(item)))
-                if not found or not found["suggested_code"]:
-                    continue
-                item["ai_suggested_code"] = found["suggested_code"]
-            # 列位置：紧跟「编码」之后，方便左右对照原码与建议码；没有编码列则放最右
-            new_cols = [{"k": "ai_suggested_code", "t": "AI建议编码"}]
-            insert_at = next((i for i, c in enumerate(bucket["columns"]) if c["k"] == "kks_code"), None)
-            if insert_at is None:
-                bucket["columns"] = bucket["columns"] + new_cols
-            else:
-                bucket["columns"] = bucket["columns"][:insert_at + 1] + new_cols + bucket["columns"][insert_at + 1:]
+    for bucket in buckets:
+        bucket["columns"] = [{"k": "sheet", "t": "工作表"}] + bucket["columns"]
+        bucket["columns"] += [{"k": "audit_result", "t": "审查结论"}, {"k": "audit_basis", "t": "审查依据"}]
+        for item in bucket["items"]:
+            decision = item.get("final_decision")
+            item["audit_result"] = ("待核" if item.get("evidence_missing") or decision == "needs_human"
+                                    else "疑似误报，待确认" if decision == "likely_false_positive"
+                                    else "不符合" if decision == "confirmed_issue"
+                                    else "待核" if item.get("status") == "needs_review" else "不符合")
+            item["audit_basis"] = item.get("final_evidence") or item.get("evidence") or item.get("definition") or "规则依据待补充"
 
     # ---- AI 复核建议（第九节 / Excel 独立 sheet 数据源）
     ai_suggestions: list[dict[str, str]] = []
-    seen_ai_rows: set[tuple[str, str]] = set()
+    seen_ai_rows: set[tuple[str, str, str]] = set()
     if ai_active:
         for bucket in buckets:
             for item in bucket["items"]:
                 summary = str(item.get("final_summary", "") or "")
                 if not summary:
                     continue
-                key = (str(item.get("excel_row", "")), str(item.get("kks_code", "")))
+                key = (str(item.get("sheet", "")), str(item.get("excel_row", "")), str(item.get("kks_code", "")))
                 if key in seen_ai_rows:
                     continue
                 seen_ai_rows.add(key)
                 ai_suggestions.append({
-                    "excel_row": key[0],
-                    "kks_code": key[1],
+                    "sheet": key[0],
+                    "excel_row": key[1],
+                    "kks_code": key[2],
                     "name": str(item.get("name", "") or ""),
                     "bucket_title": str(bucket["title"]),
                     "decision": _AI_DECISION_LABELS.get(str(item.get("final_decision", "") or ""), "需人工确认"),
@@ -528,13 +589,17 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
 
     # ---- 结构说明与范围
     structure_rows: list[tuple[str, str]] = []
-    structure_rows.append(("文件性质", "增量新增批次，非全厂汇总" if incremental else "全量文件"))
-    structure_rows.append(("主表", f"{result.get('sheet', '—')} {data_rows:,} 行（权威源）"))
+    if result.get("stage_scope_note"):
+        structure_rows.append(("报告阶段", result["stage_scope_note"]))
+    structure_rows.append(("文件性质", "增量新增批次，非全厂汇总" if incremental else "工作簿范围审查，未验证全厂覆盖"))
+    if result.get("evaluation_scope"):
+        structure_rows.append(("AI抽样范围", f"仅对分层抽样的{result['evaluation_scope']['sample_issues']}项进行效果检查，不能认定全文件AI复核已完成。"))
+    structure_rows.append(("已审工作表", f"{result.get('sheet', '—')} {data_rows:,} 个有效编码行"))
     if scope.get("notes"):
         for note in scope["notes"]:
             structure_rows.append(("范围/约定", note))
     if orig_1n_groups:
-        structure_rows.append(("原KKS一对多", f"{len(orig_1n_groups)} 组；新KKS全唯一，以新KKS为主键"))
+        structure_rows.append(("原KKS一对多", f"{len(orig_1n_groups)} 组；物理设备身份及历史映射须结合设备台账确认"))
     for note in result.get("structural_notes", []):
         if "空 Sheet" in str(note) or "空白行" in str(note) or "首行" in str(note):
             structure_rows.append(("文件结构", str(note)))
@@ -550,14 +615,14 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
     if incremental:
         honesty.append({"tag": "范围", "bold": f"父级孤儿 {external_rows:,} 行({external_units} 个父级节点)不在本文件",
                         "text": "增量文件对自身判孤儿必然接近 100%，已改为“与主库闭合”的范围验证项，不计入缺陷（见第六节）。"})
-    honesty.append({"tag": "企业惯例", "bold": "全厂码 G 取值按企业两位前缀 00/01/02/61 放行",
-                    "text": "G='0'/'6' 等字符若按国标单字符 G 表判定会误报（此前 8,208 条假阳性已消除）；企业增量文件以两位数字前缀标识机组/公用，视为合法。"})
+    honesty.append({"tag": "国标依据", "bold": "全厂码H₂H₃依据GB/T 50549-2020表4.3.1-2校验",
+                    "text": "00为全厂公用，01～60为单机组，61～90为两机共用；91～99的共用范围须按工程约定核实，不能仅凭格式判定归属正确。"})
     if scope.get("converged_to_master_rows"):
         honesty.append({"tag": "收敛业务", "bold": f"{scope.get('converged_to_master_rows')} 行旧扩展码(非12位)收敛为 12 位主码",
                         "text": "这是“旧码→12位主码”的标准化业务本身，非层级缺陷；未逐条列入问题（此前 8,403 条假阳性已消除）。"})
     if len(orig_1n_groups):
         honesty.append({"tag": "一对多", "bold": f"原KKS 一对多 {len(orig_1n_groups)} 组",
-                        "text": "多为“一个旧测点拆分为多个新设备”的合理映射；新KKS 全唯一，原KKS 仅作历史参照（P2 提示非 P0 重复）。"})
+                        "text": "同一旧标识对应多个当前编码，仅作设备身份线索。拆分是否合理及是否为同一物理设备，须结合原始台账、图纸和历史映射核实。"})
     if len(dup_name_items):
         honesty.append({"tag": "同名聚簇", "bold": f"同名/同物异名 {len(dup_name_items)} 组",
                         "text": "KKS 名称本身不唯一定位设备，聚簇仅作人工抽检线索并按簇计 1 条，不按簇内编码数放大。"})
@@ -624,14 +689,6 @@ def build_overview(result: dict[str, Any]) -> dict[str, Any]:
         "ai_model": ai_model_name,
         "ai_summary": ai_summary if ai_summary_ok else {},
         "ai_suggestions": ai_suggestions,
-        "ai_code_suggestions": suggest_rows,
-        "ai_code_suggest_meta": {
-            "model": str(code_suggest.get("model", "") or ""),
-            "status": str(code_suggest.get("status", "") or ""),
-            "requested": int(code_suggest.get("requested", 0) or 0),
-            "validated": int(code_suggest.get("validated", 0) or 0),
-            "rejected": int(code_suggest.get("rejected", 0) or 0),
-        },
         "cards": cards,
         "must_handle": must_handle,
         "clean_flags": {
@@ -694,10 +751,12 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
     header = f"""<header>
   <h1>{esc(ov['title'])}</h1>
   <div class="meta">源文件：{esc(ov['source_path'] or '—')}<br>
-  主表：<b>{esc(ov['sheet'])}</b>（{ov['data_rows']:,} 行{'' if not ov['missing_rows'] else f"，另有 {ov['missing_rows']} 行缺码"}）；
+  已审工作表：<b>{esc(ov['sheet'])}</b>（{ov['data_rows']:,} 个有效编码行{'' if not ov['missing_rows'] else f"，另有 {ov['missing_rows']} 行缺码"}）；
   审计日期：{today}；框架：kks-audit 八维
-  <span class="ver">{'增量新增批次' if ov['scope']['incremental'] else '全量'}</span></div>
+  <span class="ver">{'AI抽样效果检查' if result.get('evaluation_scope') else ('增量新增批次' if ov['scope']['incremental'] else '工作簿范围')}</span></div>
 </header>"""
+    if result.get("stage_scope_note"):
+        header += f'<div class="callout p2"><b>{esc(result["stage_scope_note"])}</b></div>'
 
     kpi_html = "".join(
         f'<div class="kpi {item["tone"]}"><div class="n">{_fmt_big(item["value"])}</div><div class="l">{esc(item["label"])}</div></div>'
@@ -764,7 +823,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
         )
     sec2 = f"""<div class="sec">
   <h2>二、八维审核结果总表</h2>
-  <p class="sub">P0 阻断 / P1 需改 / P2 提示 / OK 良性。★ 注：本文件为增量新增时，“父级孤儿”不在此文件内判定（父节点在主库），已转为范围验证项。</p>
+  <p class="sub">八维与 kks-audit/SKILL.md 的框架一一对应：①结构/语法 ②唯一性 ③层级/树 ④迁移一致性 ⑤语义/扩展码 ⑥机组三方一致 ⑦跨厂/范围对比 ⑧可导入性。P0 阻断 / P1 需改 / P2 提示 / OK 良性。★ 注：本文件为增量新增时，“父级孤儿”不在此文件内判定（父节点在主库），已转为范围验证项；⑦仅在上传对比文件后生效。</p>
   <div class="dims">{''.join(cards_html)}</div>
 </div>"""
 
@@ -790,7 +849,9 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
 </div>"""
 
     # 四、P1 关键问题详情
-    def data_table(headers: list[str], rows: list[list[Any]], mono_cols: set[int], *, limit: int = 24) -> str:
+    def data_table(headers: list[str], rows: list[list[Any]], mono_cols: set[int], *,
+                   limit: int = 24, col_keys: list[str] | None = None) -> str:
+        col_keys = col_keys or []
         head = "".join(f"<th>{esc(h)}</th>" for h in headers)
         body = []
         for row in rows[:limit]:
@@ -801,7 +862,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
                     classes.append("mono")
                 if isinstance(cell, int) or (isinstance(cell, str) and cell.replace(",", "").isdigit()):
                     classes.append("num")
-                cells.append(f'<td class="{" ".join(classes)}">{_fmt_big(cell)}</td>')
+                cells.append(f'<td class="{" ".join(classes)}">{_fmt_big(cell_text(cell))}</td>')
             body.append("<tr>" + "".join(cells) + "</tr>")
         if len(rows) > limit:
             body.append(f'<tr><td colspan="{len(headers)}" class="num" style="color:var(--mut)">…（共 {len(rows):,} 条，详见 Excel）</td></tr>')
@@ -835,7 +896,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
         if key == "p1_unit_text" and ov["unit_direction"]:
             note += " " + direction_text(ov["unit_direction"])
         p1_sections += f"""<h3 style="font-size:15px;margin:14px 0 4px">4.{p1_no} {esc(bucket['title'])}（{bucket['count']:,} 条）</h3>
-<div class="callout p1">{note}</div>{data_table(headers, rows, mono_cols)}"""
+<div class="callout p1">{note}</div>{data_table(headers, rows, mono_cols, col_keys=[c['k'] for c in bucket['columns']])}"""
     sec4 = f"""<div class="sec">
   <h2>四、P1 关键问题详情</h2>
   {p1_sections or '<p class="sub">未发现 P1 关键问题。</p>'}
@@ -853,7 +914,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
         rows = bucket_rows(bucket)
         mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in _MONO_KINDS}
         p2_sections += f"""<h3 style="font-size:15px;margin:18px 0 4px">5.{p2_no} {esc(bucket['title'])}（{bucket['count']:,} 条）</h3>
-<div class="callout p2">{esc(bucket['note']) or '提示项，人工抽检核对。'}</div>{data_table(headers, rows, mono_cols, limit=20)}"""
+<div class="callout p2">{esc(bucket['note']) or '提示项，人工抽检核对。'}</div>{data_table(headers, rows, mono_cols, limit=20, col_keys=[c['k'] for c in bucket['columns']])}"""
     # 原KKS一对多（按组）
     if ov["orig_1n_groups"]:
         p2_no += 1
@@ -863,7 +924,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
                 rows.append([g["old"], m.get("excel_row", ""), m.get("kks_code", ""), m.get("parent_code", ""), m.get("profession", ""), m.get("name", "")])
         p2_sections += f"""<h3 style="font-size:15px;margin:18px 0 4px">5.{p2_no} 原KKS 一对多映射（{len(ov['orig_1n_groups']):,} 组 / {len(rows):,} 行）</h3>
 <div class="callout p2">同一条 原KKS编码 映射到 ≥2 条 新KKS编码。多为“一个旧测点拆分为多个新设备”的合理映射，但原KKS 非唯一键；以 <b>新KKS 为主键</b>、原KKS 仅作历史参照。</div>
-{data_table(['原KKS(键)', '行', '新KKS', '父级', '专业', '设备名称'], rows, {0, 2, 3}, limit=18)}"""
+{data_table(['原KKS(键)', '行', '新KKS', '父级', '专业', '设备名称'], rows, {0, 2, 3}, limit=18, col_keys=['old_code', 'excel_row', 'kks_code', 'parent_code', 'profession', 'name'])}"""
     if ov["aux_dup"]:
         p2_no += 1
         aux = ov["aux_dup"]
@@ -872,14 +933,14 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
         tail = f'<tr><td colspan="3" class="num" style="color:var(--mut)">{more}</td></tr>' if more else ""
         p2_sections += f"""<h3 style="font-size:15px;margin:18px 0 4px">5.{p2_no} 重码待处理（{len(aux['rows'])} 条，仍未编码）</h3>
 <div class="callout p2">源文件「{esc(aux['sheet'])}」sheet 的条目本批次仍未赋码（不在主表）。建议对照主库确认是否已在库或需新增，避免与主库重复。</div>
-<table class="data"><tr><th>设备名称</th><th>专业</th><th>状态</th></tr>{"".join(f'<tr><td>{esc(r[0])}</td><td>{esc(r[1])}</td><td>{esc(r[2])}</td></tr>' for r in rows)}{tail}</table>"""
+<table class="data"><tr><th>设备名称</th><th>专业</th><th>状态</th></tr>{"".join(f'<tr><td>{esc(cell_text(r[0]))}</td><td>{esc(cell_text(r[1]))}</td><td>{esc(cell_text(r[2]))}</td></tr>' for r in rows)}{tail}</table>"""
     if ov["buckets"][0]["items"]:
         bucket = ov["buckets"][0]
         headers = [c["t"] for c in bucket["columns"]]
         rows = bucket_rows(bucket)
         mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in _MONO_KINDS}
         p0_html = (f"<h3 style='font-size:15px;margin:14px 0 4px'>{esc(bucket['title'])}（{bucket['count']} 条）</h3>"
-                   f'<div class="callout p0">阻断性问题必须修改并复核后才能导入。</div>{data_table(headers, rows, mono_cols, limit=20)}')
+                   f'<div class="callout p0">阻断性问题必须修改并复核后才能导入。</div>{data_table(headers, rows, mono_cols, limit=20, col_keys=[c["k"] for c in bucket["columns"]])}')
         p2_sections = p0_html + p2_sections
     sec5 = f"""<div class="sec">
   <h2>五、P2 提示项与阻断项</h2>
@@ -900,7 +961,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
             scope_html += ('<p class="sub">本文件引用的外部父级节点 Top 样例（完整清单见 Excel）：</p>'
                            '<table class="data"><tr><th>父级节点</th><th>下挂行数</th><th>位置</th></tr>' + ptab + '</table>')
     else:
-        scope_html += '<div class="callout ok"><b>本文件为全量/主表文件：</b>内部层级自洽，父级均在文件内。</div>'
+        scope_html += '<div class="callout p2"><b>本次按工作簿范围审查：</b>父级闭合情况见层级审查问题；全厂覆盖仍须结合设备台账确认。</div>'
     if sc["notes"]:
         for note in sc["notes"]:
             scope_html += f'<div class="callout p2">{esc(note)}</div>'
@@ -939,39 +1000,7 @@ def render_html(result: dict[str, Any], ov: dict[str, Any]) -> str:
   <ul class="tight">{points9}</ul>
 </div>"""
 
-    # 十、AI 建议编码（只对判定为问题的行生成；未生成时省略本节）
     sec10 = ""
-    sug_rows = ov.get("ai_code_suggestions") or []
-    if sug_rows:
-        meta = ov.get("ai_code_suggest_meta") or {}
-        usable = [s for s in sug_rows if s.get("suggested_code")]
-        body10: list[str] = []
-        for s in (usable or sug_rows)[:24]:
-            body10.append(
-                "<tr><td class=\"num\">{}</td><td class=\"mono\">{}</td><td>{}</td>"
-                "<td class=\"mono\">{}</td><td>{}</td><td>{}</td></tr>".format(
-                    esc(s.get("excel_row", "")),
-                    esc(s.get("kks_code", "")),
-                    esc(str(s.get("name", ""))[:40]),
-                    esc(s.get("suggested_code", "") or "—"),
-                    esc(s.get("basis", "") or "—"),
-                    esc(str(s.get("reason", ""))[:120]),
-                )
-            )
-        more10 = (f'<tr><td colspan="6" class="num" style="color:var(--mut)">'
-                  f'…（共 {len(sug_rows):,} 条，详见 Excel「AI建议编码」sheet）</td></tr>'
-                  if len(sug_rows) > 24 else "")
-        sec10 = f"""<div class="sec">
-  <h2>十、AI 建议编码（仅问题行）</h2>
-  <div class="sub">模型 {esc(meta.get('model') or '—')}；对 {meta.get('requested', 0)} 个有问题行生成建议，
-  其中 {meta.get('validated', 0)} 条通过本地复核（骨架/字母表/分类码字典），
-  {meta.get('rejected', 0)} 条因不合规被丢弃。建议仅供参考，改码前请对照规则依据人工确认。</div>
-  <div class="callout p2">每条建议都必须在本地复核里同时满足：<b>12 位骨架</b>（G|F0|F1F2F3|F4F5|A1A2|AN1AN2AN3）、
-  <b>不含 I/O</b>、<b>系统分类码与设备分类码在 GB/T 50549-2020 附录字典内</b>。不满足的不会出现在下表，
-  也不会写进 Excel。表中留「—」表示模型认为证据不足，未给出建议。</div>
-  <table class="data"><tr><th>行</th><th>原编码</th><th>设备名称</th><th>AI建议编码</th><th>依据</th><th>理由</th></tr>
-  {"".join(body10)}{more10}</table>
-</div>"""
 
     # 一至十节全部转为可折叠章节（默认展开，点击标题收起/展开）
     sec1, sec2, sec3, sec4, sec5, sec6, sec7, sec8, sec9, sec10 = (
@@ -1057,7 +1086,7 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
     ws["A2"] = f"源文件:{ov['source_path'] or '—'}"
     ws["A2"].fill = PatternFill("solid", fgColor=PALE_BLUE)
     ws.merge_cells("A3:E3")
-    ws["A3"] = f"审计日期:{today}  主表已编码:{ov['data_rows']:,}  缺码行:{ov['missing_rows']}  问题总数:{ov['issue_count']}  规则依据:{ov['standard_display'] or '—'}"
+    ws["A3"] = f"审计日期:{today}  主表已编码:{ov['data_rows']:,}  缺码行:{ov['missing_rows']}  规则命中条目:{summary_metrics(result)['rule_hits']}  规则依据:{ov['standard_display'] or '—'}"
     ws["A3"].fill = PatternFill("solid", fgColor=PALE_BLUE)
     ws["A3"].alignment = Alignment(wrap_text=True)
 
@@ -1070,12 +1099,20 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
             return level
 
     rows_out: list[tuple[str, str, Any, str, str]] = []
+    for key, label in (("effective_kks", "有效KKS数量"), ("device_level_codes", "设备级编码"),
+                       ("duplicate_codes", "重复编码"), ("parent_errors", "父级问题"),
+                       ("p0", "已确认问题P0"), ("p1", "已确认问题P1"), ("p2", "已确认问题P2"),
+                       ("confirmed_issues", "已确认问题合计"), ("pending_review", "待人工确认"),
+                       ("suspected_false_positives", "疑似误报"), ("rule_hits", "规则命中条目")):
+        value = summary_metrics(result)[key]
+        rows_out.append(("统一指标", label, value, "OK" if key in {"effective_kks", "device_level_codes"} or not value else "P0" if key == "p0" else "P1",
+                         "与前端、HTML同口径；P0/P1/P2只计确认问题，待核及疑似误报分列"))
     for card in ov["cards"]:
         for label, value, sev, hint in card["rows"]:
             rows_out.append((card["title"], str(label), value, sev_chip(value, sev.upper()), hint))
     # 兜底指标行
     rows_out.extend([
-        ("汇总", "主表已编码行", ov["data_rows"], "OK", "主表有效数据行"),
+        ("汇总", "已审工作表编码行", ov["data_rows"], "OK", "已审工作表有效编码行"),
         ("汇总", "缺码非空行", ov["missing_rows"], "P1" if ov["missing_rows"] else "OK", "非空行缺 KKS 码"),
         ("汇总", "AI 语义复核", ov["ai_reviewed"], "OK",
          (f"候选 {ov['ai_candidate']} 条；模型 {ov['ai_model'] or '—'}" if ov["ai_active"] else "未启用，仅规则审计（可在 AI 管理员配置中开启）")),
@@ -1172,16 +1209,20 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
         mono_cols = {i for i, c in enumerate(bucket["columns"]) if c["k"] in _MONO_KINDS}
         data = []
         for item in bucket["items"]:
-            data.append([item.get(c["k"], "") for c in bucket["columns"]])
+            row_values: list[Any] = []
+            for col in bucket["columns"]:
+                value = item.get(col["k"], "")
+                row_values.append(_blank_cell(value))
+            data.append(row_values)
         write_sheet(name, f"{bucket['title']}（{bucket['count']}条,{bucket['level']}）", headers, data, mono_cols)
 
     # 原KKS一对多（按组展开逐行）
     if ov["orig_1n_groups"]:
-        headers = ["原KKS(键)", "行", "新KKS", "父级", "专业", "设备名称"]
+        headers = ["工作表", "原KKS(键)", "行", "当前KKS", "父级", "专业", "设备名称"]
         data = []
         for g in ov["orig_1n_groups"]:
             for m in g["members"]:
-                data.append([g["old"], m.get("excel_row", ""), m.get("kks_code", ""), m.get("parent_code", ""), m.get("profession", ""), m.get("name", "")])
+                data.append([_blank_cell(v) for v in (m.get("sheet", ""), g["old"], m.get("excel_row", ""), m.get("kks_code", ""), m.get("parent_code", ""), m.get("profession", ""), m.get("name", ""))])
         write_sheet("P2_原KKS一对多", f"原KKS一对多映射（{len(ov['orig_1n_groups'])}组/{len(data)}行,P2）", headers, data, {0, 2, 3})
 
     if ov["aux_dup"]:
@@ -1195,25 +1236,10 @@ def render_xlsx(path: Path, result: dict[str, Any], ov: dict[str, Any]) -> None:
         write_sheet(
             "AI复核建议",
             f"AI 复核建议（{len(ov['ai_suggestions'])}条 · 模型 {ov['ai_model'] or '—'}）",
-            ["行", "编码", "设备名称", "来源分类", "AI结论", "AI说明", "AI建议"],
-            [[s["excel_row"], s["kks_code"], s["name"], s["bucket_title"], s["decision"], s["summary"], s["suggestion"]]
+            ["工作表", "行", "编码", "设备名称", "来源分类", "AI结论", "AI说明", "AI建议"],
+            [[s["sheet"], s["excel_row"], s["kks_code"], s["name"], s["bucket_title"], s["decision"], s["summary"], s["suggestion"]]
              for s in ov["ai_suggestions"]],
-            {1},
-        )
-
-    # AI 建议编码（独立 sheet；未生成时跳过）
-    if ov.get("ai_code_suggestions"):
-        rows10 = ov["ai_code_suggestions"]
-        meta10 = ov.get("ai_code_suggest_meta") or {}
-        write_sheet(
-            "AI建议编码",
-            f"AI 建议编码（{len(rows10)} 条 · 通过复核 {meta10.get('validated', 0)} · 模型 {meta10.get('model') or '—'}）",
-            ["行", "原编码", "设备名称", "AI建议编码", "改动段", "规则依据", "理由", "是否通过本地复核", "置信度"],
-            [[s["excel_row"], s["kks_code"], s["name"], s["suggested_code"] or "—",
-              s["changed"], s["basis"], s["reason"],
-              "通过" if s["valid"] else f'未通过：{s["invalid_reason"] or "模型未给出建议"}',
-              s["confidence"]] for s in rows10],
-            {1, 3},
+            {2},
         )
 
     # 结构说明与范围

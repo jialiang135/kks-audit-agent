@@ -438,29 +438,14 @@ def expected_missing(cols, rows):
 # 设备术语词典（starter，ADAPT HERE 按厂扩充；用于 #27 语义可解性 P2）
 EQUIP_TERMS = set('泵 阀 机 风机 电机 电动机 马达 压缩机 换热器 加热器 凝汽器 除氧器 锅炉 汽轮机 发电机 变压器 开关柜 配电柜 皮带机 刮板机 碎煤机 给煤机 磨煤机 空预器 除尘器 脱硫塔 吸收塔 烟囱 管道 容器 罐 箱 执行机构 传感器 变送器 液位计 温度计 压力表 流量计 MCC PC'.split())
 
-# 机组一致性（全厂码 G：1-9 → 1~9 号机；A-G → 10~16 号机）
-# 通用默认：20版编码机组位前缀数字 == 名称所写机组号（1↔1号, 2↔2号, A↔10号）
-COMMON_CODES = {'J','K','L','M','N','P','Q','R','S','T','U','V','Y'}   # 期别公用 J-R / 多期公用 S-V / 全厂公用 Y
-FREE_CODES = {'H','W','X','Z'}                                          # 自由使用（火电厂导则 5.1 表2 注3）
-UNIT_OVERRIDE = {}                  # ADAPT: 个别厂 G 取值与名称不一致时显式覆写，例 {'E':14}
-MAX_UNIT = 16                       # 机组号上限护栏（A-G 对应 10-16）
-CN_NUM = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10}
-UNIT_LETTER_MAP = {'A':10,'B':11,'C':12,'D':13,'E':14,'F':15,'G':16}
+# GB/T 50549-2020 表4.3.1-2，全厂码为两位数字。
+CN_NUM = dict(zip("一二三四五六七八九十", range(1, 11)))
 
-def _code_unit(g_char):
-    """把全厂码 G（1 位）翻译成机组号；无法可靠翻译时返回 None（跳过，不误报）。
-    ★护栏：滁州实证——10版残留前缀 '60' 被当成"60号机"，凭空产生 7 条误报。
-      G 只取 1 位（1-9/A-G），J-R/S-V/Y 为公用，H/W/X/Z 自由使用。"""
-    if not g_char:
-        return None
-    if g_char in COMMON_CODES or g_char in FREE_CODES:
-        return None                      # 公用/自由，跳过
-    if g_char in UNIT_OVERRIDE:
-        return UNIT_OVERRIDE[g_char]
-    if g_char.isdigit():
-        v = int(g_char)
-        return v if 1 <= v <= 9 else None
-    return UNIT_LETTER_MAP.get(g_char.upper())
+def _code_unit(code):
+    from kks_gen.compliance import plant_code
+    prefix = plant_code(code)
+    return int(prefix) if prefix and 1 <= int(prefix) <= 60 else None
+
 
 def name_text_hygiene(cols, rows):
     """#27 名称文本卫生 + 语义可解性。返回 (symbol_issues[P1], semantic_voids[P2])。
@@ -493,101 +478,52 @@ def name_text_hygiene(cols, rows):
     return symbol_issues, semantic_voids
 
 def unit_consistency(cols, rows):
-    """#28 机组三方一致（原B升级）：机组列 ↔ 名称机组指代 ↔ 全厂码 G。"""
-    k = cols['kks']; n = cols['name']; u = cols['unit']
-    issues = []
-    name_unit_pat = re.compile(r'(\d{1,2}|[一二三四五六七八九十])\s*号\s*(机|炉|机组)')
-    for i, r in enumerate(rows):
-        c = r[k] if k is not None else None
-        if not c:
-            continue
-        c = str(c).strip()
-        code_g = c[0]
-        nm = r[n] if n is not None else None
-        nu = None
-        if nm:
-            m = name_unit_pat.search(str(nm))
-            if m:
-                key = m.group(1)
-                nu = CN_NUM.get(key, int(key)) if not key.isdigit() else int(key)
-        uc = r[u] if u is not None else None
-        uc_num = None
-        if uc:
-            um = re.search(r'\d{1,2}|[一二三四五六七八九十]', str(uc))
-            if um:
-                key = um.group(0)
-                uc_num = CN_NUM.get(key, int(key)) if not key.isdigit() else int(key)
-        if (uc and ('公用' in str(uc) or '公共' in str(uc))) or code_g in COMMON_CODES or code_g in FREE_CODES:
-            continue                                        # 公用/自由白名单，勿误报
-        expect = _code_unit(code_g)
-        if expect is None:
-            continue                                        # 根/非标准前缀跳过
-        if nu is not None and nu != expect:
-            issues.append((i, c, f'名称指{nu}号但编码全厂码G={code_g}(应{expect}号)'))
-        if uc_num is not None and uc_num != expect:
-            issues.append((i, c, f'机组列指{uc_num}号但编码全厂码G={code_g}(应{expect}号)'))
-    return issues
+    """GB/T 50549-2020 表4.3.1-2；共用范围不得按首字符读为单机。"""
+    from kks_gen.compliance import unit_conflicts
+    result = []
+    for index, row in enumerate(rows):
+        def value(key):
+            column = cols.get(key)
+            return str(row[column] or "") if column is not None and column < len(row) else ""
+        code = value("kks")
+        result.extend((index, code, message) for message in unit_conflicts(code, value("name"), value("unit")))
+    return result
 
 # ---- 分段字符类型（KKS 12 位骨架）----
-# 位1 全厂码G(字母/数字) | 位2 系统前缀号F0(数字) | 位3-5 系统分类码F1F2F3 | 位6-7 系统编号FN | 位8-9 设备分类码A1A2 | 位10-12 设备编号AN
-SEG_12 = [(1, 1, 'ALNUM', '全厂码G'), (2, 2, 'DIGIT', '系统前缀号F0'),
-          (3, 5, 'ALPHA', '系统分类码F1F2F3'), (6, 7, 'DIGIT', '系统编号FN'),
-          (8, 9, 'ALPHA', '设备分类码A1A2'), (10, 12, 'DIGIT', '设备编号AN')]
+# 火电H1/H4缺省时的12位设备结构；其他类型由共享解析器处理。
+SEG_12 = [(1, 2, 'DIGIT', '全厂码H2H3'),
+          (3, 5, 'ALPHA', '系统分类码S1S2S3'), (6, 7, 'DIGIT', '系统编号S4S5'),
+          (8, 9, 'ALPHA', '设备分类码T1T2'), (10, 12, 'DIGIT', '设备编号T3T4T5')]
 
 def segment_type_check(cols, rows):
-    """★P0 位置感知字符类型校验（补"非法字符"盲区）：
-    仅查 [^A-Z0-9] 会漏掉「字母O冒充数字0 / 字母I冒充数字1」——它们都是 A-Z。
-    本函数按 12 位骨架逐段校验字符类型，数字段出现字母即报错（并给出建议修正）。
-    太仓实证：112 条第10位写成字母 O，同系统兄弟码可反证应为 0。"""
-    k = cols['kks']
-    FIX = {'O': '0', 'o': '0', 'I': '1', 'l': '1', 'i': '1', 'S': '5', 'B': '8', 'Z': '2'}
-    res = []
-    for i, r in enumerate(rows):
-        c = r[k] if k is not None else None
-        if not c:
-            continue
-        c = str(c).strip()
-        if len(c) < 12:          # 只对完整设备级码做分段校验（系统级短码跳过）
-            continue
-        body = c[:12]
-        for a, b, want, label in SEG_12:
-            seg = body[a-1:b]
-            if want == 'DIGIT' and not seg.isdigit():
-                bad = [ch for ch in seg if not ch.isdigit()]
-                sug = ''.join(FIX.get(ch, ch) for ch in seg)
-                res.append((i, c, f'{label}(第{a}-{b}位)="{seg}" 含非数字 {bad}',
-                            body[:a-1] + sug + body[b:] if sug != seg else ''))
-            elif want == 'ALPHA' and not seg.isalpha():
-                res.append((i, c, f'{label}(第{a}-{b}位)="{seg}" 含非字母', ''))
-            elif want == 'ALNUM' and not seg.isalnum():
-                res.append((i, c, f'{label}(第{a}-{b}位)="{seg}" 含非字母数字', ''))
-    return res
+    """Use the typed national-standard parser, including optional H1/H4."""
+    from kks_gen.compliance import assess
+    result = []
+    column = cols.get("kks")
+    if column is None:
+        return result
+    for index, row in enumerate(rows):
+        code = str(row[column] or "") if column < len(row) else ""
+        if code:
+            result.extend((index, code, message, "") for message in assess(code).errors)
+    return result
+
 
 def ocr_confusable(cols, rows):
-    """#29 OCR 易混字符待核（位置无关的兜底扫描）。
-    与 segment_type_check 配合：本函数只报"位置无法判定"的可疑项，避免重复。
-    - 硬异常 I/i/O/o：KKS 字母表本就排除 I/O（防与 1/0 混淆），出现即错。
-    - 软提示 小写 l：疑为数字 1（大写 L 合法，不报）。
-    只标不自动改。"""
-    k = cols['kks']
-    hard = set('IiOo')
-    soft = set('l')
-    res = []
-    for i, r in enumerate(rows):
-        c = r[k] if k is not None else None
-        if not c:
+    """Only inspect functional identifiers; terminal letters I/O are allowed."""
+    from kks_gen.identifiers import parse
+    result = []
+    column = cols.get("kks")
+    if column is None:
+        return result
+    for index, row in enumerate(rows):
+        code = str(row[column] or "") if column < len(row) else ""
+        if code.startswith(":"):
             continue
-        c = str(c).strip()
-        for ch in c:
-            if ch in hard:
-                res.append((i, c, f'含易混字符 {ch} (硬异常:KKS字母表排除I/O，小写非法)'))
-                break
-        else:
-            for ch in c:
-                if ch in soft:
-                    res.append((i, c, f'含易混字符 {ch} (疑为数字1,待核)'))
-                    break
-    return res
+        if any(ch in code for ch in "IiOo"):
+            result.append((index, code, "含禁用字母或疑似OCR错误，按对应标识的字符段核对"))
+    return result
+
 
 def text_hygiene(cols, rows):
     """#30 文本卫生（码+名称）：首尾空白/换行/tab/全角空格/控制符 + 汉字间夹空格。
@@ -788,12 +724,8 @@ def system_class_code_legality(cols, rows):
     k = cols.get('kks')
 
     def extract(c):
-        if len(c) < 5:
-            return ''
-        seg = c[2:5]
-        if len(seg) != 3 or not seg.isalpha():
-            return ''      # 字符类型问题由 segment_type_check 负责
-        return seg
+        from kks_gen.identifiers import parse
+        return parse(c).segments.get("sys", "")
 
     return _aggregate_by_segment(rows, k, extract, known, groups, prefixes,
                                  '系统分类码', lambda seg: None)
@@ -819,12 +751,12 @@ def device_class_code_legality(cols, rows):
     k = cols.get('kks')
 
     def extract(c):
-        if len(c) < 12:
-            return ''
-        seg = c[7:9]
-        if len(seg) != 2 or not seg.isalpha():
-            return ''
-        return seg
+        from kks_gen.identifiers import parse
+        segment = parse(c).segments.get("dev", "")
+        if segment:
+            return segment
+        match = re.fullmatch(r"[BCEGKTUW]?[0-9]{2}[0-9]?[A-Z]{3}[0-9]{2}([A-Z]{2})[0-9]{3}", c)
+        return match[1] if match else ""
 
     def hard_rule(seg):
         bad = [ch for ch in seg if ch in forbidden]
@@ -857,13 +789,17 @@ def valve_pipe_number_segment_check(cols, rows):
     res = []
     for i, r in enumerate(rows):
         c = _row_code(r, k)
-        if len(c) < 12 or c[7:9] not in applies:
+        from kks_gen.identifiers import parse
+        segments = parse(c).segments
+        device = segments.get("dev", "")
+        devno = segments.get("devno", "")
+        if device not in applies or not devno:
             continue
         name = str(r[n]).strip() if (n is not None and r[n] is not None) else ''
         if not name:
             continue
         try:
-            number = int(c[9:12])
+            number = int(devno)
         except ValueError:
             continue
         band = None
@@ -888,7 +824,7 @@ def valve_pipe_number_segment_check(cols, rows):
         if band in ('001-299', '1-299'):
             continue
         res.append((i, c,
-                    f'{c[7:9]} 设备编号 "{c[9:12]}" 落在 {band} 段（{_segment_name(band, seg_cfg)}），但名称含 {_band_words(wanted, kw)} 语义',
+                    f'{device} 设备编号 "{devno}" 落在 {band} 段（{_segment_name(band, seg_cfg)}），但名称含 {_band_words(wanted, kw)} 语义',
                     f'按 GB/T 50549-2020 表5.1.5，{_band_words(wanted, kw)} 类应使用 {wanted} 段；请核对编号或名称', 'P2'))
     return res
 

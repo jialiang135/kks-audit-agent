@@ -1,0 +1,288 @@
+{
+ "star": {
+  "CQB": {
+   "cn": "电子间锅炉 380 （415）VAC 电源柜 /220（240）VAC 电 源柜/电磁阀柜等",
+   "kind": "system",
+   "source": "中煤细则表15",
+   "slot": "CQA~CQZ",
+   "declared_at": "CQA"
+  },
+  "CRE": {
+   "cn": "信息安全防护机柜",
+   "kind": "system",
+   "source": "中煤细则表15",
+   "slot": "CRA~CRZ",
+   "declared_at": "CRA"
+  },
+  "CQD": {
+   "cn": "DEH 电源柜",
+   "kind": "system",
+   "source": "中煤细则表15",
+   "slot": "CQA~CQZ",
+   "declared_at": "CQA"
+  },
+  "CQC": {
+   "cn": "电子间汽机 380 （415）VAC 电源柜 /220（240）VAC 电",
+   "kind": "system",
+   "source": "中煤细则表15",
+   "slot": "CQA~CQZ",
+   "declared_at": "CQA"
+  },
+  "CUU": {
+   "cn": "辅网监控系统",
+   "kind": "system",
+   "source": "中煤细则表16",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUB": {
+   "cn": "汽水取样系统、加 药系统",
+   "kind": "system",
+   "source": "中煤细则表16",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUC": {
+   "cn": "化学补给水系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUD": {
+   "cn": "凝结水精处理系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUE": {
+   "cn": "燃油泵房、天然气 调压站",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUF": {
+   "cn": "海水淡化系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUG": {
+   "cn": "补充水泵房、原水 预处理",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUH": {
+   "cn": "除灰渣、除尘、钢 板仓系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUJ": {
+   "cn": "污水处理系统、生 活水处理",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUK": {
+   "cn": "废水处理系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUL": {
+   "cn": "循环水软化水处理 系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUM": {
+   "cn": "空冷系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUN": {
+   "cn": "热网系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUP": {
+   "cn": "循环水泵房、消防 水泵房、公用水泵 房、雨水泵房",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUQ": {
+   "cn": "空压机系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUR": {
+   "cn": "氢站",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUS": {
+   "cn": "脱硝系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CUT": {
+   "cn": "脱硫系统",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CUA~CUZ",
+   "declared_at": "CUA"
+  },
+  "CTB": {
+   "cn": "锅炉侧保温箱",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CTA~CTZ",
+   "declared_at": "CTA"
+  },
+  "CTC": {
+   "cn": "汽机侧保护箱",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CTA~CTZ",
+   "declared_at": "CTA"
+  },
+  "CTD": {
+   "cn": "汽机侧保温箱",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CTA~CTZ",
+   "declared_at": "CTA"
+  },
+  "CTE": {
+   "cn": "辅助车间保护箱",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CTA~CTZ",
+   "declared_at": "CTA"
+  },
+  "CTF": {
+   "cn": "辅助车间保温箱",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CTA~CTZ",
+   "declared_at": "CTA"
+  },
+  "CTG": {
+   "cn": "脱硫保护箱",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CTA~CTZ",
+   "declared_at": "CTA"
+  },
+  "CTH": {
+   "cn": "脱硫保温箱",
+   "kind": "system",
+   "source": "中煤细则表17",
+   "slot": "CTA~CTZ",
+   "declared_at": "CTA"
+  },
+  "UYC": {
+   "cn": "综合",
+   "kind": "system",
+   "source": "中煤细则表18",
+   "slot": "UYB~UYZ",
+   "declared_at": "UYB"
+  },
+  "UYM": {
+   "cn": "机务",
+   "kind": "system",
+   "source": "中煤细则表18",
+   "slot": "UYB~UYZ",
+   "declared_at": "UYB"
+  },
+  "UYG": {
+   "cn": "化学",
+   "kind": "system",
+   "source": "中煤细则表18",
+   "slot": "UYB~UYZ",
+   "declared_at": "UYB"
+  },
+  "UYH": {
+   "cn": "暖通",
+   "kind": "system",
+   "source": "中煤细则表18",
+   "slot": "UYB~UYZ",
+   "declared_at": "UYB"
+  },
+  "UYP": {
+   "cn": "水工供水、给排水",
+   "kind": "system",
+   "source": "中煤细则表18",
+   "slot": "UYB~UYZ",
+   "declared_at": "UYB"
+  },
+  "UYE": {
+   "cn": "除灰、脱硫",
+   "kind": "system",
+   "source": "中煤细则表18",
+   "slot": "UYB~UYZ",
+   "declared_at": "UYB"
+  },
+  "UYN": {
+   "cn": "其他",
+   "kind": "system",
+   "source": "中煤细则表18",
+   "slot": "UYB~UYZ",
+   "declared_at": "UYB"
+  }
+ },
+ "true_new": {
+  "CBD": {
+   "cn": "操作员控制台",
+   "kind": "system",
+   "source": "中煤细则表14"
+  },
+  "CBB": {
+   "cn": "DCS、DEH 工程师站 /历史数据站/SOE 站/HART 管理站/ 辅网工程师站/现 场总线设备管理站 /信息系统管",
+   "kind": "system",
+   "source": "中煤细则表14"
+  },
+  "CBC": {
+   "cn": "TDM/VMS/炉管泄漏 /飞灰含碳/风粉在 线等系统的工程师 站",
+   "kind": "system",
+   "source": "中煤细则表15"
+  },
+  "CPB": {
+   "cn": "MIS 机柜、箱",
+   "kind": "system",
+   "source": "中煤细则表15"
+  },
+  "CAD": {
+   "cn": "DEH 机柜",
+   "kind": "system",
+   "source": "中煤细则表15"
+  },
+  "CAE": {
+   "cn": "ETS 机柜",
+   "kind": "system",
+   "source": "中煤细则表15"
+  }
+ }
+}

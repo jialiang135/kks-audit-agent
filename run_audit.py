@@ -14,11 +14,16 @@ import json
 import logging
 import re
 from collections import Counter, defaultdict
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable
+from audit_metrics import confirmed_priority_counts, summary_metrics
 
 import openpyxl
-from ai_review import review_issue_candidates, suggest_correct_codes, summarize_audit
+from kks_gen.compliance import assess, unit_conflicts, plant_code
+from kks_gen.row_policy import classify_row, is_table_instruction
+from ai_review import review_issue_candidates, summarize_audit
+from kks_gen.audit_policy import findings as device_findings, STAGES, subject as device_subject
 from audit_history import record_and_render
 from app_runtime import APP_ROOT, configure_logging
 from report_business import build_overview, render_html, render_xlsx
@@ -34,15 +39,12 @@ ProgressCallback = Callable[[dict[str, Any]], None]
 ROOT_PARENTS = {"", "-1"}
 # 10 版旧前缀历史参考（G=5/6/L/J 本身合法，迁移为项目约定，不再作为 P1 阻断）
 OLD_PREFIX = {"50": "05", "60": "06", "L0": "61", "J0": "61"}
-# 全厂码 G：公用取值（期别公用 J-R / 多期公用 S-V / 全厂公用 Y）
-COMMON_UNITS = {"J", "K", "L", "M", "N", "P", "Q", "R", "S", "T", "U", "V", "Y"}
-# 全厂码 G：自由使用字母
-FREE_UNIT_LETTERS = {"H", "W", "X", "Z"}
-# 全厂码 G：机组映射（1-9 → 1~9 号；A-G → 10~16 号）
-UNIT_LETTER_MAP = {"A": 10, "B": 11, "C": 12, "D": 13, "E": 14, "F": 15, "G": 16}
-# 企业惯例：20 版两位数字前缀（增量新增批次常用）——00=全厂公用 / 01=1号 / 02=2号 / 61=1,2号公用
-# 国标 G 表是单字符，但企业增量文件普遍以"两位数字前缀"标识机组/公用，按项目惯例视为合法。
-ENTERPRISE_UNIT_PREFIXES = {"00": "全厂公用", "01": "1号", "02": "2号", "61": "1,2号公用"}
+# GB/T 50549-2020 表4.3.1-2，全厂码H2H3为两位数字。
+COMMON_UNITS = {"00"} | {f"{n:02d}" for n in range(61, 100)}
+FREE_UNIT_LETTERS = set()
+UNIT_LETTER_MAP = {}
+ENTERPRISE_UNIT_PREFIXES = {f"{n:02d}": f"{n}号" for n in range(1, 61)}
+ENTERPRISE_UNIT_PREFIXES.update({"00": "全厂公用", **{f"{n:02d}": "两机共用" for n in range(61, 91)}})
 ALLOWED_CODE = re.compile(r"^[A-Z0-9-]+$")
 NAME_UNIT = re.compile(r"(\d{1,2}|[一二三四五六七八九十])\s*号\s*(机|炉|机组)")
 CN_NUM = {"一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
@@ -145,8 +147,14 @@ def issue_rule_tree(result: dict[str, Any]) -> list[dict[str, Any]]:
 
     rules: list[dict[str, Any]] = []
     rule_index: dict[str, dict[str, Any]] = {}
+    code_node_index: dict[tuple[str, str], dict[str, Any]] = {}
 
     def bump(node: dict[str, Any], pr: str) -> None:
+        # P-level badges in the tree follow the same confirmed-only meaning as
+        # the dashboard and KPI cards; pending/false-positive entries remain in
+        # the detailed hit list and its total.
+        if str(current_item.get("final_decision") or "confirmed_issue") != "confirmed_issue":
+            return
         if pr == "P0":
             node["p0"] += 1
         elif pr == "P1":
@@ -155,6 +163,7 @@ def issue_rule_tree(result: dict[str, Any]) -> list[dict[str, Any]]:
             node["p2"] += 1
 
     for item in issues:
+        current_item = item
         rid = str(item.get("rule_id") or "未编号规则")
         pr = str(item.get("priority", "P2"))
         rule = rule_index.get(rid)
@@ -174,11 +183,7 @@ def issue_rule_tree(result: dict[str, Any]) -> list[dict[str, Any]]:
             rule_index[rid] = rule
 
         code = str(item.get("kks_code") or "").strip()
-        node: dict[str, Any] | None = None
-        for child in rule["children"]:  # 同一规则下编码数量有限，线性查找即可
-            if child["title"] == code:
-                node = child
-                break
+        node = code_node_index.get((rid, code))
         if node is None:
             node = {
                 "kind": "code", "level": 1,
@@ -191,6 +196,7 @@ def issue_rule_tree(result: dict[str, Any]) -> list[dict[str, Any]]:
                 "issues": [], "children": [],
             }
             rule["children"].append(node)
+            code_node_index[(rid, code)] = node
 
         node["issues"].append({
             "priority": pr,
@@ -202,6 +208,7 @@ def issue_rule_tree(result: dict[str, Any]) -> list[dict[str, Any]]:
             "suggestion": suggestion_text(item),
             "status": item.get("status", ""),
             "ai_decision": item.get("ai_decision", ""),
+            "final_decision": item.get("final_decision", "confirmed_issue"),
         })
         bump(rule, pr)
         bump(node, pr)
@@ -209,9 +216,9 @@ def issue_rule_tree(result: dict[str, Any]) -> list[dict[str, Any]]:
         node["count"] += 1
 
     for rule in rules:
-        rule["note"] = f"{len(rule['children'])} 个编码 · {rule['count']} 条"
+        rule["note"] = f"{len(rule['children'])} 个编码 · {rule['count']} 条命中"
         for node in rule["children"]:
-            node["note"] = f"{node['count']} 条"
+            node["note"] = f"{node['count']} 条命中"
     return rules
 
 
@@ -276,24 +283,15 @@ def rule_tree_html(nodes: list[dict[str, Any]]) -> str:
 def quality_metrics(result: dict[str, Any]) -> dict[str, int]:
     """Return business-facing quality metrics used by the report and UI.
 
-    P0/P1/P2 均为真实规则级计数（与详细问题清单自洽）。
+    P0/P1/P2 只统计 AI/规则最终确认为问题的条目；待核和疑似误报分别统计。
     另保留两个业务治理重点的聚焦计数（扩展码治理 KKS-17/22、历史迁移 KKS-18）
     供报告明细作为治理提示，不作为首页大数字口径。
     """
-    records = result.get("_ai_context", {}).get("records", [])
-    codes = [text(item.get("kks_code")) for item in records if isinstance(item, dict)]
-    metrics = result.get("metrics", {})
-    priority_counts = Counter(item.get("priority", "P2") for item in _report_issues(result))
+    metrics = summary_metrics(result)
     return {
-        "effective_kks": int(result.get("data_rows", len(codes)) or 0),
-        "device_level_codes": sum(1 for code in codes if len(code) == 12),
-        "duplicate_codes": int(metrics.get("duplicate_code_groups", 0) or 0),
-        "parent_errors": int(metrics.get("orphan_rows", 0) or 0) + int(metrics.get("prefix_mismatch_rows", 0) or 0),
-        "p0": int(priority_counts.get("P0", 0)),
-        "p1": int(priority_counts.get("P1", 0)),
-        "p2": int(priority_counts.get("P2", 0)),
-        "rule_p1": int(priority_counts.get("P1", 0)),
-        "rule_p2": int(priority_counts.get("P2", 0)),
+        **metrics,
+        "rule_p1": int(metrics["p1"]),
+        "rule_p2": int(metrics["p2"]),
         "focused_p1": _rule_issue_count(result, {"KKS-17", "KKS-22"}),
         "focused_p2": _rule_issue_count(result, {"KKS-18"}),
     }
@@ -306,48 +304,6 @@ def _rule_issue_count(result: dict[str, Any], rule_ids: set[str]) -> int:
         if rules & rule_ids:
             total += 1
     return total
-
-
-def report_quality_dimensions(result: dict[str, Any]) -> list[dict[str, str]]:
-    """Build the eight quality dimensions shown to non-technical reviewers."""
-    metrics = result.get("metrics", {})
-    dimensions: list[dict[str, str]] = []
-
-    def add(dimension: str, check: str, count: int, detail: str, *, zero: str = "通过") -> None:
-        dimensions.append({
-            "dimension": dimension,
-            "check": check,
-            "result": zero if count == 0 else f"发现 {count} 项",
-            "detail": detail,
-        })
-
-    structure_ok = bool(result.get("sheet_info")) and bool(result.get("columns"))
-    dimensions.append({
-        "dimension": "结构层",
-        "check": "表结构、字段识别",
-        "result": "通过" if structure_ok else "待处理",
-        "detail": f"主表 {result.get('sheet', '—')}；已识别表头和 KKS、父级、名称字段。" if structure_ok else "未能完整识别主表结构。",
-    })
-    add("语法层", "字符合法性", _rule_issue_count(result, {"KKS-04", "KKS-04b", "KKS-05", "KKS-06", "KKS-29", "KKS-30"}), "检查字符、分段类型、长度和文本卫生。")
-    duplicate_count = int(metrics.get("duplicate_code_groups", 0) or 0)
-    add("唯一性", "重复 KKS", duplicate_count, "按完整 KKS 码分组，未将不同层级的相似码误判为重复。")
-    parent_count = int(metrics.get("orphan_rows", 0) or 0) + int(metrics.get("prefix_mismatch_rows", 0) or 0)
-    add("层级", "父级关系", parent_count, "检查孤儿节点、父子归属和层级关系。")
-    migration_count = _rule_issue_count(result, {"KKS-13", "KKS-14", "KKS-15", "KKS-16", "KKS-18", "KKS-25c"})
-    add("迁移", "旧码映射", migration_count, "检查历史原码、新码前缀变化和一对多映射。")
-    semantic_count = max(int(metrics.get("long_code_rows", 0) or 0), _rule_issue_count(result, {"KKS-17", "KKS-22", "KKS-A", "KKS-C", "KKS-E", "KKS-F", "KKS-G"}))
-    add("语义", "扩展码分析", semantic_count, "检查扩展编码、设备类型、编号连续性和语义疑点。")
-    naming_count = _rule_issue_count(result, {"KKS-24", "KKS-25", "KKS-25b", "KKS-26", "KKS-27", "KKS-28", "KKS-31"})
-    add("命名", "名称规范", naming_count, "检查名称歧义、同物异名、机组三方一致和父子语义。")
-    import_governance = result.get("import_governance", {})
-    import_ready = bool(import_governance.get("direct_import_ready"))
-    dimensions.append({
-        "dimension": "导入",
-        "check": "数据库兼容性",
-        "result": "通过" if import_ready else "待处理",
-        "detail": "已通过导入前检查。" if import_ready else "本次未连接真实 DM8；扩展码、历史映射和 P0/P1 问题需处理后再导入。",
-    })
-    return dimensions
 
 
 def report_import_conclusion(result: dict[str, Any]) -> str:
@@ -386,6 +342,16 @@ SKILL_RULE_SOURCE = "kks-audit/SKILL.md"
 # 由 references/KKS编码审核标准检查清单.md 的"校验原理"提炼，
 # 作为 HTML 报告 / Excel 问题清单 / Web 预览"问题定义"列的统一数据源。
 RULE_DEFINITIONS: dict[str, str] = {
+    "KKS-39": "设备交付编码严格十二位，数字和字母各段类型必须正确。",
+    "KKS-40": "设备主体类别与附录B设备分类代码核对；主体有歧义时待核。",
+    "KKS-41": "明确系统字段与附录A分类代码核对；缺少工程证据时待核。",
+    "KKS-42": "名称功能、用途、介质和位置与分类含义的语义一致性审查。",
+    "KKS-43": "设备流水编号有效性检查，特殊用途须确认工程约定。",
+    "KKS-44": "机组、区域及位置归属辅助核查，不能凭名称推测归属。",
+    "KKS-45": "缺少工程编号分配与备用设备约定时，编号合理性不能判定通过。",
+    "KKS-46": "缺少工程位置、图纸及全厂台账时，位置与全厂唯一性不能判定通过。",
+    "KKS-38": "项目设备表中指令/测点的设备KKS须留空；国标信号标识与设备标识分开管理。",
+    "KKS-37": "分类、层级及工程约定待核：自动判据无法确认，须补充工程索引、图纸或约定；具体适用依据见问题说明。",
     "KKS-00": "数据行缺少 KKS 编码：非空记录应含设备 KKS 码，缺失则无法入库定位。",
     "KKS-01": "多 Sheet 定位主表：应区分主表与导出/草稿表，防止重复或漏审。",
     "KKS-02": "表头与数据起始行定位：表头不总在第 1 行，错读将导致整列错位。",
@@ -393,7 +359,7 @@ RULE_DEFINITIONS: dict[str, str] = {
     "KKS-04": "字符合法性：仅允许大写字母 A-Z、数字 0-9 与分隔符 -；小写、中文、全角及 ~、/ 等未定义字符判非法。",
     "KKS-04b": "分段字符类型校验：12 位骨架逐段定类型——G/F1F2F3/A1A2 为字母段，F0/FN/AN 为数字段，数字段出现字母或字母段出现数字即错。",
     "KKS-05": "编码长度合规：设备级 12 位、系统级 5/6/7 位、根节点 1 位；超过 12 位不立即判错，转编码深度定性。",
-    "KKS-06": "结构位取值合规：全厂码 G 须在 1-9/A-G/J-R/S-V/Y 或自由字母 H/W/X/Z 取值内；编码不得含 I/O 等易混字母。",
+    "KKS-06": "结构位取值合规：全厂码H₂H₃按表4.3.1-2取两位数字；I/O约束按标识类型和字母段判定。",
     "KKS-07": "重复 KKS 码：主键须唯一；区分位置后缀丢失（可机械修复）与异设备真碰撞（须人工重编）。",
     "KKS-08": "父级参照完整性：非根节点父级码须作为某行真实存在，否则层级断链、破坏外键。",
     "KKS-09": "子码前缀一致性：子码须以父码为前缀（结合父级列值判定，不按固定位数截取推导）。",
@@ -415,7 +381,7 @@ RULE_DEFINITIONS: dict[str, str] = {
     "KKS-25c": "结构身份键一对多：同一旧码对应多个不同新码，疑似真重复，须人工裁定。",
     "KKS-26": "应编未编：父设备按惯例应含可独立标识的子部件（隔离点/回路/执行机构）却缺失。",
     "KKS-27": "名称文本卫生与语义可解性：名称含非常规符号/控制符判脏；提取不到任何已知设备名词判语义需人核。",
-    "KKS-28": "机组三方一致：机组列、名称中的机组指代、全厂码 G 三方须一致；公用/自由字母跳过不误报。",
+    "KKS-28": "机组三方一致：机组列、名称中的机组指代、全厂码H₂H₃三方须一致；共用范围依据工程约定复核。",
     "KKS-29": "OCR 易混字符待核：编码含 I/i/L/l/O/o 等易混字符，人工核对是否为数字 1/0 的识别错误。",
     "KKS-30": "文本卫生：码与名称的首尾空白、换行、制表符、全角空格等脏数据，标记并附清洗。",
     "KKS-31": "父子名称语义一致性：直接父子一级、同类设备的名称标识 token 应一致，矛盾即报。",
@@ -469,6 +435,14 @@ _ST_CODE_DEV = f"{_GB} 4.4.3 设备分类码应由 2 个大写英文字母组成
 _ST_VALVE = f"{_GB} 表5.1.4 阀门设备分类码；表5.1.5 QM/WP 设备编号分段（{_ZM} 8.1.5、8.1.6）"
 
 RULE_SOURCES: dict[str, str] = {
+    "KKS-39": _ST_LEN,
+    "KKS-40": _ST_CODE_DEV,
+    "KKS-41": _ST_CODE_SYS,
+    "KKS-42": _ST_COMBO,
+    "KKS-43": _ST_SEG,
+    "KKS-44": _ST_G,
+    "KKS-45": f"{_GB} 第3.3节及第4.4.5节；工程编号约定证据要求",
+    "KKS-46": f"{_GB} 第3.3节、第3.1.1节；工程位置及全厂唯一性证据要求",
     "KKS-04": _ST_STRUCT, "KKS-04b": _ST_SEG,
     "KKS-05": _ST_LEN, "KKS-06": _ST_G, "KKS-07": _ST_UNIQ,
     "KKS-08": _ST_STRUCT, "KKS-09": _ST_STRUCT, "KKS-10": _ST_STRUCT,
@@ -478,6 +452,8 @@ RULE_SOURCES: dict[str, str] = {
     "KKS-A": _ST_DEV, "KKS-G": _ST_COMBO,
     "KKS-32": _ST_CODE_SYS, "KKS-33": _ST_CODE_DEV,
     "KKS-35": _ST_VALVE,
+    "KKS-37": "GB/T 50549-2020 第3.3节及表4.3.1-2；具体分类、编号或项目约定依据见问题说明。",
+    "KKS-38": "项目设备表交付约定：指令/测点不占设备KKS列；GB/T 50549-2020 第4.7节规定独立的信号标识。",
 }
 
 
@@ -530,16 +506,24 @@ def find_column(header: tuple[Any, ...], kind: str) -> int | None:
         return None
 
     if kind == "kks":
+        preferred = first(lambda s: "KKS" in s and any(x in s for x in ("新", "修编后", "最终")) and not any(x in s for x in ("原", "旧", "上级", "父级", "设计")))
+        if preferred is not None:
+            return preferred
         return first(lambda s: "KKS" in s and not any(x in s for x in ("原", "旧", "上级", "父级", "设计")))
+    if kind == "original_name":
+        return first(lambda s: "名称" in s and any(x in s for x in ("原", "设计")))
     if kind == "old":
         return first(lambda s: "KKS" in s and any(x in s for x in ("原", "旧")))
     if kind == "parent":
+        preferred = first(lambda s: any(x in s for x in ("父级", "上级")) and "KKS" in s)
+        if preferred is not None:
+            return preferred
         return first(lambda s: "父级" in s or "上级" in s)
     if kind == "name":
         preferred = first(lambda s: ("修改后" in s or "新名称" in s or "新设备名称" in s) and "原" not in s)
         if preferred is not None:
             return preferred
-        return first(lambda s: "名称" in s and not any(x in s for x in ("原", "机组", "系统", "上级")))
+        return first(lambda s: "名称" in s and not any(x in s for x in ("原", "机组", "系统", "上级", "父级")))
     if kind == "unit":
         return first(lambda s: ("机组" in s or "机组号" in s) and "名称" not in s)
     if kind == "dtype":
@@ -550,6 +534,18 @@ def find_column(header: tuple[Any, ...], kind: str) -> int | None:
         # 系统/系统名称列（工艺系统归属，用于报告表格的"系统"列展示）
         return first(lambda s: "系统" in s and not any(x in s for x in ("KKS", "编码", "设备", "上级", "父级", "字母", "名称表")))
     return None
+
+
+def audit_columns(header):
+    columns = {kind: find_column(header, kind) for kind in
+               ("kks", "old", "parent", "name", "original_name", "unit", "dtype", "profession", "system")}
+    index = columns["kks"]
+    finished = index is not None and any(term in text(header[index]) for term in ("新", "修编后", "最终"))
+    columns["finished"] = finished
+    if finished:
+        for kind in ("old", "original_name", "unit", "dtype", "profession", "system"):
+            columns[kind] = None
+    return columns
 
 
 def inspect_sheets(wb) -> list[dict[str, Any]]:
@@ -595,11 +591,12 @@ def make_record(excel_row: int, row: tuple[Any, ...], cols: dict[str, int | None
         return text(row[idx]) if idx is not None and idx < len(row) else ""
 
     return {
+        "finished_product": bool(cols.get("finished")),
         "excel_row": excel_row,
         "kks_code": get("kks"),
         "old_code": get("old"),
         "parent_code": get("parent"),
-        "name": get("name"),
+        "name": get("name") if cols.get("finished") else get("name") or get("original_name"),
         "unit": get("unit"),
         "device_type": get("dtype"),
         "profession": get("profession"),
@@ -620,6 +617,7 @@ def add_issue(issues: list[dict[str, Any]], *, priority: str, rule_id: str, cate
         "category": category,
         "definition": RULE_DEFINITIONS.get(rule_id, ""),
         "excel_row": rec.get("excel_row", ""),
+        "sheet": rec.get("sheet", ""),
         "kks_code": rec.get("kks_code", ""),
         "parent_code": rec.get("parent_code", ""),
         "old_code": rec.get("old_code", ""),
@@ -633,54 +631,56 @@ def add_issue(issues: list[dict[str, Any]], *, priority: str, rule_id: str, cate
     })
 
 
-def code_unit(g_char: str, common_units: set[str] | None = None) -> int | None:
-    """全厂码 G（1 位）→ 机组号。
-
-    - 1~9 → 1~9 号机组；A~G → 10~16 号机组
-    - J~R/S~V/Y（公用）与 H/W/X/Z（自由使用）→ None（跳过，不误报）
-    - 其他取值（0、I/O、数字外字符）→ None（由 G 取值合规检查另行报错）
-    """
-    if not g_char:
-        return None
-    if g_char in (common_units or COMMON_UNITS):
-        return None
-    if g_char in FREE_UNIT_LETTERS:
-        return None
-    if g_char.isdigit():
-        value = int(g_char)
-        return value if 1 <= value <= 9 else None
-    return UNIT_LETTER_MAP.get(g_char.upper())
+def record_role(rec):
+    kwargs = {"include_measurement": not rec.get("finished_product", False)}
+    role = classify_row(rec.get("old_code"), rec.get("name"), rec.get("device_type"), **kwargs)
+    return role if role.is_point else classify_row(rec.get("kks_code"), rec.get("name"), rec.get("device_type"), **kwargs)
 
 
-def valid_g_char(g_char: str) -> bool:
-    """全厂码 G 合法取值：1-9 / A-G / J-R / S-V / Y / 自由字母 H/W/X/Z。
+def _add_compliance_issues(issues, rec):
+    role = record_role(rec)
+    if role.is_point and rec["kks_code"]:
+        add_issue(issues, priority="P0", rule_id="KKS-38", category="指令/测点占用设备KKS", rec=rec,
+                  message="指令/测点的设备KKS列应留空；" + role.reason,
+                  suggestion="清空设备KKS，保留原信号标识与设备归属信息。")
+        issues[-1]["compliance_locked"] = True
+    assessment = assess(rec["kks_code"])
+    for message in assessment.errors:
+        add_issue(issues, priority="P0", rule_id="KKS-04b", category="国标及项目结构校验", rec=rec,
+                  message=message, suggestion="按适用条款及工程约定整改后重新审核。")
+        issues[-1]["compliance_locked"] = True
+    for message in assessment.pending:
+        add_issue(issues, priority="P1", rule_id="KKS-37", category="工程约定待核", rec=rec,
+                  message=message, suggestion="补充工程编码索引、图纸或分类码约定。", status="needs_review")
+        issues[-1]["definition"] = "自动检查无法确认的分类、编号及工程约定；具体适用条款见问题说明。"
+        issues[-1]["evidence"] = message
 
-    注：企业惯例（两位数字前缀 00/01/02/61）不在此处判定，由
-    ``enterprise_unit_ok`` 在编码级判断，避免把 G='0'/'6' 当非法。
-    """
-    if not g_char:
-        return False
-    if g_char.isdigit():
-        return 1 <= int(g_char) <= 9
-    return g_char.upper() in (set(UNIT_LETTER_MAP) | COMMON_UNITS | FREE_UNIT_LETTERS)
+
+def _set_compliance_result(result):
+    hard = sum(bool(i.get("compliance_locked")) or i.get("rule_id") == "KKS-07" for i in result.get("issues", []))
+    result["compliance"] = {"standard": "GB/T 50549-2020", "status": "blocked" if hard else "pending",
+                            "hard_findings": hard, "scope": "工作簿自动校验；工程约定、图纸符合性及全厂唯一性仍须确认"}
+    caveat = "国标审核范围限于已实现的自动判据，缺少工程约定、图纸及全厂台账时不能认定全面合规。"
+    if caveat not in result.get("conclusion", ""):
+        result["conclusion"] = result.get("conclusion", "") + " " + caveat
 
 
-def enterprise_unit_ok(code: str, enterprise_prefixes: dict[str, str] | None = None) -> bool:
-    """企业惯例校验：编码前两位命中企业前缀表（00/01/02/61…）视为合法。"""
-    table = enterprise_prefixes or ENTERPRISE_UNIT_PREFIXES
-    return len(code) >= 2 and code[:2] in table
+def code_unit(code: str, common_units=None) -> int | None:
+    prefix = plant_code(code)
+    return int(prefix) if prefix and 1 <= int(prefix) <= 60 else None
+
+
+def valid_g_char(value: str) -> bool:
+    """Compatibility name: validate complete two-digit H2H3, never one char."""
+    return bool(re.fullmatch(r"[0-9]{2}", value))
+
+
+def enterprise_unit_ok(code: str, enterprise_prefixes=None) -> bool:
+    return bool(plant_code(code))
 
 
 def enterprise_mode(code_prefixes: set[str]) -> bool:
-    """判定本次文件是否采用企业两位数字前缀惯例。
-
-    依据：编码前两位命中企业表的行占比 ≥ 80%（对 12 位设备码而言，
-    00/01/02/61 是企业机组/公用的确定性信号）。
-    """
-    if not code_prefixes:
-        return False
-    hits = sum(1 for p in code_prefixes if len(p) >= 2 and p[:2] in ENTERPRISE_UNIT_PREFIXES)
-    return hits / len(code_prefixes) >= 0.8
+    return bool(code_prefixes) and all(re.fullmatch(r"[0-9]{2}", p) for p in code_prefixes)
 
 
 def classify_extension(code: str) -> str:
@@ -705,49 +705,69 @@ def _normalise_profession(value: str) -> str:
     return value.strip()
 
 
+@contextmanager
+def load_workbook_rows(input_path: Path):
+    """打开工作簿并**保证关闭**，供调用方立即取完数据。
+
+    ⚠️ 为什么必须有这个包装：openpyxl 的 read_only 模式会一直持有文件句柄，直到
+    `wb.close()`。此前审核完从没关过，导致 Windows 上 `runs/<run_id>/input/*.xlsx`
+    一直处于"被占用"状态——台账删除产物、移动/重命名 run 目录都会报
+    `WinError 32 另一个程序正在使用此文件`。项目里所有 `iter_rows` 都会 `list(...)`
+    物化数据，所以取完就能安全关闭。
+    """
+    wb = openpyxl.load_workbook(input_path, read_only=True, data_only=True)
+    try:
+        yield wb
+    finally:
+        try:
+            wb.close()
+        except Exception:  # 关闭失败不能影响审核结果
+            LOGGER.warning("workbook_close_failed file=%s", getattr(input_path, "name", input_path))
+
+
 def summarize_scope(input_path: Path) -> dict[str, Any]:
     """Summarize one workbook for the Skill's cross-scope comparison rules."""
-    wb = openpyxl.load_workbook(input_path, read_only=True, data_only=True)
-    sheet, rows, header_idx = choose_sheet(wb, None)
-    header = rows[header_idx]
-    cols = {kind: find_column(header, kind) for kind in ("kks", "old", "parent", "name", "unit", "dtype", "profession", "system")}
-    if cols["kks"] is None:
-        raise ValueError(f"对比文件主表缺少 KKS 码列：{input_path.name}")
-    records: list[dict[str, Any]] = []
-    professions: Counter[str] = Counter()
-    depth: Counter[str] = Counter()
-    codes: set[str] = set()
-    for excel_row, row in enumerate(rows[header_idx + 2:], start=header_idx + 2):
-        rec = make_record(excel_row, row, cols)
-        code = rec["kks_code"]
-        if not code:
-            continue
-        records.append(rec)
-        codes.add(code)
-        if cols.get("profession") is not None and cols["profession"] < len(row):
-            profession = _normalise_profession(text(row[cols["profession"]]))
-            if profession:
-                professions[profession] += 1
-        if len(code) <= 12:
-            depth["设备/系统级"] += 1
-        else:
-            depth[classify_extension(code)] += 1
-    non_process = sum(
-        count for profession, count in professions.items()
-        if profession not in STANDARD_PROCESS_PROFESSIONS
-        and not any(token in profession for token in STANDARD_PROCESS_PROFESSIONS)
-    )
-    return {
-        "file": str(input_path),
-        "sheet": sheet,
-        "header_row": header_idx + 1,
-        "total_codes": len(records),
-        "unique_codes": len(codes),
-        "professional_counts": dict(sorted(professions.items())),
-        "non_process_profession_codes": non_process,
-        "depth_counts": dict(sorted(depth.items())),
-        "profession_column_detected": cols.get("profession") is not None,
-    }
+    with load_workbook_rows(input_path) as wb:
+        sheet, rows, header_idx = choose_sheet(wb, None)
+        header = rows[header_idx]
+        cols = {kind: find_column(header, kind) for kind in ("kks", "old", "parent", "name", "unit", "dtype", "profession", "system", "original_name")}
+        if cols["kks"] is None:
+            raise ValueError(f"对比文件主表缺少 KKS 码列：{input_path.name}")
+        records: list[dict[str, Any]] = []
+        professions: Counter[str] = Counter()
+        depth: Counter[str] = Counter()
+        codes: set[str] = set()
+        for excel_row, row in enumerate(rows[header_idx + 2:], start=header_idx + 2):
+            rec = make_record(excel_row, row, cols)
+            code = rec["kks_code"]
+            if not code:
+                continue
+            records.append(rec)
+            codes.add(code)
+            if cols.get("profession") is not None and cols["profession"] < len(row):
+                profession = _normalise_profession(text(row[cols["profession"]]))
+                if profession:
+                    professions[profession] += 1
+            if len(code) <= 12:
+                depth["设备/系统级"] += 1
+            else:
+                depth[classify_extension(code)] += 1
+        non_process = sum(
+            count for profession, count in professions.items()
+            if profession not in STANDARD_PROCESS_PROFESSIONS
+            and not any(token in profession for token in STANDARD_PROCESS_PROFESSIONS)
+        )
+        return {
+            "file": str(input_path),
+            "sheet": sheet,
+            "header_row": header_idx + 1,
+            "total_codes": len(records),
+            "unique_codes": len(codes),
+            "professional_counts": dict(sorted(professions.items())),
+            "non_process_profession_codes": non_process,
+            "depth_counts": dict(sorted(depth.items())),
+            "profession_column_detected": cols.get("profession") is not None,
+        }
 
 
 def compare_scope(primary_path: Path, comparison_path: Path) -> dict[str, Any]:
@@ -817,6 +837,8 @@ def _template_columns(header: tuple[Any, ...], cols: dict[str, int | None]) -> d
     """Expose both semantic column names and original headers to the Skill template."""
     result: dict[str, int | None] = dict(cols)
     for idx, value in enumerate(header):
+        if cols.get("finished") and idx not in {cols.get("kks"), cols.get("parent"), cols.get("name")}:
+            continue
         label = text(value)
         if label:
             result[label] = idx
@@ -1040,16 +1062,9 @@ def _apply_template_skill_rules(
 
 # 设备索引字母（A 码）——10 版 VGB 旧字母（QM/MA/BT/FT/LS 等）不再用于名实一致性判定
 DEVICE_LETTER_SEMANTICS = {
-    "泵": {"AP", "BN"},
-    "阀": {"AA"},
-    "门": {"AA", "AB"},
-    "执行机构": {"AS"},
-    "测温": {"CT"},
-    "温度": {"CT"},
-    "流量": {"CF"},
-    "液位": {"CL"},
-    "风机": {"AN"},
-    "压缩机": {"AN"},
+    "泵": {"GP"}, "阀": {"QM", "QN", "RM", "FL", "FM", "QA"},
+    "测温": {"BT"}, "温度": {"BT"}, "流量": {"BF"}, "液位": {"BL"},
+    "风机": {"GQ"}, "压缩机": {"GQ"},
 }
 KNOWN_DEVICE_LETTERS = set().union(*DEVICE_LETTER_SEMANTICS.values())
 NAME_CONTEXT_TERMS = ("管道", "系统", "水室", "用汽", "冷却水", "油处理")
@@ -1077,14 +1092,15 @@ def _apply_additional_skill_rules(
     for index, rec in records_by_index.items():
         code = rec.get("kks_code", "")
         name = rec.get("name", "")
-        if len(code) >= 9 and code[7:9] in KNOWN_DEVICE_LETTERS:
-            letters = code[7:9]
-            matches = [(name.rfind(term), term, allowed) for term, allowed in DEVICE_LETTER_SEMANTICS.items() if term in name]
-            if matches:
-                position, term, allowed = max(matches)
+        from kks_gen.identifiers import parse
+        letters = parse(code).segments.get("dev", "")
+        if letters:
+            matched = device_subject(name)
+            if matched:
+                term, allowed = matched
                 # “供给水泵管道/泵系统”中的泵是工艺上下文，不是本行设备主体；
                 # 只有最后一个明确设备词才进入名称-设备字母一致性检查。
-                if not (term == "泵" and any(context in name[position:] for context in NAME_CONTEXT_TERMS)) and letters not in allowed:
+                if letters not in allowed:
                     _append_skill_issue(
                         issues, seen, records_by_index, rule_id="KKS-A", priority="P1", category="名称语义与设备字母疑点", index=index,
                         message=f"名称主体词为“{term}”，但编码设备字母为 {letters}。", suggestion="结合 KKS 设备字母表和名称语义人工确认，不自动改码。", status="needs_review",
@@ -1117,12 +1133,11 @@ def _apply_additional_skill_rules(
         name = rec.get("name", "")
         if not dtype or not name:
             continue
-        dtype_group = next((group for group, terms in NAME_TYPE_TERMS.items() if any(term in dtype for term in terms)), None)
-        name_groups = [group for group, terms in NAME_TYPE_TERMS.items() if any(term in name for term in terms)]
-        if dtype_group and name_groups and dtype_group not in name_groups:
+        dtype_subject, name_subject = device_subject(dtype), device_subject(name)
+        if dtype_subject and name_subject and not dtype_subject[1].intersection(name_subject[1]):
             _append_skill_issue(
                 issues, seen, records_by_index, rule_id="KKS-E", priority="P2", category="设备类型与名称矛盾", index=index,
-                message=f"设备类型列为“{dtype}”，名称疑似属于“{'、'.join(name_groups)}”。", suggestion="人工核对设备类型列和名称，不自动覆盖任一字段。", status="needs_review",
+                message=f"设备类型列为“{dtype}”，名称主体为“{name_subject[0]}”。", suggestion="人工核对设备类型列和名称，不自动覆盖任一字段。", status="needs_review",
             )
     diagnostics["executed_rules"].append("KKS-E")
 
@@ -1239,21 +1254,28 @@ def apply_ai_review_stage(
     *,
     progress_callback: ProgressCallback | None = None,
 ) -> dict[str, Any]:
-    """Run the optional semantic stage and update the audit conclusion."""
-    result["ai_review"] = review_issue_candidates(result, progress_callback=progress_callback)
-    result["ai_summary"] = summarize_audit(result, progress_callback=progress_callback)
-    # 问题行的「AI 建议编码」：只对有问题的行生成，条款原文随 prompt 送入，
-    # 生成结果再由本地复核（骨架/字母表/分类码字典），不合规的标为不可用。
+    """Review existing findings only; never request replacement codes."""
+    result.pop("code_suggestions", None)
     try:
-        result["code_suggestions"] = suggest_correct_codes(
-            result,
-            progress_callback=progress_callback,
-            rule_source_lookup=lambda rid, std: rule_source(rid, std),
-        )
-    except Exception as exc:  # 建议编码失败不影响主审核结论
-        LOGGER.warning("ai_code_suggest_stage_failed error=%s", exc)
-        result["code_suggestions"] = {"status": "failed", "error": str(exc)[:200], "suggestions": {}}
+        result["ai_review"] = review_issue_candidates(result, progress_callback=progress_callback)
+    except Exception as exc:
+        LOGGER.warning("ai_review_stage_failed error=%s", exc)
+        result["ai_review"] = {"status": "failed", "error": str(exc)[:200]}
+    for issue in result.get("issues", []):
+        if issue.get("compliance_locked") or issue.get("rule_id") == "KKS-07":
+            issue["final_decision"] = "confirmed_issue"
+            issue["status"] = "open"
+        elif issue.get("evidence_missing"):
+            issue["final_decision"] = "needs_human"
+            issue["status"] = "needs_review"
+            issue["final_action"] = "需要人工确认"
+            issue["final_reason"] = "缺少关联资料，智能判断不能替代缺失的证据。"
+    _set_compliance_result(result)
+    result["ai_summary"] = summarize_audit(result, progress_callback=progress_callback)
     result["final_decision_counts"] = final_decision_counts(result)
+    # The dashboard severity distribution must match confirmed P0/P1/P2 counts.
+    # Keep issue_count as the full rule-hit workload for detail/history views.
+    result["priority_counts"] = confirmed_priority_counts(result)
     final_counts = result["final_decision_counts"]
     final_actionable = final_counts.get("confirmed_issue", 0) + final_counts.get("needs_human", 0)
     if final_actionable:
@@ -1266,6 +1288,18 @@ def apply_ai_review_stage(
             f"本次规则命中项均经 AI 归并为疑似误报，共 {final_counts['likely_false_positive']} 个；"
             "仍建议人工抽查。源 Excel 未修改。"
         )
+    result.pop("_ai_evidence_index", None)
+    def strip_proposed_codes(value):
+        if isinstance(value, dict):
+            for field, child in value.items():
+                if isinstance(child, str) and (field == "suggestion" or field.endswith("_suggestion")):
+                    value[field] = re.sub(r"(?<![A-Za-z0-9])[0-9]{2}[A-Z]{1,3}(?:[0-9]{2}(?:[A-Z]{2}[0-9]{3})?)?(?:[-.][A-Z0-9]+)*(?![A-Za-z0-9])", "〔编码值省略〕", child)
+                else:
+                    strip_proposed_codes(child)
+        elif isinstance(value, list):
+            for child in value:
+                strip_proposed_codes(child)
+    strip_proposed_codes(result)
     return result
 
 
@@ -1276,6 +1310,7 @@ def write_audit_artifacts(
     *,
     progress_callback: ProgressCallback | None = None,
 ) -> dict[str, Any]:
+    result["quality_metrics"] = quality_metrics(result)
     """Write only the two user-facing audit artifacts."""
     _emit_progress(progress_callback, {"phase": "audit", "stage": "report", "percent": 95, "message": "正在生成审核报告", "hint": "整理 HTML 报告和问题 Excel"})
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -1317,8 +1352,8 @@ def audit_tree_collection(
     _emit_progress(progress_callback, {"phase": "audit", "stage": "reading", "percent": 12, "message": "正在读取系统设备树", "hint": "识别父、子设备列和工作表结构"})
     sheet_info = []
     try:
-        workbook = openpyxl.load_workbook(input_path, read_only=True, data_only=True)
-        sheet_info = inspect_sheets(workbook)
+        with load_workbook_rows(input_path) as workbook:
+            sheet_info = inspect_sheets(workbook)
     except Exception:
         sheet_info = [{"sheet": sheet, "max_row": len(rows), "max_col": max((len(row) for row in rows), default=0), "nonempty_rows": len(rows), "first_nonempty_row": 1, "last_nonempty_row": len(rows), "header_preview": list(rows[header_idx])}]
     issues: list[dict[str, Any]] = []
@@ -1330,13 +1365,15 @@ def audit_tree_collection(
     accepted_lengths = {1, 3, 4, 5, 6, 7, 11, 12, 13, 16, 17}
 
     def normalized(code: str) -> str:
-        return code.replace("O", "0").replace("o", "0").replace("I", "1").replace("i", "1")
+        return code
 
-    for excel_row, row in enumerate(rows[header_idx + 2:], start=header_idx + 2):
+    for excel_row, row in enumerate(rows[header_idx + 1:], start=header_idx + 2):
         parent_code = _tree_value(row, tree_cols["parent_code"])
         child_code = _tree_value(row, tree_cols["child_code"])
         parent_name = _tree_value(row, tree_cols["parent_name"])
         child_name = _tree_value(row, tree_cols["child_name"])
+        if not child_code and classify_row(name=child_name).is_point:
+            continue
         if not parent_code and not child_code:
             if child_name:
                 missing_child += 1
@@ -1349,27 +1386,9 @@ def audit_tree_collection(
         rec = _tree_record(excel_row, child_code, parent_code, child_name)
         child_records.append(rec)
         child_groups[child_code].append(rec)
-        if not ALLOWED_CODE.fullmatch(child_code):
-            add_issue(issues, priority="P0", rule_id="KKS-04", category="编码含非法字符", rec=rec, message=f"子设备编码含非允许字符：{child_code}", suggestion="只保留大写字母、数字和约定分隔符。")
-        if len(child_code) not in accepted_lengths:
-            add_issue(issues, priority="P0", rule_id="KKS-05", category="编码长度异常", rec=rec, message=f"子设备编码长度为 {len(child_code)}，不在已识别范围内。", suggestion="核对变长层级或扩展建模。")
-        if len(child_code) >= 12:
-            for start, end, label, want in ((0, 1, "全厂码G", "ALNUM"), (1, 2, "系统前缀号F0", "DIGIT"), (2, 5, "系统分类码F1F2F3", "ALPHA"),
-                                            (5, 7, "系统编号FN", "DIGIT"), (7, 9, "设备分类码A1A2", "ALPHA"), (9, 12, "设备编号AN", "DIGIT")):
-                part = child_code[start:end]
-                if want == "ALNUM":
-                    ok = part.isalnum()
-                elif want == "DIGIT":
-                    ok = part.isdigit()
-                else:
-                    ok = part.isalpha()
-                if not ok:
-                    add_issue(issues, priority="P0", rule_id="KKS-04b", category="分段字符类型错误", rec=rec, message=f"{label}片段 {part!r} 含错误字符。", suggestion="按同层兄弟码和图纸人工确认修正值。")
-                    break
-            if any(char in child_code for char in "IiOo"):
-                add_issue(issues, priority="P0", rule_id="KKS-06", category="KKS 禁用易混字母", rec=rec, message=f"编码含 KKS 字母表排除的 I/O：{child_code}", suggestion="核对是否为 1/0 的 OCR 或录入错误。")
-        if len(child_code) > 12:
-            add_issue(issues, priority="P1", rule_id="KKS-17/22", category="12 位以上扩展码", rec=rec, message=f"{child_code} 属于 {classify_extension(child_code)}，不能直接按 12 位 LOCATIONS 主码处理。", suggestion="拆分位置、相位、部件或信号属性，不要直接截断。", status="needs_review")
+        _add_compliance_issues(issues, rec)
+        if parent_code:
+            _add_compliance_issues(issues, _tree_record(excel_row, parent_code, "", parent_name))
         if not parent_code:
             relation_counts["MISSING"] += 1
             add_issue(issues, priority="P0", rule_id="KKS-08", category="树表缺父级 KKS", rec=rec, message="子设备存在但同行父设备 KKS 为空。", suggestion="补齐父级 KKS；不要通过改子设备码掩盖树关系缺失。")
@@ -1435,12 +1454,13 @@ def audit_tree_collection(
     _emit_progress(progress_callback, {"phase": "audit", "stage": "rules_completed", "percent": 62, "message": "本地规则审核完成", "hint": f"已发现 {len(issues)} 个规则问题，准备进行 AI 候选复核"})
     if run_ai_review:
         apply_ai_review_stage(result, progress_callback=progress_callback)
+    _set_compliance_result(result)
     if write_outputs:
         write_audit_artifacts(input_path, output_dir, result, progress_callback=progress_callback)
     return result
 
 
-def audit_file(
+def _audit_sheet(
     input_path: Path,
     output_dir: Path,
     requested_sheet: str | None = None,
@@ -1453,7 +1473,6 @@ def audit_file(
     configure_logging()
     _emit_progress(progress_callback, {"phase": "audit", "stage": "reading", "percent": 8, "message": "正在读取 Excel", "hint": f"打开工作簿：{input_path.name}"})
     LOGGER.info("audit_start file=%s output_dir=%s", input_path.name, output_dir)
-    wb = openpyxl.load_workbook(input_path, read_only=True, data_only=True)
     rule_config = _load_rule_config()
     root_parents = {text(item) for item in rule_config.get("root_parent_values", ROOT_PARENTS)} or ROOT_PARENTS
     old_prefix_migrations = rule_config.get("old_prefix_migrations", OLD_PREFIX)
@@ -1461,12 +1480,34 @@ def audit_file(
         old_prefix_migrations = OLD_PREFIX
     common_units = {text(item) for item in rule_config.get("common_unit_prefixes", COMMON_UNITS)} or COMMON_UNITS
     accepted_lengths = {int(item) for item in rule_config.get("accepted_code_lengths", [2, 3, 4, 5, 7, 12, 13])}
-    sheet_info = inspect_sheets(wb)
-    sheet, rows, header_idx = choose_sheet(wb, requested_sheet)
+    # 工作簿在这里读完就关掉（见 load_workbook_rows）：句柄不释放会让后续
+    # "移除产物 / 移动 run 目录"在 Windows 上失败（WinError 32）
+    with load_workbook_rows(input_path) as wb:
+        sheet_info = inspect_sheets(wb)
+        sheet, rows, header_idx = choose_sheet(wb, requested_sheet)
+        workbook_codes = defaultdict(list)
+        other_points = []
+        for candidate_sheet in wb.worksheets:
+            candidate_rows = rows if candidate_sheet.title == sheet else list(candidate_sheet.iter_rows(values_only=True))
+            try:
+                candidate_header = detect_header(candidate_rows)
+            except ValueError:
+                continue
+            candidate_cols = audit_columns(candidate_rows[candidate_header])
+            if candidate_cols["kks"] is None:
+                continue
+            for row_number, candidate_row in enumerate(candidate_rows[candidate_header + 1:], candidate_header + 2):
+                candidate = make_record(row_number, candidate_row, candidate_cols)
+                if is_table_instruction(candidate["kks_code"], candidate["name"], candidate["old_code"]) or not candidate["kks_code"]:
+                    continue
+                candidate["sheet"] = candidate_sheet.title
+                workbook_codes[candidate["kks_code"].upper()].append(candidate)
+                if candidate_sheet.title != sheet and record_role(candidate).is_point:
+                    other_points.append(candidate)
     _emit_progress(progress_callback, {"phase": "audit", "stage": "structure", "percent": 25, "message": "正在识别工作表结构", "hint": f"当前工作表：{sheet}；数据行：{max(0, len(rows) - header_idx - 1)}"})
     header = rows[header_idx]
-    cols = {kind: find_column(header, kind) for kind in ("kks", "old", "parent", "name", "unit", "dtype", "profession", "system")}
-    missing = [kind for kind in ("kks", "parent", "name") if cols[kind] is None]
+    cols = audit_columns(header)
+    missing = [kind for kind in ("kks", "name") if cols[kind] is None and not (kind == "name" and cols.get("original_name") is not None)]
     if missing:
         tree_cols = detect_tree_collection_columns(header)
         if tree_cols:
@@ -1496,14 +1537,21 @@ def audit_file(
         index: make_record(header_idx + 2 + index, row, cols)
         for index, row in enumerate(bounded_rows)
     }
+    for context_record in template_records.values():
+        context_record["sheet"] = sheet
     for i, row in enumerate(bounded_rows, start=header_idx + 2):
         if not nonempty(row):
             blank_rows.append(i)
             continue
         rec = make_record(i, row, cols)
+        rec["sheet"] = sheet
+        if rec.get("finished_product") and not any(rec.get(k) for k in ("kks_code", "parent_code", "name")):
+            continue
+        if is_table_instruction(rec["kks_code"], rec["name"], rec["old_code"]):
+            continue
         if rec["kks_code"]:
             records.append(rec)
-        else:
+        elif not classify_row(rec.get("old_code"), rec["name"], rec.get("device_type")).is_point:
             nonempty_without_code.append(rec)
 
 
@@ -1519,6 +1567,25 @@ def audit_file(
             for rec in group:
                 add_issue(issues, priority="P0", rule_id="KKS-07", category="重复 KKS 码", rec=rec,
                           message=f"KKS 码 {code} 在主表出现 {len(group)} 次。", suggestion="核对是否为后缀丢失或异设备真碰撞；修复前不得导入。")
+
+    # Include cross-sheet and case-normalized collisions without repeating
+    # the exact duplicates already reported for the selected sheet.
+    for code, group in workbook_codes.items():
+        if len(group) < 2 or (all(rec["sheet"] == sheet for rec in group)
+                              and len({rec["kks_code"] for rec in group}) == 1):
+            continue
+        locations = "、".join(f"{rec['sheet']}!{rec['excel_row']}" for rec in group)
+        for rec in group:
+            add_issue(issues, priority="P0", rule_id="KKS-07", category="工作簿重复KKS", rec=rec,
+                      message=f"编码 {code} 在工作簿重复：{locations}", suggestion="核对所有冲突对象，编码须唯一。")
+            issues[-1]["sheet"] = rec["sheet"]
+            issues[-1]["compliance_locked"] = True
+    for rec in other_points:
+        add_issue(issues, priority="P0", rule_id="KKS-38", category="指令/测点占用设备KKS", rec=rec,
+                  message=f"{rec['sheet']}!{rec['excel_row']} 指令/测点的设备KKS列应留空。",
+                  suggestion="清空设备KKS，保留原信号标识与设备归属信息。")
+        issues[-1]["sheet"] = rec["sheet"]
+        issues[-1]["compliance_locked"] = True
 
     # 模式判定：增量新增批次 / 企业两位数字前缀惯例
     # 增量批次（父级系统码在主库、本文件几乎全为设备级码）里，"父级不在本文件"
@@ -1554,12 +1621,7 @@ def audit_file(
             # 记录到范围验证；孤儿、前缀、长度类不再按本文件内部缺陷报 P0。
             scope_external_parents[parent] += 1
             # KKS-15 的层级收敛提示、KKS-25 的名称聚簇也归入范围说明，避免 8 千级假阳性
-        if not ALLOWED_CODE.fullmatch(code):
-            add_issue(issues, priority="P0", rule_id="KKS-04", category="编码含非法字符", rec=rec,
-                      message=f"编码含非允许字符：{code}", suggestion="只保留大写字母、数字和约定分隔符；请人工确认。")
-        if len(code) not in accepted_lengths:
-            add_issue(issues, priority="P0", rule_id="KKS-05", category="编码长度异常", rec=rec,
-                      message=f"编码长度为 {len(code)}，不在本表已识别的变长层级/扩展范围内。", suggestion="核对是否误拼接或缺失层级。")
+        _add_compliance_issues(issues, rec)
         if parent and parent not in root_parents and parent not in code_set and not incremental_batch:
             orphan_recs.append(rec)
             add_issue(issues, priority="P0", rule_id="KKS-08", category="父级孤儿", rec=rec,
@@ -1577,36 +1639,6 @@ def audit_file(
         if parent and parent not in root_parents and len(parent) >= len(code):
             add_issue(issues, priority="P0", rule_id="KKS-11", category="父级长度异常", rec=rec,
                       message=f"父级长度 {len(parent)} 不小于子码长度 {len(code)}。", suggestion="核对层级关系。")
-
-        if len(code) >= 12:
-            # 分段结构：全厂码G(1) + 系统前缀号F0(1) + 系统分类码F1F2F3(3) + 系统编号FN(2) + 设备分类码A1A2(2) + 设备编号AN(3)
-            segments = ((0, 1, "全厂码G", "ALNUM"), (1, 2, "系统前缀号F0", "DIGIT"), (2, 5, "系统分类码F1F2F3", "ALPHA"),
-                        (5, 7, "系统编号FN", "DIGIT"), (7, 9, "设备分类码A1A2", "ALPHA"), (9, 12, "设备编号AN", "DIGIT"))
-            seg_has_issue = False
-            for start, end, label, want in segments:
-                part = code[start:end]
-                if want == "ALNUM":
-                    ok = part.isalnum()
-                elif want == "DIGIT":
-                    ok = part.isdigit()
-                else:
-                    ok = part.isalpha()
-                if not ok:
-                    seg_has_issue = True
-                    suggestion = code
-                    if label == "设备编号AN":
-                        suggestion = code[:start] + part.replace("O", "0").replace("o", "0").replace("I", "1").replace("i", "1").replace("l", "1") + code[end:]
-                    add_issue(issues, priority="P0", rule_id="KKS-04b", category="分段字符类型错误", rec=rec,
-                              message=f"{label}片段 {part!r} 含错误字符。", suggestion=f"建议候选：{suggestion}；必须结合兄弟码/图纸人工确认。")
-                    break
-            if any(ch in code for ch in "IiOo") and not seg_has_issue:
-                add_issue(issues, priority="P0", rule_id="KKS-06", category="KKS 禁用易混字母", rec=rec,
-                          message=f"编码含 KKS 字母表排除的 I/O：{code}", suggestion="核对是否为 1/0 的 OCR 或录入错误，不自动替换。")
-
-        if len(code) > 12:
-            kind = classify_extension(code)
-            add_issue(issues, priority="P1", rule_id="KKS-17/22", category="12 位以上扩展码", rec=rec,
-                      message=f"{code} 被识别为“{kind}”；静态规则不能直接判断其是否应进入 LOCATIONS 主码。", suggestion="确认是否拆出位置/相位/部件/信号属性列，或进入扩展表；不要直接截断。", status="needs_review")
 
         if rec["name"] == "":
             add_issue(issues, priority="P0", rule_id="KKS-D", category="有码无名称", rec=rec,
@@ -1641,50 +1673,11 @@ def audit_file(
             add_issue(issues, priority="P2", rule_id="KKS-27", category="名称语义需人核", rec=rec,
                       message="名称过短或无法提取中文/字母语义。", suggestion="人工核对名称，不按此项自动判错。", status="needs_review")
 
-        expected = code_unit(code[0], common_units)
-        if enterprise and len(code) >= 2 and code[:2] in ENTERPRISE_UNIT_PREFIXES:
-            # 企业惯例（00/01/02/61）：编码前缀是权威机组标识，只核对"机组列"文本。
-            # 文本应与前缀规范表达全等，避免把 61(1,2号公用) 误判成 6 号机。
-            prefix = code[:2]
-            unit_text = rec.get("unit", "")
-            norm = ""
-            if unit_text:
-                if "公用" in unit_text or "公共" in unit_text:
-                    nums = sorted({int(x) for x in re.findall(r"\d+", unit_text)})
-                    norm = "公用" if not nums else (",".join(str(x) for x in nums) + "号公用")
-                else:
-                    m = NAME_UNIT.search(unit_text)
-                    if m:
-                        key = m.group(1)
-                        num = CN_NUM[key] if key in CN_NUM else int(key)
-                        norm = f"{num}号"
-            expect_norm = "全厂公用" if prefix == "00" else ENTERPRISE_UNIT_PREFIXES.get(prefix, prefix)
-            if unit_text and norm and norm not in expect_norm:
-                add_issue(issues, priority="P1", rule_id="KKS-28", category="机组三方不一致", rec=rec,
-                          message=f"机组列文本为{unit_text!r}，但编码前缀 {prefix} 表示{expect_norm}。",
-                          suggestion="以编码前缀(00/01/02/61)为准校正机组列文本。")
-        elif expected is not None:
-            for field, label in (("name", "名称"), ("unit", "机组列")):
-                m = NAME_UNIT.search(rec[field]) if rec[field] else None
-                if not m:
-                    continue
-                key = m.group(1)
-                found = CN_NUM[key] if key in CN_NUM else int(key)
-                if found != expected:
-                    review = semantic_unit_review(rec, expected)
-                    if review and review[0] == "resolved":
-                        resolved.append({"priority": "排除", "status": "resolved", "rule_id": "KKS-28", "category": "机组三方一致（语义复核）", "excel_row": rec["excel_row"], "kks_code": rec["kks_code"], "parent_code": rec["parent_code"], "old_code": rec["old_code"], "name": rec["name"], "message": f"{label}规则命中：{review[1]}", "suggestion": "不修改编码；保留为语义复核记录。", "evidence": "编码前缀、机组列、父级均指向当前机组。"})
-                    else:
-                        add_issue(issues, priority="P1", rule_id="KKS-28", category="机组三方不一致", rec=rec,
-                                  message=f"{label}指向 {found} 号，但编码前缀指向 {expected} 号。", suggestion="核对编码、机组列与名称三方，不自动改码。")
+        for message in unit_conflicts(code, rec["name"], rec["unit"]):
+            add_issue(issues, priority="P1", rule_id="KKS-28", category="机组三方不一致", rec=rec,
+                      message=message, suggestion="核对图纸及工程约定，不自动改归属。", status="needs_review")
 
         old, new = rec["old_code"], rec["kks_code"]
-        # 全厂码 G 取值合规：G 必须在 1-9 / A-G / J-R / S-V / Y / 自由字母内
-        # 企业惯例（00/01/02/61 两位数字前缀）视为合法，不按国标单字符 G 表判非法。
-        g_char = code[0] if code else ""
-        if g_char and not valid_g_char(g_char) and not enterprise_unit_ok(code):
-            add_issue(issues, priority="P0", rule_id="KKS-06", category="全厂码 G 取值非法", rec=rec,
-                      message=f"全厂码 G={g_char!r} 不在合法取值范围内（1-9/A-G/J-R/S-V/Y，自由字母 H/W/X/Z；企业惯例 00/01/02/61）。", suggestion="核对是否为旧版前缀（50/60/L0/J0 现行体系下 G=5/6/L/J 合法）或录入错误。")
         # 10 版旧前缀迁移：G=5/6/L/J 本身合法，迁移 50→05 等属项目约定，仅作 P2 历史提示
         if old and new and old[:2] != new[:2]:
             expected_prefix = old_prefix_migrations.get(old[:2])
@@ -1701,7 +1694,9 @@ def audit_file(
 
     unique_records_by_code = {code: group[0] for code, group in by_code.items() if len(group) == 1}
     skill_template_diagnostics = _apply_template_skill_rules(
-        bounded_rows,
+        [tuple(None for _ in row) if is_table_instruction(template_records[index]["kks_code"], template_records[index]["name"], template_records[index]["old_code"]) or classify_row(template_records[index].get("old_code") or template_records[index]["kks_code"],
+                                                template_records[index]["name"], template_records[index].get("device_type")).is_point else row
+         for index, row in enumerate(bounded_rows)],
         template_cols,
         template_records,
         unique_records_by_code,
@@ -1733,6 +1728,12 @@ def audit_file(
         )
 
     for rec in nonempty_without_code:
+        if rec.get("finished_product") and not device_subject(rec.get("name", "")):
+            add_issue(issues, priority="P1", rule_id="KKS-00", category="成品字段缺失待核", rec=rec,
+                      message="新编码为空，成品名称不足以确认设备主体或是否属于应留空的测点。",
+                      suggestion="补充成品名称或确认留空属性。", status="needs_review")
+            issues[-1]["evidence_missing"] = True
+            continue
         add_issue(issues, priority="P0", rule_id="KKS-00", category="非空行缺 KKS 码", rec=rec,
                   message="非空数据行没有 KKS 编码。", suggestion="确认是待编设备、草稿行还是应删除的空记录；不直接删除。")
 
@@ -1771,8 +1772,8 @@ def audit_file(
         )
     if enterprise:
         scope_notes.append(
-            "识别为企业惯例两位数字前缀（00=全厂公用 / 01=1号 / 02=2号 / 61=1,2号公用），"
-            "全厂码 G 取值校验按企业惯例放行。"
+            "识别为国标两位数字全厂码（00=全厂公用 / 01=1号 / 02=2号 / 61=1,2号公用），"
+            "按 GB/T 50549-2020 表4.3.1-2 校验全厂码 H₂H₃。"
         )
     scope_validation = {
         "mode": "incremental" if incremental_batch else "full",
@@ -1858,6 +1859,211 @@ def audit_file(
     _emit_progress(progress_callback, {"phase": "audit", "stage": "rules_completed", "percent": 62, "message": "本地规则审核完成", "hint": f"已发现 {len(issues)} 个规则问题，准备进行 AI 候选复核"})
     if run_ai_review:
         apply_ai_review_stage(result, progress_callback=progress_callback)
+    _set_compliance_result(result)
+    if write_outputs:
+        write_audit_artifacts(input_path, output_dir, result, progress_callback=progress_callback)
+    return result
+
+
+def audit_file(input_path: Path, output_dir: Path, requested_sheet=None, comparison_path=None,
+               progress_callback=None, *, run_ai_review=True, write_outputs=True) -> dict[str, Any]:
+    """Audit every recognizable device sheet before semantic review and export."""
+    input_path, output_dir = Path(input_path), Path(output_dir)
+    eligible, excluded, all_records = [], [], []
+    with load_workbook_rows(input_path) as workbook:
+        if requested_sheet and requested_sheet not in workbook.sheetnames:
+            raise ValueError(f"工作表不存在：{requested_sheet}")
+        for ws in workbook.worksheets:
+            if requested_sheet and ws.title != requested_sheet:
+                excluded.append({"sheet": ws.title, "reason": "用户指定审查工作表，未纳入本次完整审查"})
+                continue
+            rows = list(ws.iter_rows(values_only=True))
+            try:
+                header_index = detect_header(rows)
+                columns = audit_columns(rows[header_index])
+                tree_columns = detect_tree_collection_columns(rows[header_index])
+            except (ValueError, IndexError):
+                excluded.append({"sheet": ws.title, "reason": "未识别设备表头或工作表为空"})
+                continue
+            if columns["kks"] is None or (columns["name"] is None and columns["original_name"] is None and not tree_columns):
+                excluded.append({"sheet": ws.title, "reason": "缺少可识别的编码列或名称列"})
+                continue
+            eligible.append(ws.title)
+            for number, row in enumerate(rows[header_index + 1:], header_index + 2):
+                if not nonempty(row):
+                    continue
+                rec = make_record(number, row, columns)
+                if tree_columns:
+                    rec = _tree_record(number, _tree_value(row, tree_columns["child_code"]),
+                                       _tree_value(row, tree_columns["parent_code"]),
+                                       _tree_value(row, tree_columns["child_name"]))
+                rec["sheet"] = ws.title
+                if rec.get("finished_product") and not any(rec.get(k) for k in ("kks_code", "parent_code", "name")):
+                    continue
+                if not is_table_instruction(rec["kks_code"], rec["name"], rec["old_code"]):
+                    all_records.append(rec)
+    if not eligible:
+        raise ValueError("没有可执行完整审查的设备工作表；请检查编码列和设备名称列")
+    results = []
+    for sheet in eligible:
+        part = _audit_sheet(input_path, output_dir, sheet, comparison_path,
+                            progress_callback, run_ai_review=False, write_outputs=False)
+        for issue in part["issues"]:
+            if not issue.get("sheet"):
+                issue["sheet"] = sheet
+        for rec in part.get("_ai_context", {}).get("records", []):
+            rec["sheet"] = sheet
+        results.append(part)
+    result = results[0]
+    issues, seen = [], set()
+    for part in results:
+        for issue in part["issues"]:
+            key = tuple(str(issue.get(field, "")) for field in
+                        ("sheet", "excel_row", "kks_code", "rule_id", "category", "message"))
+            if key not in seen:
+                seen.add(key)
+                issues.append(issue)
+    referenced = {r["parent_code"] for r in all_records if r["parent_code"]}
+    global_codes = {r["kks_code"] for r in all_records if r["kks_code"]}
+    for rec in all_records:
+        parent = rec.get("parent_code", "")
+        if rec.get("finished_product") and parent and parent not in ROOT_PARENTS:
+            for parent_error in assess(parent).errors:
+                add_issue(issues, priority="P0", rule_id="KKS-04b", category="父级编码结构错误", rec=rec,
+                          message="父级编码：" + parent_error, suggestion="核对父级编码的适用层级和结构。",
+                          evidence="父级KKS编码=" + parent)
+                issues[-1].update(compliance_locked=True, audit_stage=0)
+        row_findings = device_findings(rec, referenced)
+        missing_subject = any(stage == 1 and "不能唯一确认设备主体" in message for stage, message, _, _ in row_findings)
+        missing_system = any(stage == 2 and not confirmed for stage, _, _, confirmed in row_findings)
+        for stage, message, basis, confirmed in row_findings:
+            add_issue(issues, priority="P0" if confirmed else "P1", rule_id=("KKS-39", "KKS-40", "KKS-41", "KKS-42", "KKS-43", "KKS-44")[stage],
+                      category=STAGES[stage], rec=rec, message=message,
+                      suggestion="核对原始资料和适用依据后重新审查。", evidence=basis,
+                      status="open" if confirmed else "needs_review")
+            issues[-1]["audit_stage"] = stage
+            issues[-1]["definition"] = basis
+            issues[-1]["compliance_locked"] = confirmed
+            issues[-1]["evidence_missing"] = ((stage == 2 and not confirmed)
+                or (stage == 1 and missing_subject)
+                or (stage == 3 and not confirmed and (missing_subject or missing_system)))
+            if issues[-1]["evidence_missing"]:
+                issues[-1]["review_scope_note"] = "设备主体或工艺归属缺少确定依据；直接列为待核，AI不得补造工程事实。"
+    # A parent in another audited sheet is present; absent external parents
+    # remain unverified regardless of an automatically inferred batch mode.
+    issues = [i for i in issues if not (i.get("rule_id") == "KKS-08"
+                                      and i.get("parent_code") in global_codes)]
+    existing_parent_findings = {(i.get("sheet"), i.get("excel_row")) for i in issues if i.get("rule_id") == "KKS-08"}
+    for rec in all_records:
+        parent = rec.get("parent_code", "")
+        if parent and parent not in ROOT_PARENTS and parent not in global_codes:
+            if (rec["sheet"], rec["excel_row"]) not in existing_parent_findings:
+                add_issue(issues, priority="P1", rule_id="KKS-08", category="外部父级待核", rec=rec,
+                          message="父级未出现在本次审查台账，尚未核实外部台账中的存在性。",
+                          suggestion="提供对应父级台账或工程编码索引。", status="needs_review",
+                          evidence="GB/T 50549-2020 第3.3节；工作簿父级闭合校验")
+                issues[-1]["evidence_missing"] = True
+        elif parent in global_codes and len(parent) == 7 and len(rec["kks_code"]) == 12 and not rec["kks_code"].startswith(parent):
+            if not any(i.get("sheet") == rec["sheet"] and i.get("excel_row") == rec["excel_row"]
+                       and i.get("rule_id") == "KKS-09" for i in issues):
+                add_issue(issues, priority="P0", rule_id="KKS-09", category="跨表系统归属冲突", rec=rec,
+                          message="设备编码与明确的父级系统标识不一致。", suggestion="核对显式父级和工程系统归属。")
+                issues[-1]["compliance_locked"] = True
+    grouped = defaultdict(list)
+    for rec in all_records:
+        if rec["kks_code"]:
+            grouped[rec["kks_code"].upper()].append(rec)
+    duplicate_findings = {(i.get("sheet"), i.get("excel_row")) for i in issues if i.get("rule_id") == "KKS-07"}
+    for code, group in grouped.items():
+        if len(group) < 2:
+            continue
+        locations = "、".join(f"{r['sheet']}!{r['excel_row']}" for r in group)
+        for rec in group:
+            if (rec["sheet"], rec["excel_row"]) in duplicate_findings:
+                continue
+            add_issue(issues, priority="P0", rule_id="KKS-07", category="工作簿重复KKS", rec=rec,
+                      message=f"编码{code}在工作簿重复：{locations}。", suggestion="核对全部冲突对象。")
+            issues[-1]["compliance_locked"] = True
+    identities = defaultdict(list)
+    for rec in all_records:
+        if rec.get("old_code") and rec["kks_code"] and not record_role(rec).is_point:
+            identities[rec["old_code"]].append(rec)
+    for old, group in identities.items():
+        if len({r["kks_code"] for r in group}) > 1 and len({r["sheet"] for r in group}) > 1:
+            for rec in group:
+                add_issue(issues, priority="P1", rule_id="KKS-25c", category="跨表设备身份一对多", rec=rec,
+                          message="同一原始设备标识跨工作表对应多个当前编码，设备身份一致性待核。",
+                          suggestion="结合设备台账及历史映射确认物理设备身份。", status="needs_review",
+                          evidence="原始设备标识=" + old)
+    unique = {code: group[0] for code, group in grouped.items() if len(group) == 1}
+    for code in cycle_nodes(unique):
+        rec = unique[code]
+        if not any(i.get("sheet") == rec["sheet"] and i.get("excel_row") == rec["excel_row"]
+                   and i.get("rule_id") == "KKS-10" for i in issues):
+            add_issue(issues, priority="P0", rule_id="KKS-10", category="跨表父级环", rec=rec,
+                      message="工作簿父级链存在循环引用。", suggestion="核对并修正层级关系。")
+            issues[-1]["compliance_locked"] = True
+    # Stable order: format, type, system, semantics, numbering, location.
+    stage_by_rule = {"KKS-00": 0, "KKS-04": 0, "KKS-04b": 0, "KKS-05": 0, "KKS-06": 0,
+                     "KKS-33": 1, "KKS-A": 1, "KKS-E": 1, "KKS-32": 2, "KKS-09": 2,
+                     "KKS-35": 4, "KKS-F": 4, "KKS-28": 5}
+    for issue in issues:
+        issue.setdefault("audit_stage", stage_by_rule.get(issue["rule_id"], 3))
+        if issue["rule_id"] in {"KKS-32", "KKS-37", "KKS-F", "KKS-28", "KKS-44"} or (issue["rule_id"] == "KKS-33" and issue.get("status") == "needs_review"):
+            issue["evidence_missing"] = True
+            issue["status"] = "needs_review"
+        if issue["rule_id"] in {"KKS-07", "KKS-10", "KKS-11", "KKS-09", "KKS-D", "KKS-00"} and issue.get("status") == "open":
+            issue["compliance_locked"] = True
+    issues.sort(key=lambda i: (i["audit_stage"], i.get("sheet", ""), _excel_row_num(i), i["rule_id"]))
+    result["issues"] = issues
+    result["sheet"] = eligible[0] if len(eligible) == 1 else "、".join(eligible)
+    result["audited_sheets"] = eligible
+    result["reviewed_rows"] = len(all_records)
+    result["excluded_sheets"] = excluded
+    result["sheet_results"] = [{"sheet": p.get("_ai_context", {}).get("records", [{}])[0].get("sheet", eligible[n])
+                                if p.get("_ai_context", {}).get("records") else eligible[n],
+                                "data_rows": p["data_rows"]} for n, p in enumerate(results)]
+    result["data_rows"] = sum(p["data_rows"] for p in results)
+    result["nonempty_rows_without_code"] = sum(p.get("nonempty_rows_without_code", 0) for p in results)
+    result["code_length_distribution"] = dict(sorted(Counter(len(r["kks_code"]) for r in all_records if r["kks_code"]).items()))
+    result["metrics"]["unique_codes"] = len(grouped)
+    result["metrics"]["duplicate_code_groups"] = sum(len(g) > 1 for g in grouped.values())
+    for metric, rules in (("orphan_rows", {"KKS-08"}), ("prefix_mismatch_rows", {"KKS-09"}),
+                          ("self_ref_rows", {"KKS-10"}), ("parent_longer_rows", {"KKS-11"})):
+        result["metrics"][metric] = len({(i.get("sheet"), i.get("excel_row")) for i in issues if i["rule_id"] in rules})
+    result["scope_validation"]["notes"] = [note for p in results for note in p.get("structural_notes", [])
+                                            if "父级系统/子系统节点在主库" not in note and "不视为孤儿" not in note]
+    result["_ai_context"] = {"records": all_records}
+    result["audit_policy"] = {"device_length": 12, "order": list(STAGES), "replacement_codes": False,
+                              "standard": "GB/T 50549-2020", "scope": "全部已识别设备工作表"}
+    result["audit_policy"]["finished_product_sheets"] = sorted({r["sheet"] for r in all_records if r.get("finished_product")})
+    result["audit_policy"]["finished_product_fields"] = ["父级KKS编码", "新KKS编码", "新设备名称"]
+    result["structural_notes"] = [note for p in results for note in p.get("structural_notes", [])
+                                  if "父级系统/子系统节点在主库" not in note and "不视为孤儿" not in note]
+    result["scope_validation"]["incremental_batch"] = False
+    result["scope_validation"]["mode"] = "workbook"
+    result["structural_notes"] += [f"完整审查工作表：{'、'.join(eligible)}", "编号分配、备用关系、安装位置及全厂唯一性须以工程约定、图纸和全厂台账确认。"]
+    result["structural_notes"] += [f"未审查工作表 {item['sheet']}：{item['reason']}" for item in excluded]
+    for sheet in eligible:
+        for stage, message in ((4, "未提供工程编号分配、预留和备用设备约定，相关编号合理性尚不能确认。"),
+                               (5, "安装位置、区域归属及全厂范围唯一性需关联图纸、位置台账和全厂设备台账确认。")):
+            add_issue(issues, priority="P1", rule_id="KKS-45" if stage == 4 else "KKS-46", category=STAGES[stage],
+                      rec={"sheet": sheet}, message=message, suggestion="补充关联资料完成核验。",
+                      status="needs_review", evidence="GB/T 50549-2020 第3.3节；关联资料核验范围")
+            issues[-1].update(audit_stage=stage, evidence_missing=True)
+    issues.sort(key=lambda i: (i["audit_stage"], i.get("sheet", ""), _excel_row_num(i), i["rule_id"]))
+    for issue in issues:
+        issue.setdefault("final_decision", "needs_human" if issue.get("status") == "needs_review" else "confirmed_issue")
+    result["issue_count"] = sum(i.get("status") != "resolved" for i in issues)
+    result["priority_counts"] = dict(Counter(i["priority"] for i in issues if i.get("status") != "resolved"))
+    result["conclusion"] = f"本次完整审查 {len(eligible)} 个工作表，发现 {result['issue_count']} 项问题或待核事项；源Excel未修改。"
+    if run_ai_review:
+        apply_ai_review_stage(result, progress_callback=progress_callback)
+    result.pop("stage_scope_note", None)
+    _set_compliance_result(result)
+    result.setdefault("import_governance", {})["direct_import_ready"] = False
+    result["compliance"]["excluded_sheets"] = excluded
+    result["quality_metrics"] = quality_metrics(result)
     if write_outputs:
         write_audit_artifacts(input_path, output_dir, result, progress_callback=progress_callback)
     return result

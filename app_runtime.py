@@ -68,6 +68,21 @@ def load_app_config() -> dict[str, Any]:
     return _merge(config, payload) if isinstance(payload, dict) else config
 
 
+def load_explicit_app_config() -> dict[str, Any]:
+    """只返回 config/app_config.json **文件里真的写了**的内容（不含默认值）。
+
+    与 load_app_config() 的区别很重要：后者会把默认值一起返回，而默认值不能当作
+    "管理员配过"来参与 .env.local 的优先级比较（见 environment_value 的说明）。
+    """
+    if not APP_CONFIG_PATH.is_file():
+        return {}
+    try:
+        payload = json.loads(APP_CONFIG_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
 def save_app_config(patch: dict[str, Any]) -> dict[str, Any]:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     config = _merge(load_app_config(), patch)
@@ -269,26 +284,22 @@ def _read_local_env() -> dict[str, str]:
 
 
 def environment_value(name: str, config_value: Any = "") -> str:
-    """Process environment > app_config.json > .env.local.
+    """取值优先级：进程环境变量 > app_config.json 的显式值 > .env.local > 传入默认值。
 
-    空字符串/纯空白的环境变量视为"未设置"：容器编排(如 docker compose 的
-    ${VAR:-})在 .env 缺项时会注入空串，若无条件采信会覆盖 app_config.json
-    里已经配好的 AI 配置。
+    ⚠️ 为什么写这么细：
+    1. 空字符串/纯空白的环境变量视为"未设置"：容器编排(如 docker compose 的 ${VAR:-})
+       在 .env 缺项时会注入空串，若无条件采信会覆盖已配好的 AI 配置；
+    2. `config_value` 必须是**真的来自 app_config.json 文件**的值。历史上调用方传的是
+       `DEFAULT_APP_CONFIG` 的默认值（例如 ai.enabled=False），而"非空即返回"的写法让
+       这个默认值排在 .env.local **前面**，导致 .env.local 里的 AI_ENABLED=true 永远
+       不生效——用户只填 KEY/URL 时 AI 静默保持关闭。默认值应排在 .env.local 之后。
     """
     raw = os.environ.get(name)
     if raw is not None and raw.strip():
         return raw
-    config_names = {
-        "AI_ENABLED": ("enabled",),
-        "AI_BASE_URL": ("base_url",),
-        "AI_API_KEY": ("api_key",),
-        "AI_MODEL": ("model",),
-        "AI_TIMEOUT_SECONDS": ("timeout_seconds",),
-    }
-    local = _read_local_env()
     if config_value not in (None, ""):
         return str(config_value)
-    return local.get(name, "")
+    return _read_local_env().get(name, "")
 
 
 def _reset_log_files() -> None:

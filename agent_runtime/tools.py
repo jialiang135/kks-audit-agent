@@ -81,6 +81,14 @@ class ReportTool:
     ) -> dict[str, Any]:
         from run_audit import write_audit_artifacts
 
+        ai = result.get("ai_review", {})
+        complete = (ai.get("status") == "completed"
+                    and ai.get("candidate_count", 0) == ai.get("reviewed_count", 0)
+                    and ai.get("verification_count", 0) == ai.get("verified_count", 0)
+                    and not ai.get("errors"))
+        if not complete:
+            raise RuntimeError("AI复核未完整完成，暂不生成正式报告；请检查模型连接或重试未完成项目。")
+
         return write_audit_artifacts(
             input_path,
             output_dir,

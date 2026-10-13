@@ -13,30 +13,51 @@ import logging
 import os
 import re
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from functools import lru_cache
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from app_runtime import environment_value, load_app_config, load_skill_context
+from app_runtime import environment_value, load_explicit_app_config, load_skill_context
 
 
 DEFAULT_BASE_URL = "https://www.ai.atyou.cn"
-DEFAULT_TIMEOUT_SECONDS = 90
+# 单次请求超时。**2026-10-10 由 90 提到 180**（`AI_TIMEOUT_SECONDS` 可覆盖）：
+#   实测真实批量（40 行 / 39 KB 请求体）**端点空闲时串行 28~35s**，90s 只剩 3 倍余量，
+#   而并发跑起来后端点半忙时抖动就会撞墙（一轮 20 批曾撞 5 次）。180s 给足余量且不影响正常路径
+#   —— 正常请求 30s 就返回了，超时值只决定"卡住时等多久"。量测工具：`tools/probe_ai_endpoint.py`。
+DEFAULT_TIMEOUT_SECONDS = 180
 LOGGER = logging.getLogger("kks-audit.ai")
 ProgressCallback = Callable[[dict[str, Any]], None]
 INTERNAL_GROUP_SIZE = 12
 REQUEST_ATTEMPTS = 2
 RETRY_BACKOFF_SECONDS = 2
+REVIEW_BATCH_RETRIES = 2
+
+
+def _is_retriable_batch_error(error: str) -> bool:
+    """Shared transient-error check for audit review and generation name review."""
+    text = str(error).lower()
+    return any(token in text for token in (
+        "timeout", "timed out", "connection", "reset", "disconnected", "remote end",
+        "json", "429", "408", "500", "502", "503", "504", "超时", "连接", "解析",
+    ))
 MAX_CONTEXT_ROWS = 12
 MAX_ADJACENT_ROWS = 5
 MAX_GLOBAL_TEXT = 1800
-MAX_CONCURRENT_REQUESTS = 3
+MAX_CONCURRENT_REQUESTS = 4
+MODEL_REQUEST_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
+# 并发这个值的实测依据（真实 deepseek-flash 端点，2026-10-08）：
+#   8 路并发时语义复核大量整组失败（"Remote end closed connection"/超时），15 个候选只复核到 1~4 个；
+#   降到 4 路后同规模用例全部完成。批内重试救不回"端点被打崩"，所以宁可用较低并发换完成率。
+# 端点够强时可以调高：AI_REVIEW_CONCURRENCY（上限 8）。
 RULE_CONTEXT_HINTS = {
     "KKS-24": {"名称", "命名", "歧义"},
     "KKS-25": {"同一系统", "归一名称", "多个 KKS"},
@@ -72,9 +93,11 @@ class AIConfig:
     max_candidates: int = 0
     summary_enabled: bool = True   # 单文件总体总结（AI_SUMMARY_ENABLED）
     trend_enabled: bool = True     # 台账跨文件趋势总结（AI_TREND_SUMMARY_ENABLED）
-    code_suggest_enabled: bool = True   # 问题行「AI 建议编码」（AI_CODE_SUGGEST_ENABLED）
-    code_suggest_max: int = 0           # 送生成的行数上限，0=不限制（AI_CODE_SUGGEST_MAX）
-    code_suggest_concurrency: int = 3   # 建议编码批并发数（AI_CODE_SUGGEST_CONCURRENCY）
+    review_concurrency: int = 4         # 语义复核组并发数（AI_REVIEW_CONCURRENCY）
+    review_batch_size: int = 12
+    context_rows: int = 12
+    thinking_mode: str = ""
+    brief_output: bool = False
 
 
 def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
@@ -107,7 +130,13 @@ def _parse_int(raw: Any, default: int, minimum: int, maximum: int) -> int:
 
 
 def _load_local_env() -> None:
-    """Load an optional local-only config without overriding process env vars."""
+    """Load an optional local-only config without overriding process env vars.
+
+    🔴 这个函数**必须被调用**（此前定义了却从未调用，是交接文档里记的已知缺口）：
+    不调用时 `.env.local` 里的 `KKS_ADMIN_TOKEN` 不会进入进程环境，后果是
+    **管理接口一律 403（fail-closed）**，且 AI 配置退回默认值 → 界面上"勾了 AI"也跑不起来。
+    调用点见文件末的 `_load_local_env()`（模块级，导入即生效；不覆盖真实环境变量）。
+    """
     path = Path(__file__).with_name(".env.local")
     if not path.is_file():
         return
@@ -135,7 +164,13 @@ def normalize_base_url(value: str) -> str:
 
 
 def load_config() -> AIConfig:
-    app_config = load_app_config()
+    """解析 AI 配置：进程环境 > config/app_config.json（文件里真写了的值）> .env.local > 默认值。
+
+    ⚠️ 这里刻意用 load_explicit_app_config() 而不是 load_app_config()：
+    后者会把 DEFAULT_APP_CONFIG 的默认值（如 ai.enabled=False）一起返回，默认值一旦被
+    当成"管理员配过"，就会排在 .env.local 前面，使 .env.local 里的 AI_ENABLED=true 失效。
+    """
+    app_config = load_explicit_app_config()
     ai = app_config.get("ai", {}) if isinstance(app_config.get("ai"), dict) else {}
     api_key = environment_value("AI_API_KEY", ai.get("api_key", "")).strip()
     enabled = _parse_bool(environment_value("AI_ENABLED", ai.get("enabled", "")), bool(api_key))
@@ -144,26 +179,35 @@ def load_config() -> AIConfig:
         base_url=normalize_base_url(raw_base_url) if raw_base_url else "",
         api_key=api_key,
         model=environment_value("AI_MODEL", ai.get("model", "")).strip(),
+        # 超时/并发/上限这类"调优参数"没有配置文件里的显式值时用代码默认值兜底
         timeout_seconds=_parse_int(environment_value("AI_TIMEOUT_SECONDS", ai.get("timeout_seconds", DEFAULT_TIMEOUT_SECONDS)), DEFAULT_TIMEOUT_SECONDS, 10, 300),
         enabled=enabled,
         max_candidates=_parse_int(environment_value("AI_REVIEW_MAX_CANDIDATES", ai.get("max_candidates", 0)), 0, 0, 2000),
         summary_enabled=_parse_bool(environment_value("AI_SUMMARY_ENABLED", ai.get("summary_enabled", "")), True),
         trend_enabled=_parse_bool(environment_value("AI_TREND_SUMMARY_ENABLED", ai.get("trend_enabled", "")), True),
-        code_suggest_enabled=_parse_bool(environment_value("AI_CODE_SUGGEST_ENABLED", ai.get("code_suggest_enabled", "")), True),
-        code_suggest_max=_parse_int(environment_value("AI_CODE_SUGGEST_MAX", ai.get("code_suggest_max", 0)), 0, 0, 2000),
-        code_suggest_concurrency=_parse_int(environment_value("AI_CODE_SUGGEST_CONCURRENCY", ai.get("code_suggest_concurrency", 3)), 3, 1, 8),
+        review_concurrency=_parse_int(environment_value("AI_REVIEW_CONCURRENCY", ai.get("review_concurrency", MAX_CONCURRENT_REQUESTS)), MAX_CONCURRENT_REQUESTS, 1, 8),
+        review_batch_size=_parse_int(environment_value("AI_REVIEW_BATCH_SIZE", ai.get("review_batch_size", 12)), 12, 1, 32),
+        context_rows=_parse_int(environment_value("AI_REVIEW_CONTEXT_ROWS", ai.get("context_rows", 12)), 12, 4, 24),
+        thinking_mode=environment_value("AI_THINKING_MODE", ai.get("thinking_mode", "")).strip().lower(),
+        brief_output=_parse_bool(environment_value("AI_REVIEW_BRIEF_OUTPUT", ai.get("brief_output", "")), False),
     )
 
 
 class OpenAICompatibleClient:
-    def __init__(self, config: AIConfig) -> None:
+    def __init__(self, config: AIConfig, *, audit_requests: bool = False) -> None:
         if not config.api_key:
             raise AIReviewError("未配置 AI_API_KEY")
         if not config.base_url:
             raise AIReviewError("未配置 AI_BASE_URL")
         self.config = config
+        self.audit_requests = audit_requests
 
     def _request_json(self, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        if (self.audit_requests and payload is not None and path == "chat/completions"
+                and str(payload.get("model", "")).lower().startswith("deepseek")
+                and self.config.thinking_mode in {"enabled", "disabled"}):
+            payload = dict(payload)
+            payload.setdefault("thinking", {"type": self.config.thinking_mode})
         url = f"{self.config.base_url}/{path.lstrip('/')}"
         body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
@@ -180,8 +224,9 @@ class OpenAICompatibleClient:
         last_error: AIReviewError | None = None
         for attempt in range(1, REQUEST_ATTEMPTS + 1):
             try:
-                with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
-                    raw = response.read().decode("utf-8", errors="replace")
+                with MODEL_REQUEST_SLOTS:
+                    with urllib.request.urlopen(request, timeout=self.config.timeout_seconds) as response:
+                        raw = response.read().decode("utf-8", errors="replace")
                 LOGGER.info("model_request path=%s status=200 bytes=%s attempt=%s", path, len(raw), attempt)
                 break
             except urllib.error.HTTPError as exc:
@@ -256,24 +301,33 @@ class OpenAICompatibleClient:
         return parse_json_content(content)
 
 
-SYSTEM_PROMPT = """你是电厂 KKS 编码审核智能体的二次复核员。
+SYSTEM_PROMPT = """只审查现有编码，不生成或输出任何替代编码。审查顺序：格式、设备类型、系统归属、名称语义、编号、位置。明确强规则错误不得被语义判断撤销。
+你是电厂 KKS 编码审核智能体的二次复核员。
 规则引擎已经给出了候选问题。你只能依据候选证据包和本组相关 Skill 片段判断，不能凭空补充表外事实。
 证据包中的当前行、父级、子级、同级编码和相邻行必须结合起来看；父子关系以 Excel 的显式父级列为准，不能用固定前 N 位臆测变长层级。
 不要修改原 Excel，不要自动改码，不要自动关闭问题；证据不足时必须返回 needs_human。
+classification_reference给出的分类释义及出处是分类核对依据；同级编码一致、父级存在、编号连续，仅说明内部结构自洽，不能证明分类符合国标。设备类型粗类目不能替代实际设备主体。
+application_examples是国标应用实例，须与抽象分类定义一起核对；不得把明确列在实例中的设备排除。设备主体符合实例只支持本项分类，不证明编号、位置或其它工程事实。
+必须区分设备本体、上下游修饰语、执行机构及测量对象；设备序号、加热器级号、抽汽段号不能当机组号。工程编号、备用、位置、未收录分类及工程索引缺少证据时只能needs_human。
+名称以一次门、二次门或阀门等实体主体结尾时，前面的模拟量、液位、压力等词描述用途，不能仅因含测量词就判为指令或测点；明确的控制指令和末尾反馈/状态需另行识别。
+suggestion只写核对资料和处理事项，不得包含任何长度的建议编码值，也不得给出带目标编码的迁移、重编或父级改码指令。
 硬性语法问题通常保留为 confirmed_issue；变长码、历史映射、机组语义、名称异常要先检查证据包中的上下文，再判断是否可能误报。
 每条结果必须返回结论、证据、原因和建议。证据只能引用证据包中真实存在的行号、编码、名称或规则字段，不能写“根据经验”作为唯一证据。
+证据包的行引用从row_pool按引用键读取，信息与原行等价。只审本项规则；每项evidence、reason分别不超过80字，suggestion不超过40字；直接给出必要依据，避免复述整组上下文。
 请只返回 JSON 对象，格式为：
 {"reviews":[{"issue_index":0,"decision":"confirmed_issue|likely_false_positive|needs_human","priority":"P0|P1|P2","confidence":0.0,"evidence":"引用证据包中的具体行号/编码/关系","reason":"中文理由","suggestion":"中文建议"}]}
 confidence 必须是 0 到 1 的数字。每个 issue_index 最多返回一次。"""
 
-GLOBAL_REVIEW_PROMPT = """你是电厂 KKS 编码审核智能体的全局分析员。
+GLOBAL_REVIEW_PROMPT = """只审查现有编码，不生成或输出任何替代编码。审查顺序：格式、设备类型、系统归属、名称语义、编号、位置。明确强规则错误不得被语义判断撤销。
+你是电厂 KKS 编码审核智能体的全局分析员。
 你将收到一份 Excel 的结构画像、规则命中统计和候选问题摘要。先从整个文件的角度识别专业范围、层级组织、命名习惯、重复模式和可能的误报来源，帮助后续逐项复核。
 不要凭空补充 Excel 外的事实，不要直接修改问题，也不要把某一条候选问题当成最终结论。
 请只返回 JSON 对象，格式为：
 {"global_review":{"summary":"整体审核观察","patterns":["全局模式或异常"],"focus":[{"rule_id":"规则编号","reason":"为什么需要重点核对"}],"consistency_checks":["建议后续重点验证的跨行关系"]}}
 所有内容必须来自输入的结构画像、规则统计或候选摘要。"""
 
-FINAL_ADJUDICATION_PROMPT = """你是电厂 KKS 编码审核智能体的最终归并员。
+FINAL_ADJUDICATION_PROMPT = """只审查现有编码，不生成或输出任何替代编码。审查顺序：格式、设备类型、系统归属、名称语义、编号、位置。明确强规则错误不得被语义判断撤销。
+你是电厂 KKS 编码审核智能体的最终归并员。
 你将收到规则命中、AI 初审、疑似误报二次核验和全局分析。请为每个候选给出最终分类：
 - confirmed_issue：证据足够，应该列为需要处理的问题；
 - needs_human：存在冲突或证据不足，必须人工确认；
@@ -350,6 +404,8 @@ def parse_json_content(content: str) -> dict[str, Any]:
 
 
 def _is_candidate(issue: dict[str, Any]) -> bool:
+    if issue.get("compliance_locked") or issue.get("evidence_missing"):
+        return False
     if issue.get("status") == "resolved":
         return False
     if issue.get("status") == "needs_review":
@@ -366,7 +422,7 @@ def _row_view(record: dict[str, Any]) -> dict[str, Any]:
     return {
         key: record.get(key, "")
         for key in (
-            "excel_row", "kks_code", "parent_code", "old_code", "name", "unit", "device_type",
+            "sheet", "excel_row", "kks_code", "parent_code", "old_code", "name", "unit", "device_type", "system",
             "raw_kks", "raw_name",
         )
         if record.get(key, "") not in (None, "")
@@ -379,52 +435,76 @@ def _context_records(result: dict[str, Any]) -> list[dict[str, Any]]:
     return [record for record in records if isinstance(record, dict)]
 
 
-def _build_evidence_packet(issue_index: int, issue: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-    records = _context_records(result)
-    issue_row = str(issue.get("excel_row", ""))
-    issue_code = str(issue.get("kks_code", ""))
-    current = next((record for record in records if str(record.get("excel_row", "")) == issue_row and issue_row), None)
-    if current is None and issue_code:
-        current = next((record for record in records if str(record.get("kks_code", "")) == issue_code), None)
-    if current is None:
-        current = {key: issue.get(key, "") for key in ("excel_row", "kks_code", "parent_code", "old_code", "name")}
+@lru_cache(maxsize=1)
+def _gb_device_index() -> dict[str, Any]:
+    path = Path(__file__).resolve().parent / "config" / "gb_device_codes.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
 
+
+@lru_cache(maxsize=8192)
+def _classification_reference(code: str) -> dict[str, Any]:
+    """Give the model the local index meaning and its actual provenance."""
+    if not re.fullmatch(r"[0-9]{2}[A-HJ-NP-Z]{3}[0-9]{2}[A-HJ-NP-Z]{2}[0-9]{3}", code):
+        return {"status": "未按十二位设备骨架解析，禁止猜测分类段"}
+    from kks_gen import identifiers as ids
+    system, device = code[2:5], code[7:9]
+    return {
+        "standard": "GB/T 50549-2020",
+        "system": {"code": system, "definition": ids.SYS_DICT.get(system, {}).get("cn", "未收录"),
+                   "source": "国标附录A" if system in ids.GB_SYS_DICT else "项目补充或未收录，国标依据待核"},
+        "device": {"code": device, "definition": ids.DEV_DICT.get(device, {}).get("cn", "未收录"),
+                   "application_examples": _gb_device_index().get(device, {}).get("note", ""),
+                   "source": "国标附录B" if device in _gb_device_index() else "项目补充或未收录，国标依据待核"},
+    }
+
+
+def _build_evidence_packet(issue_index: int, issue: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    index = result.get("_ai_evidence_index")
+    if index is None:
+        records = _context_records(result)
+        by_location, by_code, by_parent = {}, defaultdict(list), defaultdict(list)
+        for record in records:
+            by_location[(record.get("sheet", ""), str(record.get("excel_row", "")))] = record
+            by_code[str(record.get("kks_code", ""))].append(record)
+            by_parent[str(record.get("parent_code", ""))].append(record)
+        index = {"location": by_location, "code": by_code, "parent": by_parent, "records": records}
+        result["_ai_evidence_index"] = index
+    records = index["records"]
+    context_limit = int(result.get("_ai_context_limit", MAX_CONTEXT_ROWS))
+    issue_row, issue_code = str(issue.get("excel_row", "")), str(issue.get("kks_code", ""))
+    issue_sheet = issue.get("sheet", "")
+    current = index["location"].get((issue_sheet, issue_row))
+    if current is None and not issue_sheet:
+        current = next((r for r in records if str(r.get("excel_row", "")) == issue_row and issue_row), None)
+    if current is None:
+        matches = index["code"].get(issue_code, []) if issue_code else []
+        current = matches[0] if matches else {key: issue.get(key, "") for key in ("sheet", "excel_row", "kks_code", "parent_code", "old_code", "name")}
     current_code = str(current.get("kks_code") or issue_code)
     parent_code = str(current.get("parent_code") or issue.get("parent_code") or "")
-    records_by_code: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for record in records:
-        code = str(record.get("kks_code", ""))
-        if code:
-            records_by_code[code].append(record)
-    parent_rows = records_by_code.get(parent_code, [])[:1] if parent_code else []
-    child_rows = [record for record in records if current_code and str(record.get("parent_code", "")) == current_code]
-    sibling_rows = [
-        record for record in records
-        if str(record.get("parent_code", "")) == parent_code
-        and str(record.get("excel_row", "")) != str(current.get("excel_row", ""))
-    ] if parent_code else []
+    parent_rows = index["code"].get(parent_code, [])[:1] if parent_code else []
+    child_rows = index["parent"].get(current_code, [])[:context_limit] if current_code else []
+    sibling_rows = [r for r in index["parent"].get(parent_code, [])
+                    if (r.get("sheet", ""), str(r.get("excel_row", ""))) != (current.get("sheet", ""), str(current.get("excel_row", "")))][:context_limit] if parent_code else []
+    adjacent_rows = []
     try:
         current_row_number = int(current.get("excel_row"))
+        for number in range(current_row_number - 2, current_row_number + 3):
+            if number != current_row_number:
+                nearby = index["location"].get((current.get("sheet", ""), str(number)))
+                if nearby:
+                    adjacent_rows.append(nearby)
     except (TypeError, ValueError):
-        current_row_number = None
-    adjacent_rows = []
-    if current_row_number is not None:
-        for record in records:
-            try:
-                row_number = int(record.get("excel_row"))
-            except (TypeError, ValueError):
-                continue
-            if row_number != current_row_number and abs(row_number - current_row_number) <= 2:
-                adjacent_rows.append(record)
+        pass
 
     def capped(values: list[dict[str, Any]], limit: int = MAX_CONTEXT_ROWS) -> list[dict[str, Any]]:
         return [_row_view(value) for value in values[:limit]]
 
     return {
         "current_row": _row_view(current),
+        "classification_reference": _classification_reference(current_code),
         "parent_rows": capped(parent_rows, 1),
-        "child_rows": capped(child_rows),
-        "same_level_rows": capped(sibling_rows),
+        "child_rows": capped(child_rows, context_limit),
+        "same_level_rows": capped(sibling_rows, context_limit),
         "adjacent_rows": capped(adjacent_rows, MAX_ADJACENT_ROWS),
         "rule_finding": {
             "rule_id": issue.get("rule_id", ""),
@@ -601,17 +681,42 @@ def _emit_progress(callback: ProgressCallback | None, event: dict[str, Any]) -> 
         LOGGER.warning("ai_progress_callback_failed error=%s", exc)
 
 
-def _candidate_groups(candidates: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+def _candidate_groups(candidates: list[dict[str, Any]], batch_size: int | None = None) -> list[list[dict[str, Any]]]:
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for candidate in candidates:
         key = (str(candidate.get("rule_id", "")), str(candidate.get("category", "")))
         grouped[key].append(candidate)
+    size = max(1, int(batch_size or INTERNAL_GROUP_SIZE))
     groups: list[list[dict[str, Any]]] = []
     for key in sorted(grouped):
         values = sorted(grouped[key], key=lambda item: int(item.get("issue_index", 0)))
-        for start in range(0, len(values), INTERNAL_GROUP_SIZE):
-            groups.append(values[start:start + INTERNAL_GROUP_SIZE])
+        for start in range(0, len(values), size):
+            groups.append(values[start:start + size])
     return groups
+
+
+def _group_evidence_request(group: list[dict[str, Any]]) -> dict[str, Any]:
+    """Share identical context rows within a batch without dropping evidence."""
+    row_pool, row_keys, candidates = {}, {}, []
+    for candidate in group:
+        item = dict(candidate)
+        packet = dict(candidate.get("evidence_packet", {}))
+        for field in ("current_row", "parent_rows", "child_rows", "same_level_rows", "adjacent_rows"):
+            rows = packet.get(field)
+            if rows is None:
+                continue
+            refs = []
+            for row in ([rows] if isinstance(rows, dict) else rows):
+                fingerprint = json.dumps(row, ensure_ascii=False, sort_keys=True)
+                if fingerprint not in row_keys:
+                    key = f"r{len(row_pool)}"
+                    row_keys[fingerprint] = key
+                    row_pool[key] = row
+                refs.append(row_keys[fingerprint])
+            packet[field] = refs[0] if isinstance(rows, dict) else refs
+        item["evidence_packet"] = packet
+        candidates.append(item)
+    return {"candidates": candidates, "row_pool": row_pool}
 
 
 def _review_group(
@@ -623,18 +728,40 @@ def _review_group(
     audit_profile: dict[str, Any] | None = None,
     global_review: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    """复核一个候选组；瞬时故障（连接被断/超时/非 JSON）自动重试。
+
+    真实端点并发 8 时实测会出现整组丢失（15 个候选只复核到 1 个）。复核是幂等的只读请求，
+    重试安全，且比"整组丢掉、报告少一批结论"划算得多。
+    """
     rule_ids = {str(item.get("rule_id", "")) for item in group}
     categories = {str(item.get("category", "")) for item in group}
-    payload = client.review(
-        model,
-        effective_system_prompt(rule_ids, categories, verification=verification),
-        {
-            "review_type": "false_positive_verification" if verification else "candidate_review",
-            "audit_profile": _compact_audit_profile(audit_profile or {}),
-            "global_review": global_review or {},
-            "candidates": group,
-        },
-    )
+    request = {
+        "review_type": "false_positive_verification" if verification else "candidate_review",
+        "audit_profile": _compact_audit_profile(audit_profile or {}),
+        "global_review": global_review or {},
+        **_group_evidence_request(group),
+    }
+    prompt = effective_system_prompt(rule_ids, categories, verification=verification)
+    if getattr(getattr(client, "config", None), "brief_output", False):
+        prompt += "\n本次要求更简洁：evidence、reason各不超过40字，suggestion不超过20字。保留真实行号和必要分类依据；不能因简洁省略导致结论无依据。"
+    payload: dict[str, Any] | None = None
+    for attempt in range(1, REVIEW_BATCH_RETRIES + 1):
+        try:
+            payload = client.review(model, prompt, request)
+            break
+        except Exception as exc:
+            # Transport retries already happen inside _request_json. Only
+            # retry parsing here, avoiding four long transport attempts.
+            if attempt < REVIEW_BATCH_RETRIES and any(term in str(exc).lower() for term in ("json", "解析")):
+                LOGGER.warning(
+                    "ai_review_group_retry attempt=%s candidates=%s error=%s",
+                    attempt, len(group), str(exc)[:120],
+                )
+                time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+                continue
+            raise
+    if payload is None:
+        raise AIReviewError("模型未返回可解析的复核结果")
     raw_reviews = payload.get("reviews", [])
     if not isinstance(raw_reviews, list):
         raise AIReviewError("模型返回的 reviews 不是数组")
@@ -646,6 +773,13 @@ def _review_group(
         if review is None or review["issue_index"] in seen:
             continue
         seen.add(review["issue_index"])
+        def original_row_reference(match):
+            row = request.get("row_pool", {}).get(match.group())
+            if row:
+                return f"{row.get('sheet', '')}!{row.get('excel_row', '')}"
+            return match.group()
+        for field in ("evidence", "reason", "suggestion"):
+            review[field] = re.sub(r"(?<![A-Za-z0-9])r[0-9]+(?![A-Za-z0-9])", original_row_reference, review[field])
         reviews.append(review)
     return reviews
 
@@ -653,7 +787,10 @@ def _review_group(
 def _default_final_review(issue: dict[str, Any], *, candidate: bool) -> dict[str, Any]:
     ai_decision = str(issue.get("ai_decision", ""))
     verification = str(issue.get("ai_verification_decision", ""))
-    if not candidate:
+    if issue.get("evidence_missing"):
+        decision = "needs_human"
+        source = "missing_evidence"
+    elif not candidate:
         decision = "confirmed_issue"
         source = "rule"
     elif ai_decision == "likely_false_positive" and verification == "likely_false_positive":
@@ -674,10 +811,10 @@ def _default_final_review(issue: dict[str, Any], *, candidate: bool) -> dict[str
         "final_decision": decision,
         "final_source": source,
         "final_action": action,
-        "final_summary": str(issue.get("message", "")),
-        "final_evidence": str(issue.get("evidence", "")),
-        "final_reason": "程序规则命中；尚未获得可替代规则结论的 AI 归并结果。" if not candidate else "AI 复核未形成可直接采信的最终结论。",
-        "final_suggestion": str(issue.get("suggestion", "人工确认")),
+        "final_summary": str(issue.get("ai_reason") or issue.get("message", "")),
+        "final_evidence": str(issue.get("ai_evidence") or issue.get("evidence", "")),
+        "final_reason": str(issue.get("ai_reason") or ("程序规则命中；尚未获得可替代规则结论的 AI 归并结果。" if not candidate else "AI 复核未形成可直接采信的最终结论。")),
+        "final_suggestion": str(issue.get("ai_suggestion") or issue.get("suggestion", "人工确认")),
     }
 
 
@@ -772,15 +909,20 @@ def _review_groups_parallel(
     reviewed_count: int,
     percent_start: int,
     percent_end: int,
+    review_concurrency: int = MAX_CONCURRENT_REQUESTS,
 ) -> tuple[dict[int, dict[str, Any]], list[str]]:
-    """Review independent groups concurrently with a small fixed worker pool."""
+    """Review independent groups concurrently with a bounded worker pool.
+
+    并发数可配（AI_REVIEW_CONCURRENCY）：实测真实端点在 8 路并发下会大量整组失败，
+    降到 4 路后可全部完成——并发过高反而更慢（要重试、还丢结果）。
+    """
     reviews_by_index: dict[int, dict[str, Any]] = {}
     errors: list[str] = []
     if not groups:
         return reviews_by_index, errors
 
     completed_groups = 0
-    max_workers = min(MAX_CONCURRENT_REQUESTS, len(groups))
+    max_workers = min(review_concurrency, len(groups))
     with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="kks-ai") as executor:
         futures = {
             executor.submit(
@@ -797,7 +939,15 @@ def _review_groups_parallel(
         for future in as_completed(futures):
             group_index, group = futures[future]
             try:
-                for review in future.result():
+                # 组级重试放在 _review_group 内部（见 group_retries 参数）：
+                # 真实端点并发 8 时出现过"只复核 1/15"——大量组因连接被断而整组丢失。
+                # 复核组是幂等的（只读证据包、不改共享状态），重试安全。
+                returned_reviews = future.result()
+                returned_indexes = {review["issue_index"] for review in returned_reviews}
+                missing_indexes = {int(item["issue_index"]) for item in group} - returned_indexes
+                if missing_indexes:
+                    errors.append(f"{'误报核验' if verification else '候选复核'}组{group_index}漏回{len(missing_indexes)}项，未返回项保留待核")
+                for review in returned_reviews:
                     reviews_by_index[review["issue_index"]] = review
             except AIReviewError as exc:
                 if verification:
@@ -826,12 +976,22 @@ def _review_groups_parallel(
                 "hint": hint,
                 "model": model,
                 "candidate_count": candidate_count,
-                "reviewed_count": reviewed_count + len(reviews_by_index),
+                "reviewed_count": reviewed_count if verification else reviewed_count + len(reviews_by_index),
+                "verified_count": len(reviews_by_index) if verification else 0,
                 "completed_groups": completed_groups,
                 "group_count": len(groups),
                 "parallelism": max_workers,
             })
     return reviews_by_index, errors
+
+
+def _review_parallelism(config: AIConfig) -> int:
+    """语义复核的实际并发数（可配，见 AIConfig.review_concurrency）。"""
+    try:
+        value = int(getattr(config, "review_concurrency", MAX_CONCURRENT_REQUESTS) or MAX_CONCURRENT_REQUESTS)
+    except (TypeError, ValueError):
+        value = MAX_CONCURRENT_REQUESTS
+    return max(1, min(value, 8))
 
 
 def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressCallback | None = None) -> dict[str, Any]:
@@ -845,7 +1005,7 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
         "base_url": config.base_url,
         "model": config.model or None,
         "review_mode": "parallel_groups",
-        "parallelism": MAX_CONCURRENT_REQUESTS,
+        "parallelism": _review_parallelism(config),
         "candidate_count": 0,
         "reviewed_count": 0,
         "group_count": 0,
@@ -895,6 +1055,7 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
 
     _emit_progress(progress_callback, {"phase": "ai", "stage": "candidate_scan", "status": "running", "percent": 65, "message": "AI 正在整理候选证据", "hint": f"共发现 {len(indexed)} 个候选，正在生成行级上下文", "candidate_count": len(indexed), "reviewed_count": 0})
     client = OpenAICompatibleClient(config)
+    client.audit_requests = True
     try:
         model, model_source = client.choose_model()
     except AIReviewError as exc:
@@ -905,6 +1066,7 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
 
     base["model"] = model
     base["model_source"] = model_source
+    result["_ai_context_limit"] = config.context_rows
     candidates = [_candidate(idx, issue, result) for idx, issue in indexed]
     # The program already has the workbook-wide metrics and structure.  Avoid
     # spending an extra model request on a global summary; send only compact
@@ -918,9 +1080,9 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
     }
     base["global_status"] = "skipped_programmatic"
     base["global_review"] = global_review
-    groups = _candidate_groups(candidates)
+    groups = _candidate_groups(candidates, config.review_batch_size)
     base["group_count"] = len(groups)
-    _emit_progress(progress_callback, {"phase": "ai", "stage": "model_ready", "status": "running", "percent": 66, "message": "AI 开始并行复核候选组", "hint": f"模型：{model}；共 {len(groups)} 组，最多并行 {MAX_CONCURRENT_REQUESTS} 组", "model": model, "candidate_count": len(indexed), "reviewed_count": 0, "parallelism": MAX_CONCURRENT_REQUESTS})
+    _emit_progress(progress_callback, {"phase": "ai", "stage": "model_ready", "status": "running", "percent": 66, "message": "AI 开始并行复核候选组", "hint": f"模型：{model}；共 {len(groups)} 组，最多并行 {_review_parallelism(config)} 组", "model": model, "candidate_count": len(indexed), "reviewed_count": 0, "parallelism": _review_parallelism(config)})
 
     reviews_by_index, group_errors = _review_groups_parallel(
         client,
@@ -934,6 +1096,7 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
         reviewed_count=0,
         percent_start=67,
         percent_end=82,
+        review_concurrency=_review_parallelism(config),
     )
     base["errors"].extend(group_errors)
     for review in reviews_by_index.values():
@@ -946,13 +1109,14 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
 
     if false_positive_indexes:
         verification_candidates = []
+        candidates_by_index = {item["issue_index"]: item for item in candidates}
         for index in false_positive_indexes:
-            candidate = next(item for item in candidates if item["issue_index"] == index)
+            candidate = candidates_by_index[index]
             verification_candidates.append({
                 **candidate,
                 "initial_review": reviews_by_index[index],
             })
-        verification_groups = _candidate_groups(verification_candidates)
+        verification_groups = _candidate_groups(verification_candidates, config.review_batch_size)
         verification_by_index, verification_errors = _review_groups_parallel(
             client,
             model,
@@ -965,6 +1129,7 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
             reviewed_count=len(reviews_by_index),
             percent_start=84,
             percent_end=90,
+            review_concurrency=_review_parallelism(config),
         )
         base["errors"].extend(verification_errors)
         for review in verification_by_index.values():
@@ -982,8 +1147,9 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
             issue["ai_reason"] = "初审疑似误报，但二次核验未完成，保留人工确认。"
             issue["ai_suggestion"] = "请结合原 Excel 行、父子关系和同级编码人工确认。"
 
+    candidate_indexes = {item["issue_index"] for item in candidates}
     for issue_index, issue in enumerate(issues):
-        candidate = any(item["issue_index"] == issue_index for item in candidates)
+        candidate = issue_index in candidate_indexes
         default_review = _default_final_review(issue, candidate=candidate)
         issue.update(default_review)
 
@@ -997,7 +1163,10 @@ def review_issue_candidates(result: dict[str, Any], progress_callback: ProgressC
     decision_counts = Counter(str(issue.get("final_decision", "needs_human")) for issue in issues if issue.get("status") != "resolved")
     base["final_decision_counts"] = dict(sorted(decision_counts.items()))
     base["actionable_count"] = decision_counts.get("confirmed_issue", 0) + decision_counts.get("needs_human", 0)
+    base["unreviewed_count"] = len(indexed) - base["reviewed_count"]
     base["status"] = "completed" if base["reviewed_count"] else "error"
+    if base["unreviewed_count"]:
+        base["errors"].append(f"{base['unreviewed_count']}项候选未获得可解析结果，保留待核")
     if base["errors"] and base["reviewed_count"]:
         base["status"] = "partial"
     _emit_progress(progress_callback, {"phase": "ai", "stage": "completed", "status": base["status"], "percent": 92, "message": "AI 语义复核完成", "hint": f"已复核 {base['reviewed_count']} 条；疑似误报二次核验 {base['verified_count']} 条", "model": model, "candidate_count": len(indexed), "reviewed_count": base["reviewed_count"]})
@@ -1011,6 +1180,7 @@ def test_ai_connection() -> dict[str, Any]:
     if not config.enabled:
         return {"ok": False, "status": "disabled", "message": "AI_ENABLED=false"}
     client = OpenAICompatibleClient(config)
+    client.audit_requests = True
     model, source = client.choose_model()
     payload = client.review(
         model,
@@ -1033,6 +1203,7 @@ def summarize_audit(result: dict[str, Any], progress_callback: ProgressCallback 
         return {"status": "disabled", "reason": "AI_SUMMARY_ENABLED=false"}
     try:
         client = OpenAICompatibleClient(config)
+        client.audit_requests = True
         model, _ = client.choose_model()
         issues = [i for i in (result.get("issues") or []) if isinstance(i, dict)]
         priority_counts: dict[str, int] = {}
@@ -1048,9 +1219,13 @@ def summarize_audit(result: dict[str, Any], progress_callback: ProgressCallback 
         metrics = result.get("metrics", {}) or {}
         ai_review = result.get("ai_review", {}) or {}
         payload = {
+            "compliance": result.get("compliance", {}),
+            "audit_policy": result.get("audit_policy", {}),
+            "evaluation_scope": result.get("evaluation_scope", {}),
             "file": Path(str(result.get("source_file", ""))).name,
             "conclusion": result.get("conclusion", ""),
             "data_rows": result.get("data_rows"),
+            "reviewed_rows": result.get("reviewed_rows"),
             "issue_count": result.get("issue_count"),
             "priority_counts": priority_counts,
             "rule_top_counts": dict(sorted(rule_counts.items(), key=lambda kv: -kv[1])[:15]),
@@ -1068,7 +1243,8 @@ def summarize_audit(result: dict[str, Any], progress_callback: ProgressCallback 
         _emit_progress(progress_callback, {"phase": "ai", "stage": "summary_running", "status": "running", "percent": 93, "message": "AI 正在生成总体总结", "hint": f"模型：{model}"})
         messages = [
             {"role": "system", "content": (
-                "你是资深电厂 KKS 编码审核专家。基于程序化审核结果，撰写面向编码管理负责人的总体总结："
+                "你是资深电厂 KKS 编码审核专家。只输出审查结论和资料核对事项，禁止输出建议编码、替换编码或新编码值。强规则冲突不能判为通过，缺少工程资料必须待核，不能宣称全面符合国标。基于程序化审核结果，撰写面向编码管理负责人的总体总结："
+                "统计数字由程序单独展示，overall和points只写定性分析，不复述具体数量。evaluation_scope非空时，这是抽样效果检查，规则频次、优先级和compliance只针对抽样，不能作为全工作簿统计；不得由内部自洽推定实际安装位置或工程归属。"
                 "overall 为 3-6 句中文总结（整体质量、主要风险、数据口径要点）；"
                 "points 为 3-5 条中文要点建议，每条一句话。只返回 JSON："
                 '{"overall":"...","points":["...","..."]}'
@@ -1095,408 +1271,6 @@ def summarize_audit(result: dict[str, Any], progress_callback: ProgressCallback 
         return {"status": "failed", "error": str(exc)[:200]}
 
 
-# ============================================================ 问题行「AI 建议编码」
-#
-# 需求（2026-10-08）：报告和问题清单里，对**判定为有问题的行**再给一列"规范编码应该是什么"。
-# 三条硬要求：
-#   1. 只对有问题的行生成（有问题才有 P0/P1/P2，不是全表都生成）；
-#   2. 规则依据必须准确——把命中的标准**条款原文**塞进 prompt，不让模型凭印象编；
-#   3. 生成结果必须过本地复核（骨架/字母表/字典），不合规的标为不可用，不写进建议列。
-#
-# ⚠️ 依据只有一份：GB/T 50549-2020（附录A/B，中煤细则附录补充）。
-#    不得再引入已废止版本（GB/T 50549-2010 及其派生导则）的码表——同一码在两套体系里
-#    含义不同，混用会让建议编码指向完全不同的设备。
-#
-# 与 review_issue_candidates 的区别：复核阶段判"这条到底是不是问题"，本阶段回答"该怎么改"。
-SUGGEST_BATCH_SIZE = 8
-SUGGEST_PROMPT = """你是电厂 KKS 编码整改工程师。任务：给**已被规则判定为有问题**的行，给出一个符合标准的规范编码。
-
-硬性约束（违反任何一条即为无效答案，会被程序丢弃）：
-1. 编码必须恰好 12 位，对应 GB/T 50549-2020 4.4.1 功能面标识三级编码（火电项目全厂码 H1 缺省）：
-   H2H3（2 位，字母或数字）+ S1S2S3（3 位字母）+ S4S5（2 位数字）+ T1T2（2 位字母）+ T3T4T5（3 位数字）。
-2. 只允许大写英文字母与阿拉伯数字，**禁用字母 I 和 O**。
-3. 系统分类码 F1F2F3、设备分类码 A1A2 必须从"候选分类码"里选，不得自己发明字母组合。
-4. 最小改动：只改导致问题的那一段；机组前缀 G、系统编号 F4F5、设备编号 AN 在没有问题时必须保持原值。
-5. 证据不足时，suggested_code 返回空字符串并在 reason 里说明缺什么证据——宁可留空，不要猜。
-6. 不要改变设备名称，不要编造标准条款号；basis 只能引用"规则依据"里给过的条款。
-
-只返回 JSON 对象，格式为：
-{"suggestions":[{"row":行号整数,"suggested_code":"12位编码或空串","changed":"被修改的段名，如 A1A2","basis":["引用的条款号"],"reason":"中文理由","confidence":0.0}]}
-confidence 为 0~1 的数字。每个 row 最多返回一次。"""
-
-
-_CODE_INDEX_CACHE: dict[str, Any] | None = None
-
-
-def _code_index() -> dict[str, Any]:
-    """读取分类码索引（与 audit_template 同一份文件，独立缓存避免交叉依赖）。"""
-    global _CODE_INDEX_CACHE
-    if _CODE_INDEX_CACHE is None:
-        from pathlib import Path as _Path
-        path = _Path(__file__).resolve().parent / "config" / "kks_code_index.json"
-        try:
-            _CODE_INDEX_CACHE = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            _CODE_INDEX_CACHE = {}
-    return _CODE_INDEX_CACHE
-
-
-def _suggest_dicts() -> tuple[dict[str, str], dict[str, str]]:
-    """返回（系统分类码字典, 设备分类码字典）。
-
-    字典来自 `config/kks_code_index.json`，即 **GB/T 50549-2020 附录A/B**（中煤细则附录作补充）。
-    ⚠️ 不要再合并任何已废止版本（GB/T 50549-2010 及其派生导则）的码表——
-    同一码在两套体系里含义不同，混用会让建议编码指向完全不同的设备。
-    """
-    idx = _code_index()
-    return dict(idx.get("system_codes") or {}), dict(idx.get("device_codes") or {})
-
-
-_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
-# 高频虚词/通用字，参与单字匹配只会带来噪声
-_STOP_CHARS = set("的与和及或用系是及在为对从至到上下内外个种设备装置系统回路流程")
-
-
-def _shingles(text: str, size: int = 2) -> set[str]:
-    return {text[i:i + size] for i in range(max(0, len(text) - size + 1))}
-
-
-def _candidate_codes(name: str, codes: dict[str, str], limit: int = 8) -> list[dict[str, str]]:
-    """按设备/系统名称与字典条目的字面重合度挑候选码。
-
-    为什么要给候选：模型直接发明字母组合是最大风险源。这里先从 GB/T 50549-2020 附录
-    字典里按名称相似度选出少量候选，让模型在候选内选择，把"编造"的概率压到最低。
-
-    打分口径（用真实名称校准过）：字典条目的名称形如「定义 / 举例」，定义部分匹配权重更高；
-    中文里"泵""阀"这类单字才是关键信息（"给水泵"和字典里的"提升泵、清洗泵"只有单字重合），
-    所以 2 字重合之外还要算单字重合，否则会出现"给水泵匹配不到任何候选"。
-    """
-    target = str(name or "").strip()
-    if not target:
-        return []
-    grams = _shingles(target)
-    target_chars = {ch for ch in target if _CJK_RE.match(ch)} - _STOP_CHARS
-    if not grams and not target_chars:
-        return []
-    scored: list[tuple[int, str, str]] = []
-    for code, label in codes.items():
-        label_text = str(label or "")
-        if not _CJK_RE.search(label_text):
-            continue
-        head, _, tail = label_text.partition(" / ")
-        tail = tail[:160]
-        head_chars = {ch for ch in head if _CJK_RE.match(ch)} - _STOP_CHARS
-        tail_chars = {ch for ch in tail if _CJK_RE.match(ch)} - _STOP_CHARS
-        score = (
-            4 * len(grams & _shingles(head))
-            + 2 * len(grams & _shingles(tail))
-            + 2 * len(target_chars & head_chars)
-            + 1 * len(target_chars & tail_chars)
-        )
-        if score:
-            scored.append((score, code, label_text))
-    scored.sort(key=lambda item: (-item[0], item[1]))
-    return [{"code": c, "name": n[:150]} for _, c, n in scored[:limit]]
-
-
-def _rule_clause_payload(rule_ids: set[str], lookup: Callable[[str, str], str] | None) -> list[dict[str, str]]:
-    """把命中规则的**标准条款原文**取出来。
-
-    条款原文优先取 config/kks_rules.json 的 rule_sources（含 standard/clause/text），
-    取不到时回退到调用方传入的 rule_source()（那是报告"规则依据"列用的同一条出处）。
-    """
-    from pathlib import Path as _Path
-    out: list[dict[str, str]] = []
-    try:
-        cfg = json.loads((_Path(__file__).resolve().parent / "config" / "kks_rules.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        cfg = {}
-    sources = cfg.get("rule_sources") or {}
-    for rid in sorted(rule_ids):
-        for item in (sources.get(rid) or {}).get("sources") or []:
-            out.append({
-                "rule_id": rid,
-                "clause": f'{item.get("standard", "")} {item.get("clause", "")}'.strip(),
-                "text": str(item.get("text", ""))[:400],
-            })
-        if not (sources.get(rid) or {}).get("sources") and lookup:
-            out.append({"rule_id": rid, "clause": lookup(rid, "")[:200], "text": ""})
-    return out
-
-
-def _suggest_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
-    """按行聚合问题：只有被规则命中的行才进候选。"""
-    records = {str(rec.get("excel_row")): rec for rec in _context_records(result)}
-    rows: dict[str, dict[str, Any]] = {}
-    for issue in result.get("issues", []):
-        if not isinstance(issue, dict) or issue.get("status") == "resolved":
-            continue
-        key = str(issue.get("excel_row") or "")
-        if not key or key == "None":
-            continue
-        code = str(issue.get("kks_code") or "").strip()
-        if not code:
-            continue          # 无码行由 KKS-00 处理，生成"正确编码"没有意义
-        rec = records.get(key, {})
-        row = rows.setdefault(key, {
-            "row": key,
-            "kks_code": code,
-            "name": str(issue.get("name") or rec.get("name") or ""),
-            "parent_code": str(issue.get("parent_code") or rec.get("parent_code") or ""),
-            "profession": str(issue.get("profession") or rec.get("profession") or ""),
-            "system": str(issue.get("system") or rec.get("system") or ""),
-            "unit": str(issue.get("unit") or rec.get("unit") or ""),
-            "rules": [],
-        })
-        row["rules"].append({
-            "rule_id": str(issue.get("rule_id", "")),
-            "priority": str(issue.get("priority", "")),
-            "category": str(issue.get("category", "")),
-            "message": str(issue.get("message", ""))[:220],
-        })
-    return list(rows.values())
-
-
-def _suggest_payload_row(row: dict[str, Any], sys_codes: dict[str, str], dev_codes: dict[str, str]) -> dict[str, Any]:
-    code = row["kks_code"]
-    names: dict[str, str] = {}
-    if len(code) >= 5:
-        names["F1F2F3(系统分类码)"] = sys_codes.get(code[2:5], "（GB/T 50549-2020 附录未收录）")
-    if len(code) >= 9:
-        names["A1A2(设备分类码)"] = dev_codes.get(code[7:9], "（GB/T 50549-2020 附录未收录）")
-    return {
-        "row": int(row["row"]) if str(row["row"]).isdigit() else row["row"],
-        "当前编码": code,
-        "设备名称": row["name"],
-        "父级": row["parent_code"],
-        "专业": row["profession"],
-        "系统": row["system"],
-        "当前分类码含义": names,
-        "命中规则": row["rules"],
-        "系统分类码候选": _candidate_codes(row["name"], sys_codes, 6),
-        "设备分类码候选": _candidate_codes(row["name"], dev_codes, 8),
-    }
-
-
-def _clean_code(value: Any) -> str:
-    return re.sub(r"[^A-Za-z0-9\-]", "", str(value or "")).strip().upper()
-
-
-# 12 位骨架的分段位置：与 config/kks_rules.json 的 code_grammar.segments_positions、
-# kks-audit/scripts/audit_template.py 的 SEG_12 三处必须一致（由 check_rule_conflicts 断言）。
-_FALLBACK_SEGMENTS = [
-    (1, 1, "ALNUM", "全厂码G"),
-    (2, 2, "DIGIT", "系统前缀号F0"),
-    (3, 5, "ALPHA", "系统分类码F1F2F3"),
-    (6, 7, "DIGIT", "系统编号FN"),
-    (8, 9, "ALPHA", "设备分类码A1A2"),
-    (10, 12, "DIGIT", "设备编号AN"),
-]
-
-
-def _segment_positions() -> list[tuple[int, int, str, str]]:
-    from pathlib import Path as _Path
-    try:
-        cfg = json.loads((_Path(__file__).resolve().parent / "config" / "kks_rules.json").read_text(encoding="utf-8"))
-        raw = (cfg.get("code_grammar") or {}).get("segments_positions")
-        if raw:
-            return [(int(a), int(b), str(kind), str(label)) for a, b, kind, label in raw]
-    except (OSError, ValueError, TypeError):
-        pass
-    return list(_FALLBACK_SEGMENTS)
-
-
-def _validate_suggested(code: str, sys_codes: dict[str, str], dev_codes: dict[str, str]) -> tuple[bool, str]:
-    """本地复核：模型给的编码必须自己先过一遍标准，不合规的直接丢弃并写明原因。"""
-    if not code:
-        return False, ""
-    if len(code) != 12:
-        return False, f"长度 {len(code)} 位，不是 12 位"
-    if not re.fullmatch(r"[A-Z0-9]{12}", code):
-        return False, "含非大写字母/数字字符"
-    bad = [c for c in code if c in ("I", "O")]
-    if bad:
-        return False, f"含禁用字母 {'、'.join(sorted(set(bad)))}"
-    for start, end, kind, label in _segment_positions():
-        seg = code[start - 1:end]
-        if kind == "DIGIT" and not seg.isdigit():
-            return False, f'{label}（第{start}-{end}位）"{seg}" 含非数字'
-        if kind == "ALPHA" and not seg.isalpha():
-            return False, f'{label}（第{start}-{end}位）"{seg}" 含非字母'
-        if kind == "ALNUM" and not seg.isalnum():
-            return False, f'{label}（第{start}-{end}位）"{seg}" 含非字母数字'
-    if code[2:5] not in sys_codes:
-        return False, f'系统分类码 "{code[2:5]}" 不在 GB/T 50549-2020 附录A 字典内'
-    if code[7:9] not in dev_codes:
-        return False, f'设备分类码 "{code[7:9]}" 不在 GB/T 50549-2020 附录B 字典内'
-    return True, ""
-
-
-def _safe_suggestion(item: Any, allowed_rows: set[str]) -> dict[str, Any] | None:
-    if not isinstance(item, dict):
-        return None
-    row = str(item.get("row", "")).strip()
-    if row not in allowed_rows:
-        return None
-    try:
-        confidence = float(item.get("confidence", 0) or 0)
-    except (TypeError, ValueError):
-        confidence = 0.0
-    basis = item.get("basis")
-    if isinstance(basis, str):
-        basis = [basis]
-    return {
-        "row": row,
-        "suggested_code": _clean_code(item.get("suggested_code", "")),
-        "changed": str(item.get("changed", ""))[:40],
-        "basis": [str(b)[:60] for b in (basis or []) if str(b).strip()][:6],
-        "reason": str(item.get("reason", ""))[:600],
-        "confidence": max(0.0, min(confidence, 1.0)),
-    }
-
-
-def suggest_correct_codes(
-    result: dict[str, Any],
-    *,
-    progress_callback: ProgressCallback | None = None,
-    rule_source_lookup: Callable[[str, str], str] | None = None,
-) -> dict[str, Any]:
-    """对问题行生成规范编码建议（只对有问题的行）。
-
-    返回结构：
-      status: disabled | completed | error；suggestions: {excel_row(str): {...}}
-      每条含 suggested_code / valid / invalid_reason / basis / reason / confidence / model
-    """
-    config = load_config()
-    base: dict[str, Any] = {
-        "enabled": bool(config.enabled and config.api_key and config.code_suggest_enabled),
-        "status": "disabled",
-        "model": config.model or None,
-        "requested": 0,
-        "returned": 0,
-        "validated": 0,
-        "rejected": 0,
-        "no_change": 0,
-        "suggestions": {},
-        "errors": [],
-    }
-    if not config.code_suggest_enabled:
-        base["reason"] = "AI_CODE_SUGGEST_ENABLED=false"
-        return base
-    if not config.enabled:
-        base["reason"] = "AI_ENABLED=false"
-        return base
-    if not config.api_key:
-        base["reason"] = "未配置 AI_API_KEY"
-        return base
-
-    rows = _suggest_rows(result)
-    if not rows:
-        base["status"] = "completed"
-        base["reason"] = "没有可建议编码的问题行"
-        return base
-    limit = int(config.code_suggest_max or 0)
-    if limit and len(rows) > limit:
-        rank = {"P0": 0, "P1": 1, "P2": 2}
-        rows.sort(key=lambda r: min(rank.get(x["priority"], 2) for x in r["rules"]))
-        base["truncated_from"] = len(rows)
-        rows = rows[:limit]
-    base["requested"] = len(rows)
-
-    sys_codes, dev_codes = _suggest_dicts()
-    if not sys_codes or not dev_codes:
-        base["status"] = "error"
-        base["errors"].append("分类码索引缺失（config/kks_code_index.json），无法校验建议编码")
-        return base
-
-    client = OpenAICompatibleClient(config)
-    try:
-        model, _source = client.choose_model()
-    except AIReviewError as exc:
-        base["status"] = "error"
-        base["errors"].append(str(exc))
-        return base
-    base["model"] = model
-
-    all_rules = {x["rule_id"] for r in rows for x in r["rules"]}
-    clauses = _rule_clause_payload(all_rules, rule_source_lookup)
-    # 依据说明取索引里声明的现行标准，避免与 run_audit 形成循环导入
-    standard = str(_code_index().get("standard") or "")
-    if not standard:
-        standard = "GB/T 50549-2020《电厂标识系统编码标准》"
-
-    suggestions: dict[str, dict[str, Any]] = {}
-    batches = [rows[i:i + SUGGEST_BATCH_SIZE] for i in range(0, len(rows), SUGGEST_BATCH_SIZE)]
-    total = len(batches)
-    concurrency = max(1, int(config.code_suggest_concurrency or 1))
-    LOGGER.info("ai_code_suggest_start rows=%s batches=%s concurrency=%s", len(rows), total, concurrency)
-
-    def run_batch(index: int, batch: list[dict[str, Any]]) -> dict[str, Any]:
-        """跑单批：线程内只组装局部结果（shard/stats/errors），不改任何共享状态。"""
-        allowed = {str(r["row"]) for r in batch}
-        payload = {
-            "task": "suggest_correct_code",
-            "standard_in_use": standard,
-            "编码骨架": "GB/T 50549-2020 4.4.1 功能面标识三级编码（火电项目全厂码 H1 缺省）："
-                        "H2H3(2) + S1S2S3(3) + S4S5(2) + T1T2(2) + T3T4T5(3) = 12 位",
-            "规则依据": clauses,
-            "rows": [_suggest_payload_row(r, sys_codes, dev_codes) for r in batch],
-        }
-        out: dict[str, Any] = {"index": index, "shard": {}, "errors": [],
-                               "returned": 0, "no_change": 0, "validated": 0, "rejected": 0}
-        try:
-            response = client.review(model, SUGGEST_PROMPT, payload)
-        except Exception as exc:  # 单批失败不影响其他批次
-            out["errors"].append(str(exc)[:200])
-            LOGGER.warning("ai_code_suggest_batch_failed batch=%s error=%s", index, exc)
-            return out
-        raw = response.get("suggestions", [])
-        if not isinstance(raw, list):
-            out["errors"].append("模型返回的 suggestions 不是数组")
-            return out
-        for item in raw:
-            parsed = _safe_suggestion(item, allowed)
-            if parsed is None:
-                continue
-            out["returned"] += 1
-            code = parsed["suggested_code"]
-            if not code:
-                out["no_change"] += 1
-            valid, reason = _validate_suggested(code, sys_codes, dev_codes)
-            if code and not valid:
-                out["rejected"] += 1
-            elif code:
-                out["validated"] += 1
-            out["shard"][parsed["row"]] = {**parsed, "valid": valid, "invalid_reason": reason, "model": model}
-        return out
-
-    done = 0
-    if concurrency == 1 or total == 1:
-        futures_iter = (run_batch(i, b) for i, b in enumerate(batches, 1))
-    else:
-        with ThreadPoolExecutor(max_workers=min(concurrency, total)) as pool:
-            futures_iter = pool.map(run_batch, range(1, total + 1), batches)
-    for out in futures_iter:
-        base["errors"].extend(out["errors"])
-        base["returned"] += out["returned"]
-        base["no_change"] += out["no_change"]
-        base["validated"] += out["validated"]
-        base["rejected"] += out["rejected"]
-        suggestions.update(out["shard"])
-        done += 1
-        _emit_progress(progress_callback, {
-            "phase": "ai", "stage": "code_suggest", "status": "running",
-            "percent": 92, "message": "AI 正在为问题行生成规范编码",
-            "hint": f"第 {done}/{total} 批完成（并发 {concurrency}），已生成 {base['validated']} 条可用建议",
-        })
-
-    base["suggestions"] = suggestions
-    base["status"] = "completed" if suggestions or not base["errors"] else "error"
-    LOGGER.info("ai_code_suggest_done rows=%s returned=%s valid=%s rejected=%s",
-                base["requested"], base["returned"], base["validated"], base["rejected"])
-    return base
-
-
 def summarize_ledger(ledger: list[dict[str, Any]], progress_callback: ProgressCallback | None = None) -> dict[str, Any]:
     """跨文件趋势总结：基于审计台账（历次审核记录）归纳质量趋势与改进建议。
 
@@ -1515,6 +1289,7 @@ def summarize_ledger(ledger: list[dict[str, Any]], progress_callback: ProgressCa
         return {"status": "disabled", "reason": "AI_TREND_SUMMARY_ENABLED=false"}
     try:
         client = OpenAICompatibleClient(config)
+        client.audit_requests = True
         model, _ = client.choose_model()
         total_rows = sum(int(e.get("rows", 0) or 0) for e in entries)
         total_issues = sum(int(e.get("issues", 0) or 0) for e in entries)
@@ -1581,3 +1356,12 @@ def summarize_ledger(ledger: list[dict[str, Any]], progress_callback: ProgressCa
     except Exception as exc:
         LOGGER.error("ai_trend_failed error=%s", exc)
         return {"status": "failed", "error": str(exc)[:200]}
+
+
+# 🔴 模块级调用点（**不要删**）：导入本模块即把 `.env.local` 读进进程环境。
+#    此前本函数定义了却从未被调用，导致：
+#      · `KKS_ADMIN_TOKEN` 不生效 → 管理接口一律 403（fail-closed）
+#      · AI 配置退回默认值 → 界面上"勾了 AI"也跑不起来
+#    采用 `setdefault` 语义（函数内 `if name not in os.environ`），**不覆盖**真实环境变量，
+#    因此 CI/测试里显式设置的变量仍然优先。
+_load_local_env()

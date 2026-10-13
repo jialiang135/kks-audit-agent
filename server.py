@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import re
+import sys
 import threading
 from email.parser import BytesParser
 from email.policy import default
@@ -57,7 +58,7 @@ PROTECTED_GET = {
     "/api/history/download",
     "/api/history/artifact",
 }
-PROTECTED_POST = {"/api/config", "/api/skill", "/api/skill/upload", "/api/ai/test"}
+PROTECTED_POST = {"/api/config", "/api/skill", "/api/skill/upload", "/api/ai/test", "/api/history/delete"}
 
 
 def admin_token() -> str:
@@ -89,19 +90,50 @@ def _light_tree(result: dict[str, Any]) -> list[dict[str, Any]]:
     return issue_rule_tree(result)
 
 
+def _run_ts(run_id: str) -> str:
+    """把 run_id 里的时间戳（`20261010T161242_ab12cd34`）转成 `2026/10/10 16:12:42`。
+
+    用 run_id 而不是目录 mtime：mtime 会被后续写入（产物落盘等）刷新，不代表提交时间。
+    """
+    m = re.match(r"^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})", str(run_id or ""))
+    if not m:
+        return ""
+    y, mo, d, h, mi, s = m.groups()
+    return f"{y}/{mo}/{d} {h}:{mi}:{s}"
+
+
 def _update_job_state(server: ThreadingHTTPServer, run_id: str, **updates: object) -> dict[str, object]:
     with server.jobs_lock:  # type: ignore[attr-defined]
         state = dict(server.jobs.get(run_id, {}))  # type: ignore[attr-defined]
         state.update(updates)
         state["updated_at"] = __import__("datetime").datetime.now().isoformat(timespec="seconds")
         server.jobs[run_id] = state  # type: ignore[attr-defined]
-        return dict(state)
+        snapshot = dict(state)
+    root = getattr(server, "runs_dir", None)
+    if root and snapshot.get("status") in {"completed", "error"} and RUN_ID_RE.fullmatch(run_id):
+        try:
+            path = Path(root) / run_id / "completed_status.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(snapshot, ensure_ascii=False), encoding="utf-8")
+        except (OSError, TypeError):
+            LOGGER.exception("audit_status_save_failed run_id=%s", run_id)
+    return snapshot
 
 
 def _get_job_state(server: ThreadingHTTPServer, run_id: str) -> dict[str, object] | None:
     with server.jobs_lock:  # type: ignore[attr-defined]
         state = server.jobs.get(run_id)  # type: ignore[attr-defined]
-        return dict(state) if isinstance(state, dict) else None
+        if isinstance(state, dict):
+            return dict(state)
+    root = getattr(server, "runs_dir", None)
+    if root and RUN_ID_RE.fullmatch(run_id):
+        try:
+            saved = json.loads((Path(root) / run_id / "completed_status.json").read_text(encoding="utf-8"))
+            if isinstance(saved, dict) and saved.get("status") in {"completed", "error"}:
+                return saved
+        except (OSError, ValueError):
+            pass
+    return None
 
 
 def _apply_progress_event(server: ThreadingHTTPServer, run_id: str, event: dict[str, object]) -> None:
@@ -185,7 +217,112 @@ def _run_audit_job(
         _update_job_state(server, run_id, status="error", phase="error", percent=0, message="审核失败", hint=str(exc), error=str(exc))
 
 
+def decode_filename_header(value: str) -> str:
+    """还原上传文件名：先容错 HTTP 头的 latin-1 解码，再做百分号解码。
+
+    ⚠️ HTTP 头按规范是 latin-1，而浏览器前端用 `encodeURIComponent(f.name)` 发（纯 ASCII，安全）。
+    但**脚本 / 中文 Windows 控制台的客户端**可能把**原始字节**直接塞进头里：
+      · 发 UTF-8 字节 → 服务端 latin-1 解出来是"双重编码"，下载文件名变成 `ÖÐÃº...`
+      · 发 **GBK** 字节（中文 Windows 控制台默认码页）→ 变成 `ÈÈ¿Ø...`
+    两种情况都在实测中踩到过，且都表现为"已填写原表"下载链接的文件名不可读。
+    这里依次尝试 latin-1→utf-8、latin-1→gbk 还原；对正常（纯 ASCII）输入是无副作用的空操作。
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    for enc in ("utf-8", "gbk"):
+        try:
+            raw = raw.encode("latin-1").decode(enc)
+            break
+        except (UnicodeEncodeError, UnicodeDecodeError, LookupError):
+            continue               # 试下一种；都不行就按原样（含百分号编码）处理
+    return unquote(raw)
+
+
+def _run_generate_job(
+    server: ThreadingHTTPServer,
+    run_id: str,
+    input_path: Path,
+    run_dir: Path,
+    *,
+    use_ai: bool,
+) -> None:
+    """后台跑「第一步：按设计编码生成设备树」。
+
+    复用既有 jobs 机制（与审核一样：进度写入 server.jobs，前端轮询 status）。
+    生成器通过模块级钩子 PROGRESS_HOOK / PROGRESS_AI_HOOK 上报进度。
+    """
+    try:
+        _update_job_state(server, run_id, status="running", phase="starting", percent=3,
+                          message="生成任务已启动", hint="正在读取 Excel 与定位列")
+        # gen_step1.py 在 tools/ 下（CLI 工具），这里按需加进 sys.path
+        tools_dir = str(APP_ROOT / "tools")
+        if tools_dir not in sys.path:
+            sys.path.insert(0, tools_dir)
+        if str(APP_ROOT / "kks_gen") not in sys.path:
+            sys.path.insert(0, str(APP_ROOT / "kks_gen"))
+        import gen_step1  # tools/gen_step1.py
+
+        def on_progress(event: dict) -> None:
+            _update_job_state(
+                server, run_id,
+                status="running",
+                phase=str(event.get("stage", "running")),
+                percent=int(event.get("percent", 0) or 0),
+                message=str(event.get("message", "正在生成")),
+                hint=str(event.get("hint", "")),
+            )
+
+        out_dir = run_dir / "generated"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        exit_code = gen_step1.main([
+            str(input_path), str(out_dir),
+            "--ai" if use_ai else "--no-ai",
+        ], progress_callback=on_progress)
+        if exit_code:
+            raise RuntimeError(f"生成器返回失败状态：{exit_code}")
+
+        # 统计（从生成结果的 JSON 读，避免重复计算）
+        payload = json.loads((out_dir / "第一步_生成结果.json").read_text(encoding="utf-8"))
+        nodes = payload.get("nodes", [])
+        stats = payload.get("stats", {}) or {}
+        # 提供原表和设备编码待核清单两个下载项。
+        # JSON 仍在 run 目录里（后台统计/复现要用），但**不作为下载项**（业务要求）。
+        files = {}
+        for path in sorted(out_dir.iterdir()):
+            if path.suffix.lower() == ".xlsx" and "已填写" in path.name:
+                files["已填写原表（交付）"] = f"/api/generate/{run_id}/{quote(path.name)}"
+            elif path.name == "设备编码待核清单.xlsx":
+                files["设备编码待核清单"] = f"/api/generate/{run_id}/{quote(path.name)}"
+        if "已填写原表（交付）" not in files:
+            raise RuntimeError("未找到回填产物（原表_已填写.xlsx），请查看运行日志")
+
+        _update_job_state(
+            server, run_id,
+            status="completed", phase="completed", percent=100,
+            message="生成完成，合规结论待核", hint="请查看修编说明；现有编码冲突、工程约定和全厂唯一性须确认",
+            compliance=(payload.get("fill") or {}).get("compliance", {"status": "pending"}),
+            source_file=input_path.name,
+            data_rows=stats.get("seed_rows", 0),
+            nodes=len(nodes),
+            parent_nodes=sum(1 for n in nodes if not n.get("design_code")),
+            need_human=sum(1 for n in nodes if n.get("need_human")),
+            ai_applied=stats.get("ai_names_applied"),
+            files=files,
+        )
+        LOGGER.info("generate_http_done run_id=%s nodes=%s ai=%s", run_id, len(nodes), use_ai)
+    except Exception as exc:
+        LOGGER.exception("generate_http_failed run_id=%s", run_id)
+        _update_job_state(server, run_id, status="error", phase="error", percent=0,
+                          message="生成失败", hint=str(exc), error=str(exc))
+
+
+
 RESULT_UI_STYLE = """<style>
+.gen-opt{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-radius:11px;background:#fff;cursor:pointer}
+.gen-opt input{margin-top:3px;flex:none}
+.gen-opt b{display:block;font-size:13px}
+.gen-opt small{display:block;margin-top:3px;color:var(--mut);font-size:11.5px;line-height:1.5}
 .result-panel{margin-top:22px;padding:30px 32px 32px;scroll-margin-top:24px}
 .result-panel-head{align-items:center;margin-bottom:22px}
 .result-panel-head h3{font-size:22px}
@@ -226,7 +363,7 @@ AUDIT_REDESIGN_STYLE = """<style>
 
 
 DASHBOARD_UI_STYLE = """<style>
-body:has(#auditPage.active) .content{height:100vh;overflow:hidden;padding:18px 28px 18px}body:has(#auditPage.active) .topbar{min-height:52px;margin-bottom:12px}body:has(#auditPage.active) .topbar h1{font-size:28px;margin-top:2px}body:has(#auditPage.active) .topbar-subtitle{display:block;margin-top:4px;color:#64748b;font-size:14px}.top-actions{display:flex;align-items:center;gap:10px}.btn-header{min-height:38px;padding:8px 13px;border:1px solid #e2e8f0;background:#fff;color:#1e3a8a;box-shadow:0 3px 10px rgba(15,23,42,.04);font-size:13px}.btn-header:hover{background:#f8faff;border-color:#a5b4fc}.nav-link .nav-icon{display:grid;place-items:center;width:24px;height:24px;color:#64748b;font-size:18px;font-weight:700;line-height:1}.nav-link.active .nav-icon{color:#2563eb}.side-ai-status{margin-top:auto;padding:13px 14px;border:1px solid #dbeafe;border-radius:12px;background:#f8fbff}.side-ai-title{display:block;color:#16a34a;font-size:14px;font-weight:750}.side-ai-title:not(.ready){color:#64748b}.side-ai-status small{display:block;margin-top:5px;color:#94a3b8;font-size:11px}.side-footer{margin-top:18px;padding:0 10px;color:#94a3b8;font-size:11px;line-height:2}.side-footer span{color:#cbd5e1}.dashboard-upload{margin-top:0;padding:14px 16px}.upload-strip{display:grid;grid-template-columns:minmax(285px,1.05fr) minmax(190px,1.25fr) 220px;gap:20px;align-items:center}.dashboard-drop{min-height:84px;padding:13px 16px;display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:13px;text-align:left;border:1px dashed #8faeff;border-radius:12px;background:#fbfdff}.dashboard-drop.dragging{background:#eef4ff;border-color:#2563eb}.upload-file-icon{display:grid;place-items:center;flex:0 0 45px;width:45px;height:49px;border:2px solid #94a3b8;border-radius:5px;background:linear-gradient(135deg,#fff 70%,#dbeafe 70%);color:#16a34a;font-size:25px;font-weight:800}.upload-copy{min-width:0}.dashboard-drop .upload-title{font-size:15px}.dashboard-drop .upload-desc{margin-top:4px;font-size:12px}.upload-link{color:#2563eb;font-weight:700;cursor:pointer}.file-details{min-width:0}.dashboard-upload .file-name{margin:0;min-height:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1e293b;font-size:14px;font-weight:750}.file-meta{display:flex;gap:8px;align-items:center;margin-top:8px;color:#94a3b8;font-size:12px}.file-meta span:first-child{color:#64748b}.upload-state{margin-top:7px;color:#16a34a;font-size:11px;font-weight:700}.upload-actions{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin:0}.upload-submit{min-height:54px;font-size:16px}.upload-actions>span{color:#64748b;text-align:center;font-size:11px}.dashboard-metrics{grid-template-columns:repeat(7,minmax(0,1fr));gap:12px;margin-top:12px}.dashboard-metric{min-height:76px;padding:13px 15px;display:flex;flex-direction:row;align-items:center;gap:12px}.dashboard-metric:after{display:none}.metric-icon{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:50%;background:#eff6ff;color:#2563eb;font-size:22px;font-weight:800}.dashboard-metric.quality .metric-icon{background:#eef2ff;color:#4f46e5}.dashboard-metric.p0 .metric-icon{background:#fee2e2;color:#dc2626}.dashboard-metric.p1 .metric-icon{background:#fef3c7;color:#d97706}.dashboard-metric.p2 .metric-icon{background:#dbeafe;color:#2563eb}.dashboard-metric small{font-size:12px}.dashboard-metric b{margin-top:3px;font-size:24px}.metric-note{display:block;margin-top:2px;color:#94a3b8;font-size:11px}.dashboard-results{margin-top:12px;padding:13px 16px 14px}.dashboard-results .result-panel-head{margin-bottom:8px;align-items:center}.dashboard-results .result-panel-head h3{font-size:18px}.dashboard-results .result-panel-head .muted{margin-top:2px;font-size:11px}.dashboard-results .progress-panel{margin-bottom:8px;padding:9px 12px}.dashboard-results .progress-track{height:7px;margin-top:6px}.dashboard-results .progress-hint{margin-top:4px;font-size:11px}.dashboard-results .result-box{min-height:48px;padding:10px 12px}.dashboard-results .result-message{gap:9px}.dashboard-results .result-message-icon{width:25px;height:25px;flex-basis:25px;font-size:17px}.dashboard-results .result-message strong{font-size:13px}.dashboard-results .result-message span:not(.result-message-icon){margin-top:1px;font-size:11px}.result-dashboard{margin-top:8px}.severity-card{padding:10px 12px;border:1px solid #edf1f6;border-radius:13px;background:#fcfdff}.section-row{display:flex;align-items:center;justify-content:space-between;gap:10px}.section-row h3,.download-panel h3{margin:0;color:#1e293b;font-size:14px}.info-dot{display:grid;place-items:center;width:15px;height:15px;border:1px solid #94a3b8;border-radius:50%;color:#64748b;font-size:10px;font-weight:800}.severity-layout{display:grid;grid-template-columns:minmax(250px,1fr) 112px 150px 230px;gap:14px;align-items:center;margin-top:8px}.severity-bar{display:flex;height:18px;overflow:hidden;border-radius:8px;background:#eef2f7}.severity-bar span{display:block;height:100%;min-width:0;transition:width .3s ease}.severity-bar span:nth-child(1){background:#ef4444}.severity-bar span:nth-child(2){background:#f59e0b}.severity-bar span:nth-child(3){background:#2563eb}.severity-legend{display:flex;gap:15px;margin-top:7px;flex-wrap:wrap;color:#64748b;font-size:11px}.severity-legend span{display:flex;align-items:center;gap:5px;white-space:nowrap}.legend-dot{display:inline-block;width:8px;height:8px;border-radius:2px;background:#2563eb}.legend-dot.p0{background:#ef4444}.legend-dot.p1{background:#f59e0b}.legend-dot.p2{background:#2563eb}.severity-legend b{color:#475569}.issue-donut{display:grid;place-items:center;width:92px;height:92px;margin:auto;border-radius:50%;background:conic-gradient(#2563eb 0 100%);position:relative}.issue-donut:after{content:"";position:absolute;inset:9px;border-radius:50%;background:#fff}.issue-donut>div{position:relative;z-index:1;text-align:center}.issue-donut strong{display:block;color:#172033;font-size:22px;line-height:1.1}.issue-donut small{display:block;margin-top:3px;color:#64748b;font-size:10px}.valid-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:11px}.valid-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#ecfdf5;color:#16a34a;font-size:22px;font-weight:800}.valid-card small{display:block;color:#64748b;font-size:11px}.valid-card b{display:block;margin-top:2px;color:#172033;font-size:20px}.valid-card span:last-child{display:block;margin-top:2px;color:#94a3b8;font-size:10px}.priority-card{padding:8px 11px;border:1px solid #e2e8f0;border-radius:11px}.priority-row{display:flex;align-items:center;justify-content:space-between;min-height:20px;color:#64748b;font-size:11px}.priority-row span{display:flex;align-items:center;gap:7px}.priority-row b{color:#334155}.priority-row.total{margin-top:3px;padding-top:4px;border-top:1px solid #eef2f7;color:#64748b}.result-lower{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(270px,.7fr);gap:16px;margin-top:10px;padding-top:10px;border-top:1px solid #eef2f7}.issue-preview-card{min-width:0}.text-action{border:0;background:transparent;color:#2563eb;font:inherit;font-size:11px;font-weight:700;cursor:pointer}.issue-table-wrap{margin-top:7px;overflow:hidden;border:1px solid #e2e8f0;border-radius:10px}.issue-table-wrap table{width:100%;border-collapse:collapse;table-layout:fixed}.issue-table-wrap th,.issue-table-wrap td{padding:5px 7px;border-bottom:1px solid #eef2f7;text-align:left;font-size:10px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.issue-table-wrap th{color:#94a3b8;font-weight:600;background:#fbfcfe}.issue-table-wrap tr:last-child td{border-bottom:0}.issue-table-wrap th:nth-child(1),.issue-table-wrap td:nth-child(1){width:48px}.issue-table-wrap th:nth-child(3),.issue-table-wrap td:nth-child(3){width:100px}.issue-table-wrap th:nth-child(4),.issue-table-wrap td:nth-child(4){width:66px}.issue-table-wrap th:nth-child(5),.issue-table-wrap td:nth-child(5){width:72px}.priority-cell{font-weight:800}.priority-cell.p0{color:#dc2626}.priority-cell.p1{color:#d97706}.priority-cell.p2{color:#2563eb}.preview-status{color:#f59e0b;font-weight:700}.src-cell{color:#0e5a44;font-size:12px;font-weight:600}.empty-preview{text-align:center!important;color:#94a3b8!important}.issue-tree-box{max-height:340px;overflow:auto;padding:6px 8px}.it-node{border:1px solid #e2e8f0;border-radius:9px;margin:4px 0;background:#fbfdff;overflow:hidden}.it-node>summary{list-style:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;cursor:pointer;font-weight:650;color:#1e3a8a;background:linear-gradient(180deg,#f2f7fd,#eaf2fa);font-size:12px}.it-node>summary::-webkit-details-marker{display:none}.it-node>summary:before{content:"▸";color:#8ba3bf;font-size:11px;width:12px}.it-node[open]>summary:before{content:"▾"}.it-node[open]>summary{background:#eaf2fa;border-bottom:1px solid #e2e8f0}.it-name{font-family:Consolas,Menlo,monospace;font-size:11.5px;color:#0b5394;font-weight:800}.it-title{color:#5b7590;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}.it-count{color:#8aa0b8;font-size:11px;margin-left:auto}.tg-rule>summary .it-count{margin-left:0;flex:0 0 108px;text-align:right}.tb{min-width:28px;padding:1px 6px;border-radius:999px;font-size:10.5px;font-weight:800;text-align:center}.tb-p0{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca}.tb-p1{background:#fffbeb;color:#b45309;border:1px solid #fde68a}.tb-p2{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}.it-kids{padding:2px 6px 6px 16px}.it-issues{padding:1px 10px 4px;background:#fff}.it-issue{padding:5px 2px 3px;border-top:1px dashed #e2e8f0;font-size:11px;line-height:1.5;color:#334155}.it-issue .priority{min-width:auto;padding:1px 6px;font-size:10px}.it-issue code{margin:0 4px;font-size:10px}.it-issue .it-def{color:#5b7590;font-size:10.5px}.it-issue b{margin-right:3px;font-size:10.5px}.it-suggest{color:#94a3b8;font-size:10.5px;margin-top:1px}.it-leaf{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 10px;color:#627d98;font-size:11px}.tg-rule{border-left:3px solid #2563eb;background:#f6f9fe}.it-node.tg-rule>summary{display:grid;grid-template-columns:12px auto max-content minmax(0,1fr) 58px 108px;align-items:center;column-gap:8px;background:linear-gradient(180deg,#eef4fc,#e2ecf8);font-size:12.5px;padding:7px 10px}.tg-rule[open]>summary{background:#e2ecf8;border-bottom:1px solid #dbe7f5}.it-node.tg-rule>summary:before{color:#5b86c6}.tg-rid{font-size:12.5px}.tg-def{flex:0 1 auto;min-width:0;color:#42536b;font-size:11px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tg-act{display:inline-flex;align-items:center;justify-content:center;line-height:1;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap}.tg-act.act-fix{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca}.tg-act.act-hm{background:#fef3c7;color:#a16207;border:1px solid #fde68a}.tg-act.act-ck{background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe}.tg-src{padding:2px 12px 7px;color:#7a93ac;font-size:10.5px;background:#fff}.it-code{margin-left:2px;border-color:#e7eef6;background:#fff}.it-code>summary{background:#fff;border-bottom:1px dashed #e2e8f0;padding:4px 10px;font-size:11.5px;font-weight:700}.it-code[open]>summary{background:#f7fafd}.it-row{display:inline-flex;flex:0 0 auto;align-items:center;padding:0 7px;border-radius:999px;background:#eef2f7;color:#40556b;font-size:10px;font-weight:800;white-space:nowrap}.it-issue .it-msg{flex:1 1 300px;color:#334155}.it-issue{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap}.download-panel{min-width:0;border-left:1px solid #eef2f7;padding-left:16px}.download-panel>h3{margin-bottom:7px}.download-panel .result-downloads{display:grid;grid-template-columns:1fr;gap:8px;margin:0}.download-panel .download-card{min-height:54px;padding:9px 10px;gap:9px}.download-panel .download-icon{width:30px;height:30px;flex-basis:30px;border-radius:8px;font-size:10px}.download-panel .download-copy strong{font-size:12px}.download-panel .download-copy span{font-size:10px}.download-panel .download-action{font-size:11px}
+body:has(#auditPage.active) .content{height:100vh;overflow:hidden;padding:18px 28px 18px}body:has(#auditPage.active) .topbar{min-height:52px;margin-bottom:12px}body:has(#auditPage.active) .topbar h1{font-size:28px;margin-top:2px}body:has(#auditPage.active) .topbar-subtitle{display:block;margin-top:4px;color:#64748b;font-size:14px}.top-actions{display:flex;align-items:center;gap:10px}.btn-header{min-height:38px;padding:8px 13px;border:1px solid #e2e8f0;background:#fff;color:#1e3a8a;box-shadow:0 3px 10px rgba(15,23,42,.04);font-size:13px}.btn-header:hover{background:#f8faff;border-color:#a5b4fc}.nav-link .nav-icon{display:grid;place-items:center;width:24px;height:24px;color:#64748b;font-size:18px;font-weight:700;line-height:1}.nav-link.active .nav-icon{color:#2563eb}.side-ai-status{margin-top:auto;padding:13px 14px;border:1px solid #dbeafe;border-radius:12px;background:#f8fbff}.side-ai-title{display:block;color:#16a34a;font-size:14px;font-weight:750}.side-ai-title:not(.ready){color:#64748b}.side-ai-status small{display:block;margin-top:5px;color:#94a3b8;font-size:11px}.side-footer{margin-top:18px;padding:0 10px;color:#94a3b8;font-size:11px;line-height:2}.side-footer span{color:#cbd5e1}.dashboard-upload{margin-top:0;padding:14px 16px}.upload-strip{display:grid;grid-template-columns:minmax(285px,1.05fr) minmax(190px,1.25fr) 220px;gap:20px;align-items:center}.dashboard-drop{min-height:84px;padding:13px 16px;display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:13px;text-align:left;border:1px dashed #8faeff;border-radius:12px;background:#fbfdff}.dashboard-drop.dragging{background:#eef4ff;border-color:#2563eb}.upload-file-icon{display:grid;place-items:center;flex:0 0 45px;width:45px;height:49px;border:2px solid #94a3b8;border-radius:5px;background:linear-gradient(135deg,#fff 70%,#dbeafe 70%);color:#16a34a;font-size:25px;font-weight:800}.upload-copy{min-width:0}.dashboard-drop .upload-title{font-size:15px}.dashboard-drop .upload-desc{margin-top:4px;font-size:12px}.upload-link{color:#2563eb;font-weight:700;cursor:pointer}.file-details{min-width:0}.dashboard-upload .file-name{margin:0;min-height:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1e293b;font-size:14px;font-weight:750}.file-meta{display:flex;gap:8px;align-items:center;margin-top:8px;color:#94a3b8;font-size:12px}.file-meta span:first-child{color:#64748b}.upload-state{margin-top:7px;color:#16a34a;font-size:11px;font-weight:700}.upload-actions{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin:0}.upload-submit{min-height:54px;font-size:16px}.upload-actions>span{color:#64748b;text-align:center;font-size:11px}.dashboard-metrics{grid-template-columns:repeat(7,minmax(0,1fr));gap:12px;margin-top:12px}.dashboard-metric{min-height:76px;padding:13px 15px;display:flex;flex-direction:row;align-items:center;gap:12px}.dashboard-metric:after{display:none}.metric-icon{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:50%;background:#eff6ff;color:#2563eb;font-size:22px;font-weight:800}.dashboard-metric.quality .metric-icon{background:#eef2ff;color:#4f46e5}.dashboard-metric.p0 .metric-icon{background:#fee2e2;color:#dc2626}.dashboard-metric.p1 .metric-icon{background:#fef3c7;color:#d97706}.dashboard-metric.p2 .metric-icon{background:#dbeafe;color:#2563eb}.dashboard-metric small{font-size:12px}.dashboard-metric b{margin-top:3px;font-size:24px}.metric-note{display:block;margin-top:2px;color:#94a3b8;font-size:11px}.dashboard-results{margin-top:12px;padding:13px 16px 14px}.dashboard-results .result-panel-head{margin-bottom:8px;align-items:center}.dashboard-results .result-panel-head h3{font-size:18px}.dashboard-results .result-panel-head .muted{margin-top:2px;font-size:11px}.dashboard-results .progress-panel{margin-bottom:8px;padding:9px 12px}.dashboard-results .progress-track{height:7px;margin-top:6px}.dashboard-results .progress-hint{margin-top:4px;font-size:11px}.dashboard-results .result-box{min-height:48px;padding:10px 12px}.dashboard-results .result-message{gap:9px}.dashboard-results .result-message-icon{width:25px;height:25px;flex-basis:25px;font-size:17px}.dashboard-results .result-message strong{font-size:13px}.dashboard-results .result-message span:not(.result-message-icon){margin-top:1px;font-size:11px}.result-dashboard{margin-top:8px}.severity-card{padding:10px 12px;border:1px solid #edf1f6;border-radius:13px;background:#fcfdff}.disposition-summary{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;padding-top:7px;border-top:1px solid #eef2f7;color:#64748b;font-size:11px}.disposition-summary span{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;background:#f1f5f9}.disposition-summary b{color:#1e293b}.section-row{display:flex;align-items:center;justify-content:space-between;gap:10px}.section-row h3,.download-panel h3{margin:0;color:#1e293b;font-size:14px}.info-dot{display:grid;place-items:center;width:15px;height:15px;border:1px solid #94a3b8;border-radius:50%;color:#64748b;font-size:10px;font-weight:800}.severity-layout{display:grid;grid-template-columns:minmax(250px,1fr) 112px 150px 230px;gap:14px;align-items:center;margin-top:8px}.severity-bar{display:flex;height:18px;overflow:hidden;border-radius:8px;background:#eef2f7}.severity-bar span{display:block;height:100%;min-width:0;transition:width .3s ease}.severity-bar span:nth-child(1){background:#ef4444}.severity-bar span:nth-child(2){background:#f59e0b}.severity-bar span:nth-child(3){background:#2563eb}.severity-legend{display:flex;gap:15px;margin-top:7px;flex-wrap:wrap;color:#64748b;font-size:11px}.severity-legend span{display:flex;align-items:center;gap:5px;white-space:nowrap}.legend-dot{display:inline-block;width:8px;height:8px;border-radius:2px;background:#2563eb}.legend-dot.p0{background:#ef4444}.legend-dot.p1{background:#f59e0b}.legend-dot.p2{background:#2563eb}.severity-legend b{color:#475569}.issue-donut{display:grid;place-items:center;width:92px;height:92px;margin:auto;border-radius:50%;background:conic-gradient(#2563eb 0 100%);position:relative}.issue-donut:after{content:"";position:absolute;inset:9px;border-radius:50%;background:#fff}.issue-donut>div{position:relative;z-index:1;text-align:center}.issue-donut strong{display:block;color:#172033;font-size:22px;line-height:1.1}.issue-donut small{display:block;margin-top:3px;color:#64748b;font-size:10px}.valid-card{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #e2e8f0;border-radius:11px}.valid-icon{display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#ecfdf5;color:#16a34a;font-size:22px;font-weight:800}.valid-card small{display:block;color:#64748b;font-size:11px}.valid-card b{display:block;margin-top:2px;color:#172033;font-size:20px}.valid-card span:last-child{display:block;margin-top:2px;color:#94a3b8;font-size:10px}.priority-card{padding:8px 11px;border:1px solid #e2e8f0;border-radius:11px}.priority-row{display:flex;align-items:center;justify-content:space-between;min-height:20px;color:#64748b;font-size:11px}.priority-row span{display:flex;align-items:center;gap:7px}.priority-row b{color:#334155}.priority-row.total{margin-top:3px;padding-top:4px;border-top:1px solid #eef2f7;color:#64748b}.result-lower{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(270px,.7fr);gap:16px;margin-top:10px;padding-top:10px;border-top:1px solid #eef2f7}.issue-preview-card{min-width:0}.text-action{border:0;background:transparent;color:#2563eb;font:inherit;font-size:11px;font-weight:700;cursor:pointer}.issue-table-wrap{margin-top:7px;overflow:hidden;border:1px solid #e2e8f0;border-radius:10px}.issue-table-wrap table{width:100%;border-collapse:collapse;table-layout:fixed}.issue-table-wrap th,.issue-table-wrap td{padding:5px 7px;border-bottom:1px solid #eef2f7;text-align:left;font-size:10px;line-height:1.35;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.issue-table-wrap th{color:#94a3b8;font-weight:600;background:#fbfcfe}.issue-table-wrap tr:last-child td{border-bottom:0}.issue-table-wrap th:nth-child(1),.issue-table-wrap td:nth-child(1){width:48px}.issue-table-wrap th:nth-child(3),.issue-table-wrap td:nth-child(3){width:100px}.issue-table-wrap th:nth-child(4),.issue-table-wrap td:nth-child(4){width:66px}.issue-table-wrap th:nth-child(5),.issue-table-wrap td:nth-child(5){width:72px}.priority-cell{font-weight:800}.priority-cell.p0{color:#dc2626}.priority-cell.p1{color:#d97706}.priority-cell.p2{color:#2563eb}.preview-status{color:#f59e0b;font-weight:700}.src-cell{color:#0e5a44;font-size:12px;font-weight:600}.empty-preview{text-align:center!important;color:#94a3b8!important}.issue-tree-box{max-height:340px;overflow:auto;padding:6px 8px}.it-node{border:1px solid #e2e8f0;border-radius:9px;margin:4px 0;background:#fbfdff;overflow:hidden}.it-node>summary{list-style:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 10px;cursor:pointer;font-weight:650;color:#1e3a8a;background:linear-gradient(180deg,#f2f7fd,#eaf2fa);font-size:12px}.it-node>summary::-webkit-details-marker{display:none}.it-node>summary:before{content:"▸";color:#8ba3bf;font-size:11px;width:12px}.it-node[open]>summary:before{content:"▾"}.it-node[open]>summary{background:#eaf2fa;border-bottom:1px solid #e2e8f0}.it-name{font-family:Consolas,Menlo,monospace;font-size:11.5px;color:#0b5394;font-weight:800}.it-title{color:#5b7590;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px}.it-count{color:#8aa0b8;font-size:11px;margin-left:auto}.tg-rule>summary .it-count{margin-left:0;flex:0 0 108px;text-align:right}.tb{min-width:28px;padding:1px 6px;border-radius:999px;font-size:10.5px;font-weight:800;text-align:center}.tb-p0{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca}.tb-p1{background:#fffbeb;color:#b45309;border:1px solid #fde68a}.tb-p2{background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe}.it-kids{padding:2px 6px 6px 16px}.it-issues{padding:1px 10px 4px;background:#fff}.it-issue{padding:5px 2px 3px;border-top:1px dashed #e2e8f0;font-size:11px;line-height:1.5;color:#334155}.it-issue .priority{min-width:auto;padding:1px 6px;font-size:10px}.it-issue code{margin:0 4px;font-size:10px}.it-issue .it-def{color:#5b7590;font-size:10.5px}.it-issue b{margin-right:3px;font-size:10.5px}.it-suggest{color:#94a3b8;font-size:10.5px;margin-top:1px}.it-leaf{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 10px;color:#627d98;font-size:11px}.tg-rule{border-left:3px solid #2563eb;background:#f6f9fe}.it-node.tg-rule>summary{display:grid;grid-template-columns:12px auto max-content minmax(0,1fr) 58px 108px;align-items:center;column-gap:8px;background:linear-gradient(180deg,#eef4fc,#e2ecf8);font-size:12.5px;padding:7px 10px}.tg-rule[open]>summary{background:#e2ecf8;border-bottom:1px solid #dbe7f5}.it-node.tg-rule>summary:before{color:#5b86c6}.tg-rid{font-size:12.5px}.tg-def{flex:0 1 auto;min-width:0;color:#42536b;font-size:11px;max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.tg-act{display:inline-flex;align-items:center;justify-content:center;line-height:1;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap}.tg-act.act-fix{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca}.tg-act.act-hm{background:#fef3c7;color:#a16207;border:1px solid #fde68a}.tg-act.act-ck{background:#dbeafe;color:#1d4ed8;border:1px solid #bfdbfe}.tg-src{padding:2px 12px 7px;color:#7a93ac;font-size:10.5px;background:#fff}.it-code{margin-left:2px;border-color:#e7eef6;background:#fff}.it-code>summary{background:#fff;border-bottom:1px dashed #e2e8f0;padding:4px 10px;font-size:11.5px;font-weight:700}.it-code[open]>summary{background:#f7fafd}.it-row{display:inline-flex;flex:0 0 auto;align-items:center;padding:0 7px;border-radius:999px;background:#eef2f7;color:#40556b;font-size:10px;font-weight:800;white-space:nowrap}.it-issue .it-msg{flex:1 1 300px;color:#334155}.it-issue{display:flex;align-items:flex-start;gap:6px;flex-wrap:wrap}.download-panel{min-width:0;border-left:1px solid #eef2f7;padding-left:16px}.download-panel>h3{margin-bottom:7px}.download-panel .result-downloads{display:grid;grid-template-columns:1fr;gap:8px;margin:0}.download-panel .download-card{min-height:54px;padding:9px 10px;gap:9px}.download-panel .download-icon{width:30px;height:30px;flex-basis:30px;border-radius:8px;font-size:10px}.download-panel .download-copy strong{font-size:12px}.download-panel .download-copy span{font-size:10px}.download-panel .download-action{font-size:11px}
  @media(max-width:1000px){.upload-strip{grid-template-columns:minmax(250px,1fr) minmax(180px,1fr)}.upload-actions{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;align-items:center}.upload-actions>span{text-align:left}.dashboard-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}.severity-layout{grid-template-columns:minmax(220px,1fr) 100px 150px}.priority-card{grid-column:1/-1}.result-lower{grid-template-columns:minmax(0,1fr) 260px}}
  @media(max-width:700px){body:has(#auditPage.active){overflow:auto}body:has(#auditPage.active) .content{height:auto;overflow:visible;padding:18px}.top-actions{margin-top:10px}.topbar{display:block}.upload-strip,.result-lower{grid-template-columns:1fr}.upload-actions{grid-column:auto;display:flex}.upload-actions>span{text-align:center}.severity-layout{grid-template-columns:1fr 100px}.severity-main{grid-column:1/-1}.valid-card{grid-column:1/-1}.priority-card{grid-column:1/-1}.download-panel{border-left:0;border-top:1px solid #eef2f7;padding:10px 0 0}.dashboard-metrics{grid-template-columns:repeat(2,1fr)}.dashboard-metric{min-height:68px;padding:10px}.metric-icon{width:34px;height:34px;flex-basis:34px;font-size:17px}.dashboard-metric b{font-size:21px}}
  @media(max-width:460px){.dashboard-metrics{grid-template-columns:1fr}.severity-layout{grid-template-columns:1fr}.issue-donut{grid-column:1}.top-actions{flex-wrap:wrap}.btn-header{flex:1}}
@@ -257,12 +394,21 @@ html{font-size:16px}body{font-family:Inter,"Segoe UI","Microsoft YaHei",Arial,sa
 @media(max-width:900px){.content{padding:28px 22px 48px}.topbar h1{font-size:28px}.hero{padding:28px 26px}.upload-zone{min-height:280px}.config-grid{max-width:none}}
 @media(max-width:520px){.content{padding:22px 15px 38px}.topbar h1{font-size:25px}.topbar .pill{margin-top:12px}.hero{min-height:0;padding:24px 20px}.hero h2{font-size:22px}.hero-tag{min-width:0;margin-top:20px}.panel{padding:20px}.upload-zone{min-height:270px;padding:24px 15px}.summary-grid{gap:12px}.metric{min-height:96px;padding:15px}.metric b{font-size:25px}.config-actions .btn{flex:1}}
 </style></head><body><div class="shell">
- <aside class="sidebar"><div class="brand"><div class="brand-mark">K</div><div><strong>KKS 审核工作台</strong><small>编码质量控制中心</small></div></div><div class="nav-label">工作台</div><button class="nav-link active" data-panel="auditPage"><span class="nav-icon">⌂</span>开始审核</button><button class="nav-link" data-panel="skillPage"><span class="nav-icon">▧</span>Skill 规则</button><button class="nav-link" data-panel="configPage"><span class="nav-icon">⚙</span>AI 配置</button><button class="nav-link" data-panel="logsPage"><span class="nav-icon">◷</span>运行日志</button><button class="nav-link" data-panel="historyPage"><span class="nav-icon">▦</span>审计台账</button><div class="side-ai-status"><span id="aiBadge" class="side-ai-title">正在读取 AI 状态</span><small id="sideAiHint">已连接 AI 审核引擎</small></div><div class="side-footer">当前版本　v1.0.0<br><span>© 2024 KKS QUALITY CONTROL</span></div></aside>
+ <aside class="sidebar"><div class="brand"><div class="brand-mark">K</div><div><strong>KKS 审核工作台</strong><small>编码质量控制中心</small></div></div><div class="nav-label">工作台</div><button class="nav-link active" data-panel="auditPage"><span class="nav-icon">⌂</span>开始审核</button>
+<button class="nav-link" data-panel="generatePage"><span class="nav-icon">⌗</span>编码生成</button><button class="nav-link" data-panel="skillPage"><span class="nav-icon">▧</span>Skill 规则</button><button class="nav-link" data-panel="configPage"><span class="nav-icon">⚙</span>AI 配置</button><button class="nav-link" data-panel="logsPage"><span class="nav-icon">◷</span>运行日志</button><button class="nav-link" data-panel="historyPage"><span class="nav-icon">▦</span>审计台账</button><div class="side-ai-status"><span id="aiBadge" class="side-ai-title">正在读取 AI 状态</span><small id="sideAiHint">已连接 AI 审核引擎</small></div><div class="side-footer">当前版本　v1.0.0<br><span>© 2024 KKS QUALITY CONTROL</span></div></aside>
  <main class="content"><header class="topbar"><div class="topbar-copy"><div id="pageEyebrow" class="eyebrow">KKS QUALITY CONTROL</div><h1 id="pageTitle">编码审核工作台</h1><div id="pageSubtitle" class="topbar-subtitle">上传 Excel 文件，AI 智能识别并生成审核结果</div></div><div class="top-actions"><button class="btn btn-header page-switch" data-panel="logsPage">◷ 运行日志</button><button class="btn btn-header page-switch" data-panel="configPage">⚙ 系统配置</button></div></header>
 <section id="auditPage" class="page active">
   <div class="panel upload-panel dashboard-upload"><form id="form" enctype="multipart/form-data"><div class="upload-strip"><div id="uploadZone" class="upload-zone dashboard-drop"><div class="upload-file-icon">▤</div><div class="upload-copy"><div class="upload-title">拖拽 Excel 文件到此处</div><div class="upload-desc">或 <label for="file" class="upload-link">点击选择文件</label></div></div><input id="file" class="file-input" name="file" type="file" accept=".xlsx" required></div><div class="file-details"><div id="fileName" class="file-name">尚未选择文件</div><div class="file-meta"><span id="fileSize">—</span><span>·</span><span id="fileFormat">支持 .xlsx</span><span>·</span><span>最大文件：50MB</span></div><div id="uploadState" class="upload-state">等待上传</div></div><div class="upload-actions"><button id="submit" class="btn btn-primary upload-submit" type="submit">▶ 开始审核</button><span>AI 智能识别并生成结果</span></div></div></form></div>
- <div class="summary-grid dashboard-metrics"><div class="metric dashboard-metric quality"><span class="metric-icon">◉</span><div><small>有效 KKS 数量</small><b id="effectiveKks">—</b><span class="metric-note">本次有效编码</span></div></div><div class="metric dashboard-metric quality"><span class="metric-icon">▦</span><div><small>设备级编码</small><b id="deviceLevelCodes">—</b><span class="metric-note">严格 12 位</span></div></div><div class="metric dashboard-metric quality"><span class="metric-icon">≡</span><div><small>重复编码</small><b id="duplicateCodes">—</b><span class="metric-note">完整 KKS 码组</span></div></div><div class="metric dashboard-metric quality"><span class="metric-icon">↳</span><div><small>父级错误</small><b id="parentErrors">—</b><span class="metric-note">孤儿或层级关系</span></div></div><div class="metric dashboard-metric p0"><span class="metric-icon">!</span><div><small>高风险问题（P0）</small><b id="qualityP0">—</b><span class="metric-note">必须整改</span></div></div><div class="metric dashboard-metric p1"><span class="metric-icon">△</span><div><small>待整改问题（P1）</small><b id="qualityP1">—</b><span class="metric-note">整改或人工确认</span></div></div><div class="metric dashboard-metric p2"><span class="metric-icon">i</span><div><small>提示问题（P2）</small><b id="qualityP2">—</b><span class="metric-note">需人工确认或治理</span></div></div></div>
- <div id="resultPanel" class="panel result-panel dashboard-results"><div class="panel-head result-panel-head"><div><h3>审核结果</h3><div class="muted">问题分布、问题预览和下载结果</div></div><span id="resultState" class="result-state idle">等待审核</span></div><div id="progressPanel" class="progress-panel" hidden><div class="progress-topline"><span id="progressText">准备审核</span><b id="progressPercent">0%</b></div><div class="progress-track"><div id="progressBar"></div></div><div id="progressHint" class="progress-hint">正在准备文件……</div></div><div id="result" class="result-box result-box-empty"><div class="result-message"><span class="result-message-icon" aria-hidden="true">◎</span><div><strong id="resultTitle">等待上传文件</strong><span id="resultSubtitle">审核完成后，问题分布和下载入口会显示在这里。</span></div></div></div><div id="resultDashboard" hidden><div class="severity-card"><div class="section-row"><h3>问题级别分布</h3><span class="info-dot">i</span></div><div class="severity-layout"><div class="severity-main"><div class="severity-bar"><span id="barP0"></span><span id="barP1"></span><span id="barP2"></span></div><div class="severity-legend"><span><i class="legend-dot p0"></i>P0 严重 <b id="legendP0">0</b></span><span><i class="legend-dot p1"></i>P1 重要 <b id="legendP1">0</b></span><span><i class="legend-dot p2"></i>P2 一般 <b id="legendP2">0</b></span></div></div><div id="issueDonut" class="issue-donut"><div><strong id="donutTotal">—</strong><small>问题总数</small></div></div><div class="valid-card"><span class="valid-icon">✓</span><div><small>有效编码</small><b id="resultDataRows">—</b><span id="validRate">—</span></div></div><div class="priority-card"><div class="priority-row"><span><i class="legend-dot p0"></i>P0 严重</span><b id="priorityP0Table">0</b></div><div class="priority-row"><span><i class="legend-dot p1"></i>P1 重要</span><b id="priorityP1Table">0</b></div><div class="priority-row"><span><i class="legend-dot p2"></i>P2 一般</span><b id="priorityP2Table">0</b></div><div class="priority-row total"><span>总计</span><b id="priorityTotal">0</b></div></div></div></div><div class="result-lower"><div class="issue-preview-card"><div class="section-row"><h3>问题预览（按规则分组）</h3><span class="text-action">点击节点展开/收起</span></div><div class="issue-table-wrap"><div id="issuePreview" class="issue-tree-box"><div class="empty-preview">审核完成后显示问题预览</div></div></div></div><div class="download-panel"><h3>下载结果</h3><div id="links" class="links result-downloads" hidden></div></div></div></div></div></section>
+ <div class="summary-grid dashboard-metrics"><div class="metric dashboard-metric quality"><span class="metric-icon">◉</span><div><small>有效 KKS 数量</small><b id="effectiveKks">—</b><span class="metric-note">非空编码行</span></div></div><div class="metric dashboard-metric quality"><span class="metric-icon">▦</span><div><small>设备级编码</small><b id="deviceLevelCodes">—</b><span class="metric-note">完整 12 位格式</span></div></div><div class="metric dashboard-metric quality"><span class="metric-icon">≡</span><div><small>重复编码</small><b id="duplicateCodes">—</b><span class="metric-note">完整 KKS 码组</span></div></div><div class="metric dashboard-metric quality"><span class="metric-icon">↳</span><div><small>父级问题</small><b id="parentErrors">—</b><span class="metric-note">孤儿或层级关系</span></div></div><div class="metric dashboard-metric p0"><span class="metric-icon">!</span><div><small>已确认问题（P0）</small><b id="qualityP0">—</b><span class="metric-note">严重级别</span></div></div><div class="metric dashboard-metric p1"><span class="metric-icon">△</span><div><small>已确认问题（P1）</small><b id="qualityP1">—</b><span class="metric-note">重要级别</span></div></div><div class="metric dashboard-metric p2"><span class="metric-icon">i</span><div><small>已确认问题（P2）</small><b id="qualityP2">—</b><span class="metric-note">一般级别</span></div></div></div>
+ <div id="resultPanel" class="panel result-panel dashboard-results"><div class="panel-head result-panel-head"><div><h3>审核结果</h3><div class="muted">确认问题级别分布、待核状态、问题明细和下载结果</div></div><span id="resultState" class="result-state idle">等待审核</span></div><div id="progressPanel" class="progress-panel" hidden><div class="progress-topline"><span id="progressText">准备审核</span><b id="progressPercent">0%</b></div><div class="progress-track"><div id="progressBar"></div></div><div id="progressHint" class="progress-hint">正在准备文件……</div></div><div id="result" class="result-box result-box-empty"><div class="result-message"><span class="result-message-icon" aria-hidden="true">◎</span><div><strong id="resultTitle">等待上传文件</strong><span id="resultSubtitle">审核完成后，问题分布和下载入口会显示在这里。</span></div></div></div><div id="resultDashboard" hidden><div class="severity-card"><div class="section-row"><h3>已确认问题级别分布</h3><span class="info-dot">i</span></div><div class="severity-layout"><div class="severity-main"><div class="severity-bar"><span id="barP0"></span><span id="barP1"></span><span id="barP2"></span></div><div class="severity-legend"><span><i class="legend-dot p0"></i>P0 严重 <b id="legendP0">0</b></span><span><i class="legend-dot p1"></i>P1 重要 <b id="legendP1">0</b></span><span><i class="legend-dot p2"></i>P2 一般 <b id="legendP2">0</b></span></div></div><div id="issueDonut" class="issue-donut"><div><strong id="donutTotal">—</strong><small>确认问题</small></div></div><div class="valid-card"><span class="valid-icon">✓</span><div><small>有效编码</small><b id="resultDataRows">—</b><span id="validRate">—</span></div></div><div class="priority-card"><div class="priority-row"><span><i class="legend-dot p0"></i>P0 严重</span><b id="priorityP0Table">0</b></div><div class="priority-row"><span><i class="legend-dot p1"></i>P1 重要</span><b id="priorityP1Table">0</b></div><div class="priority-row"><span><i class="legend-dot p2"></i>P2 一般</span><b id="priorityP2Table">0</b></div><div class="priority-row total"><span>确认问题合计</span><b id="priorityTotal">0</b></div></div></div><div class="disposition-summary"><span>规则命中条目<b id="ruleHitCount">0</b></span><span>待人工确认<b id="pendingReviewCount">0</b></span><span>疑似误报<b id="falsePositiveCount">0</b></span></div></div><div class="result-lower"><div class="issue-preview-card"><div class="section-row"><h3>规则命中明细（含待核）</h3><span class="text-action">点击节点展开/收起</span></div><div class="issue-table-wrap"><div id="issuePreview" class="issue-tree-box"><div class="empty-preview">审核完成后显示问题预览</div></div></div></div><div class="download-panel"><h3>下载结果</h3><div id="links" class="links result-downloads" hidden></div></div></div></div></div></section>
+<section id="generatePage" class="page"><div class="panel"><div class="panel-head"><div><h3>按设计编码生成设备树</h3><div class="muted">读取含有「设计编码」的原始表（原名称 / 设计编码 / 专业 / 图纸名称或图号），生成 设备名称、KKS编码、上级设备名称、上级KKS编码，并向上展开父级链；设备名称由 <b>AI 自动补全</b>。源文件不会被修改。</div></div><span style="padding:6px 10px;border-radius:999px;background:#e8f0fe;color:#1a56b8;font-size:12px;font-weight:700;white-space:nowrap">第一步</span></div>
+<div class="upload-zone" id="genDrop" style="margin-top:14px"><div class="upload-icon">⌗</div><div class="upload-title">上传含设计编码的 Excel</div><div class="upload-desc">支持 .xlsx；列名可不同（设计编码 / 设计码 / 设计编号 均可识别）</div><button class="btn btn-secondary upload-select" id="genPick" type="button">选择文件</button><input id="genFile" type="file" accept=".xlsx" hidden><div id="genFileName" class="file-name muted">尚未选择文件</div></div>
+<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px"><button id="genStart" class="btn btn-primary" type="button">开始生成</button><span id="genHint" class="muted">生成过程在后台运行，可以关闭页面</span></div>
+<div id="genProgress" class="progress-panel" hidden><div class="progress-topline"><span id="genProgressText">准备生成</span><b id="genProgressPercent">0%</b></div><div class="progress-track"><div id="genProgressBar"></div></div><div id="genProgressHint" class="progress-hint"></div></div>
+<div id="genResult" hidden style="margin-top:18px"><div class="biz-kpis" id="genKpis"></div><div class="result-downloads" id="genLinks"></div><div class="muted" style="margin-top:10px;font-size:12px">交付物是你的原表 + 已生成的 设备名称 / KKS编码 / 上级设备名称 / 上级KKS编码（已有内容不覆盖），另附「修编说明」列。</div></div>
+<div id="genStatus" class="status" hidden></div>
+<div style="margin-top:20px;border-top:1px solid var(--line);padding-top:14px"><div style="font-size:13px;font-weight:700;margin-bottom:8px">最近生成记录</div><div id="genRecent" class="muted">暂无记录</div></div>
+</div></section>
 <section id="skillPage" class="page"><div class="panel"><div class="panel-head"><div><h3>Skill 规则管理</h3><div class="muted">管理员可以查看、修改或上传 Skill 文件。Markdown 会影响 AI 参考上下文；audit_template.py 是可执行规则代码，修改后必须重启服务。</div></div><span style="padding:6px 10px;border-radius:999px;background:#fff1e6;color:#a95118;font-size:12px;font-weight:700;white-space:nowrap">管理员功能</span></div><div style="display:grid;grid-template-columns:minmax(230px,1fr) 2fr;gap:12px;align-items:center;margin:15px 0 10px"><label for="skillFile" style="font-size:13px;font-weight:700">当前文件</label><select id="skillFile" style="width:100%;border:1px solid var(--line);border-radius:9px;padding:11px 12px;font:inherit;color:var(--ink);background:#fff"></select></div><div id="skillMeta" class="skill-meta">选择文件后显示说明</div><div class="editor-toolbar"><span id="skillDirty" class="skill-badge">未修改</span><span id="skillCharCount">0 字符</span></div><textarea id="skill" class="skill-editor" spellcheck="false"></textarea><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px"><button id="saveSkill" class="btn btn-primary" type="button">保存当前文件</button><input id="skillUpload" type="file" accept=".md,.py,.zip" style="max-width:260px"><span id="skillUploadName" class="skill-upload-name muted">未选择文件</span><button id="uploadSkill" class="btn btn-secondary" type="button">上传 Skill 文件 / 包</button></div><div class="muted" style="margin-top:10px">支持单个 `.md` / `.py` 文件，也支持完整 `.zip` 包；系统只接收 SKILL.md、references/*.md 和 scripts/audit_template.py，并自动保留旧版本备份。</div><div id="skillStatus" class="status">正在加载 Skill……</div></div></section>
 <section id="configPage" class="page"><div class="panel"><div class="panel-head"><div><h3>AI 管理员配置</h3><div class="muted">修改接口地址、模型和 AI 复核开关。API 密钥只显示掩码，不会写入日志、报告或审核结果。</div></div><span style="padding:6px 10px;border-radius:999px;background:#fff1e6;color:#a95118;font-size:12px;font-weight:700;white-space:nowrap">管理员</span></div><div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border:1px solid #f0d9c8;background:#fffaf5;border-radius:10px"><div class="config-field" style="min-width:320px;flex:1"><label for="adminToken">管理令牌</label><input id="adminToken" type="password" autocomplete="new-password" placeholder="服务端 .env 中的 KKS_ADMIN_TOKEN"><span class="field-help">访问配置、Skill、日志、AI 测试等管理接口所需；仅保存在本机浏览器，不会上传到服务端。</span></div><button id="saveAdminToken" class="btn btn-secondary" type="button">保存令牌</button></div><div class="config-grid"><div class="config-field"><label for="baseUrl">AI 接口地址</label><input id="baseUrl" type="url" placeholder="https://example.com/v1"><span class="field-help">兼容 OpenAI 格式的 /v1 接口地址。</span></div><div class="config-field"><label for="model">模型名称</label><input id="model" type="text" placeholder="例如 deepseek-v4-flash"><span class="field-help">填写服务商实际提供的模型标识。</span></div><div class="config-field"><label for="apiKey">API 密钥</label><input id="apiKey" type="password" autocomplete="new-password" placeholder="留空表示保持现有密钥"><span class="field-help">保存后只显示掩码，留空不会覆盖原密钥。</span></div><div class="config-field"><label for="enabled">AI 复核开关</label><select id="enabled"><option value="true">启用</option><option value="false">停用</option></select><span class="field-help">停用时仍执行规则审核，但不调用模型。</span></div></div><label class="config-key-option"><input id="clearKey" type="checkbox"> 清空当前已保存的 API 密钥</label><div class="config-actions"><button id="saveConfig" class="btn btn-primary" type="button">保存配置</button><button id="testAi" class="btn btn-secondary" type="button">测试 AI 连接</button><span id="configDirty" class="skill-badge">未修改</span></div><div id="configStatus" class="status">正在读取配置……</div></div></section>
 <section id="logsPage" class="page"><div class="panel"><div class="panel-head"><div><h3>运行日志</h3><div class="muted">记录服务启动、文件审核、AI 状态和报告生成过程；不会记录 API 密钥。</div></div><div class="log-toolbar"><span id="logMeta" class="log-meta">尚未刷新</span><button id="refreshLogs" class="btn btn-secondary" type="button">刷新日志</button></div></div><pre id="logs" class="log-box">正在读取日志……</pre></div></section><section id="historyPage" class="page"><div class="panel"><div class="panel-head"><div><h3>审计台账</h3><div class="muted">每完成一次审核自动追加一条记录，并跨文件累计汇总；汇总报告可在本页直接下载，文件同时保存在服务端 runs 目录。</div></div><div class="log-toolbar"><button id="dlSummary" class="btn btn-secondary" type="button">下载汇总报告</button><button id="dlLedger" class="btn btn-secondary" type="button">下载台账 JSON</button><button id="refreshHistory" class="btn btn-secondary" type="button">刷新台账</button></div></div><div id="historyHost" class="muted" style="padding:6px 0">正在读取台账……</div></div></section>
@@ -272,10 +418,12 @@ function adminTokenValue(){try{return localStorage.getItem('kksAdminToken')||''}
 function isAuthErr(err){return Boolean(err&&(err.code==='unauthorized'||err.code==='admin_token_unset'))}
 function authHint(err){return err&&err.code==='admin_token_unset'?'服务端未配置 KKS_ADMIN_TOKEN，请管理员在 .env 中设置后重启服务':'请先在「AI 配置」页填写管理令牌'}
 async function jsonFetch(url,options={}){const opts=Object.assign({},options);const tk=adminTokenValue();if(tk){opts.headers=Object.assign({},options.headers||{},{Authorization:'Bearer '+tk})}const r=await fetch(url,opts);const d=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(d.error||'请求失败');e.code=d.code;e.status=r.status;throw e}return d}
- const pageMeta={auditPage:['KKS QUALITY CONTROL','编码审核工作台','上传 Excel 文件，AI 智能识别并生成审核结果'],skillPage:['RULE MANAGEMENT','Skill 规则管理','维护 AI 参考文档和可执行审核规则'],configPage:['AI ADMINISTRATION','AI 配置','管理模型接口、密钥和审核参数'],logsPage:['SYSTEM ACTIVITY','运行日志','查看审核任务、配置变更和服务运行记录'],historyPage:['AUDIT HISTORY','审计台账','跨文件累计记录与汇总对比']};
+ const pageMeta={auditPage:['KKS QUALITY CONTROL','编码审核工作台','上传 Excel 文件，AI 智能识别并生成审核结果'],generatePage:['KKS CODE GENERATION','编码生成','按设计编码生成设备树：设备名称 / KKS编码 / 上级名称与编码'],skillPage:['RULE MANAGEMENT','Skill 规则管理','维护 AI 参考文档和可执行审核规则'],configPage:['AI ADMINISTRATION','AI 配置','管理模型接口、密钥和审核参数'],logsPage:['SYSTEM ACTIVITY','运行日志','查看审核任务、配置变更和服务运行记录'],historyPage:['AUDIT HISTORY','审计台账','跨文件累计记录与汇总对比']};
 function setPageMeta(page){const meta=pageMeta[page]||pageMeta.auditPage;document.getElementById('pageEyebrow').textContent=meta[0];document.getElementById('pageTitle').textContent=meta[1];document.getElementById('pageSubtitle').textContent=meta[2]}
- function activatePage(page){document.querySelectorAll('.nav-link').forEach(x=>x.classList.toggle('active',x.dataset.panel===page));document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id===page));setPageMeta(page);if(page==='logsPage')loadLogs();if(page==='configPage')loadConfig();if(page==='historyPage')loadHistory()}
- document.querySelectorAll('.nav-link,.page-switch').forEach(btn=>btn.addEventListener('click',()=>activatePage(btn.dataset.panel)));setPageMeta('auditPage');
+ function activatePage(page){document.querySelectorAll('.nav-link').forEach(x=>x.classList.toggle('active',x.dataset.panel===page));document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id===page));setPageMeta(page);if(page==='logsPage')loadLogs();if(page==='configPage')loadConfig();if(page==='historyPage')loadHistory();if(page==='generatePage'&&window.__initGeneratePage)window.__initGeneratePage()}
+ document.querySelectorAll('.nav-link,.page-switch').forEach(btn=>btn.addEventListener('click',()=>activatePage(btn.dataset.panel)));
+// 深链接：?page=generatePage 可直接打开某个 Tab（也便于分享/书签）
+(function(){try{var want=new URLSearchParams(location.search).get('page');if(want&&document.getElementById(want))activatePage(want);else setPageMeta('auditPage')}catch(e){setPageMeta('auditPage')}})();
 const fileInput=document.getElementById('file'),uploadZone=document.getElementById('uploadZone');
  function formatBytes(value){if(!value)return '—';if(value<1024*1024)return (value/1024).toFixed(1)+' KB';return (value/1024/1024).toFixed(1)+' MB'}
  function showSelectedFile(file){setText('fileName',file?file.name:'尚未选择文件');setText('fileSize',file?formatBytes(file.size):'—');setText('fileFormat',file?'.'+file.name.split('.').pop().toLowerCase():'支持 .xlsx');setText('uploadState',file?'已选择文件':'等待上传')}
@@ -291,9 +439,9 @@ fileInput.addEventListener('change',e=>showSelectedFile(e.target.files[0]));
  function setProgress(value,text,hint){document.getElementById('progressBar').style.width=value+'%';setText('progressPercent',value+'%');setText('progressText',text);setText('progressHint',hint);if(value>0&&value<100)setResultState('审核中','running')}
  function startProgress(){document.getElementById('progressPanel').hidden=false;document.getElementById('resultDashboard').hidden=true;result.hidden=false;links.hidden=true;setText('uploadState','正在审核');setResultMessage('正在创建审核任务','文件已接收，正在执行规则检查和 AI 复核。','running');setResultState('排队中','running');setProgress(5,'审核任务已启动','已接收文件，正在等待后台任务开始')}
  function finishProgress(ok){setProgress(ok?100:0,ok?'审核完成':'审核未完成',ok?'报告已生成，可以下载结果':'请根据错误信息修正后重试');setResultState(ok?'已完成':'未完成',ok?'done':'failed')}
- function renderQualityMetrics(metrics){const q=metrics||{};setText('effectiveKks',q.effective_kks===undefined?'—':q.effective_kks);setText('deviceLevelCodes',q.device_level_codes===undefined?'—':q.device_level_codes);setText('duplicateCodes',q.duplicate_codes===undefined?'—':q.duplicate_codes);setText('parentErrors',q.parent_errors===undefined?'—':q.parent_errors);setText('qualityP0',q.p0===undefined?'—':q.p0);setText('qualityP1',q.p1===undefined?'—':q.p1);setText('qualityP2',q.p2===undefined?'—':q.p2)}
+ function renderQualityMetrics(metrics){const q=metrics||{};setText('effectiveKks',q.effective_kks===undefined?'—':q.effective_kks);setText('deviceLevelCodes',q.device_level_codes===undefined?'—':q.device_level_codes);setText('duplicateCodes',q.duplicate_codes===undefined?'—':q.duplicate_codes);setText('parentErrors',q.parent_errors===undefined?'—':q.parent_errors);setText('qualityP0',q.p0===undefined?'—':q.p0);setText('qualityP1',q.p1===undefined?'—':q.p1);setText('qualityP2',q.p2===undefined?'—':q.p2);setText('ruleHitCount',q.rule_hits===undefined?'—':q.rule_hits);setText('pendingReviewCount',q.pending_review===undefined?'—':q.pending_review);setText('falsePositiveCount',q.suspected_false_positives===undefined?'—':q.suspected_false_positives)}
  function renderAuditSummary(d){if(d.quality_metrics)renderQualityMetrics(d.quality_metrics)}
- function renderDistribution(counts,total){const p0=Number(counts.P0||0),p1=Number(counts.P1||0),p2=Number(counts.P2||0),sum=p0+p1+p2,totalValue=Number(total)||sum||1,a=p0/totalValue*100,b=p1/totalValue*100,c=p2/totalValue*100;setText('legendP0',p0);setText('legendP1',p1);setText('legendP2',p2);setText('priorityP0Table',p0);setText('priorityP1Table',p1);setText('priorityP2Table',p2);setText('priorityTotal',sum);setText('donutTotal',total||sum);const bars=[['barP0',a],['barP1',b],['barP2',c]];bars.forEach(([id,value])=>{const el=document.getElementById(id);if(el)el.style.width=value.toFixed(2)+'%'});const donut=document.getElementById('issueDonut');if(donut)donut.style.background='conic-gradient(#ef4444 0 '+a+'%,#f59e0b '+a+'% '+(a+b)+'%,#2563eb '+(a+b)+'% 100%)'}
+ function renderDistribution(counts){const p0=Number(counts.P0||0),p1=Number(counts.P1||0),p2=Number(counts.P2||0),sum=p0+p1+p2,totalValue=sum||1,a=p0/totalValue*100,b=p1/totalValue*100,c=p2/totalValue*100;setText('legendP0',p0);setText('legendP1',p1);setText('legendP2',p2);setText('priorityP0Table',p0);setText('priorityP1Table',p1);setText('priorityP2Table',p2);setText('priorityTotal',sum);setText('donutTotal',sum);const bars=[['barP0',a],['barP1',b],['barP2',c]];bars.forEach(([id,value])=>{const el=document.getElementById(id);if(el)el.style.width=value.toFixed(2)+'%'});const donut=document.getElementById('issueDonut');if(donut)donut.style.background='conic-gradient(#ef4444 0 '+a+'%,#f59e0b '+a+'% '+(a+b)+'%,#2563eb '+(a+b)+'% 100%)'}
 function escHtml(v){return String(v==null?'\u2014':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 function _nodeBadge(n){let b='';if(Number(n.p0))b+='<span class="tb tb-p0">'+n.p0+'</span>';if(Number(n.p1))b+='<span class="tb tb-p1">'+n.p1+'</span>';if(Number(n.p2))b+='<span class="tb tb-p2">'+n.p2+'</span>';return b}
 function _issueRowsHtml(rows){if(!Array.isArray(rows)||!rows.length)return '';return '<div class="it-issues">'+rows.map(function(r){return '<div class="it-issue"><span class="it-row">行号 '+escHtml(r.excel_row||'—')+'</span><span class="it-msg">'+escHtml(r.message||'待核问题')+'</span><div class="it-suggest">建议：'+escHtml(r.suggestion||'')+'</div></div>'}).join('')+'</div>'}
@@ -301,7 +449,7 @@ function _treeNodeHtml(n,open){const isCode=n.kind==='code',act=String(n.action|
 function renderIssueTree(container,nodes,openDepth){if(!container)return;if(!Array.isArray(nodes)||!nodes.length){container.innerHTML='<div class="empty-preview">本次没有可展示的问题</div>';return}container.innerHTML=nodes.map(function(n){return _treeNodeHtml(n,Number(n.level||0)<Number(openDepth||1))}).join('')}
 function renderIssuePreview(items){const body=document.getElementById('issuePreview');if(!body)return;renderIssueTree(body,items,1)}
 
-function renderCompletedResult(d){const counts=d.priority_counts||{};document.getElementById('result').hidden=true;document.getElementById('progressPanel').hidden=true;document.getElementById('resultDashboard').hidden=false;setText('uploadState','审核完成');renderQualityMetrics(d.quality_metrics||{});renderDistribution(counts,d.issue_count);renderIssuePreview(d.issue_preview||[]);links.innerHTML='';for(const [label,url] of Object.entries(d.files||{})){const a=document.createElement('a');a.className='download-card';a.href=url;a.download='';const icon=document.createElement('span');icon.className='download-icon';icon.textContent=label.includes('HTML')?'</>':'XLSX';const copy=document.createElement('span');copy.className='download-copy';const title=document.createElement('strong');title.textContent=label;const desc=document.createElement('span');desc.textContent=label.includes('HTML')?'正式质量审核报告，包含结论和整改建议':'精简问题清单，支持筛选和排序';copy.append(title,desc);const action=document.createElement('span');action.className='download-action';action.textContent='下载';a.append(icon,copy,action);links.appendChild(a)}links.hidden=!Object.keys(d.files||{}).length}
+function renderCompletedResult(d){const counts=d.priority_counts||{};document.getElementById('result').hidden=true;document.getElementById('progressPanel').hidden=true;document.getElementById('resultDashboard').hidden=false;setText('uploadState','审核完成');renderQualityMetrics(d.quality_metrics||{});renderDistribution(counts);renderIssuePreview(d.issue_preview||[]);links.innerHTML='';for(const [label,url] of Object.entries(d.files||{})){const a=document.createElement('a');a.className='download-card';a.href=url;a.download='';const icon=document.createElement('span');icon.className='download-icon';icon.textContent=label.includes('HTML')?'</>':'XLSX';const copy=document.createElement('span');copy.className='download-copy';const title=document.createElement('strong');title.textContent=label;const desc=document.createElement('span');desc.textContent=label.includes('HTML')?'正式质量审核报告，包含结论和整改建议':'精简问题清单，支持筛选和排序';copy.append(title,desc);const action=document.createElement('span');action.className='download-action';action.textContent='下载';a.append(icon,copy,action);links.appendChild(a)}links.hidden=!Object.keys(d.files||{}).length}
  async function watchAudit(runId){while(true){const d=await jsonFetch('/api/audits/'+encodeURIComponent(runId)+'/status'),ai=d.ai_review||{};if(d.percent!==undefined)setProgress(d.percent,d.message||'正在审核',d.hint||'');renderAuditSummary(d);if(d.status==='completed'){renderCompletedResult(d);finishProgress(true);return}if(d.status==='error')throw new Error(d.hint||d.error||'审核失败');setResultMessage(d.message||'正在审核，请稍候……',d.hint||'后台正在处理，请保持页面打开。','running');await new Promise(resolve=>setTimeout(resolve,600))}}
 async function loadState(){try{const d=await jsonFetch('/healthz');setAiBadge(Boolean(d.ai_configured))}catch(err){setAiBadge(false)}}
   form.addEventListener('submit',async e=>{e.preventDefault();submit.disabled=true;submit.classList.add('is-loading');submit.textContent='审核准备中…';startProgress();try{const created=await jsonFetch('/api/audits',{method:'POST',body:new FormData(form)});await watchAudit(created.run_id)}catch(err){setResultMessage('审核失败',err.message||'请根据日志排查问题后重试。','failed');finishProgress(false)}finally{submit.disabled=false;submit.classList.remove('is-loading');submit.textContent='开始审核'}});
@@ -350,6 +498,12 @@ loadState();loadConfig();loadSkill();loadLogs();
 @media(max-width:700px){.biz-kpis{grid-template-columns:repeat(2,1fr)}}
 </style><script>
 function _bizEsc(s){s=(s===null||s===undefined)?'':String(s);var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+  // 明细表空值统一标注"源表未填"
+  function _bizCell(col,row){var v=row[col.k];var t=(v===null||v===undefined)?'':String(v).trim();
+    if(t&&t!=='-'&&t!=='—'&&t!=='无')return _bizEsc(t);
+    if(col.k==='ai_suggested_code')return '<span style="color:#94a3b8">—（无需改码，见建议说明）</span>';
+    if(col.k==='ai_suggest_note')return _bizEsc('未生成建议说明：该行未进入问题行建议范围');
+    return '<span style="color:#b0bac7">—（源表未填）</span>'}
 function renderBusinessOverview(ov){
   var host=document.getElementById('issuePreview');if(!host)return;
   var buckets=Array.isArray(ov&&ov.buckets)?ov.buckets.filter(function(b){return b.items&&b.items.length}):[];
@@ -368,7 +522,7 @@ function renderBusinessOverview(ov){
     var bkt=buckets[i],cols=bkt.columns||[],items=bkt.items||[];
     var show=items.slice(0,80);
     var th=cols.map(function(c){return '<th>'+_bizEsc(c.t)+'</th>'}).join('');
-    var tr=show.map(function(r){return '<tr>'+cols.map(function(c){return '<td>'+_bizEsc(r[c.k])+'</td>'}).join('')+'</tr>'}).join('');
+    var tr=show.map(function(r){return '<tr>'+cols.map(function(c){return '<td>'+_bizCell(c,r)+'</td>'}).join('')+'</tr>'}).join('');
     if(items.length>show.length)tr+='<tr><td colspan="'+cols.length+'" class="biz-more">…共 '+items.length+' 条，完整清单见 Excel 下载</td></tr>';
     var panel=host.querySelector('.biz-panel');if(!panel)return;
     panel.innerHTML='<div class="biz-table-wrap"><table class="biz-table"><thead><tr>'+th+'</tr></thead><tbody>'+tr+'</tbody></table></div>';
@@ -382,7 +536,7 @@ function renderCompletedResult(d){
   document.getElementById('result').hidden=true;document.getElementById('progressPanel').hidden=true;document.getElementById('resultDashboard').hidden=false;
   setText('uploadState','审核完成');
   renderQualityMetrics(d.quality_metrics||{});
-  renderDistribution(counts,d.issue_count);
+  renderDistribution(counts);
   renderBusinessOverview(d.business_overview||null);
   var links=document.getElementById('links');links.innerHTML='';
   for(var key in (d.files||{})){var url=d.files[key];var a=document.createElement('a');a.className='download-card';a.href=url;a.download='';var icon=document.createElement('span');icon.className='download-icon';icon.textContent=key.indexOf('HTML')>=0?'</>':'XLSX';var copy=document.createElement('span');copy.className='download-copy';var title=document.createElement('strong');title.textContent=key;var desc=document.createElement('span');desc.textContent=key.indexOf('HTML')>=0?'八维业务化审核报告（总体结论/八维总表/分组明细）':'业务分组问题清单（概览+各类明细）';copy.append(title,desc);var action=document.createElement('span');action.className='download-action';action.textContent='下载';a.append(icon,copy,action);links.appendChild(a);}
@@ -401,6 +555,25 @@ function loadHistory(){
     return '<button class="btn btn-secondary" style="padding:2px 8px;font-size:12px;margin-right:4px" data-run="'+r+'" data-kind="html" type="button">报告</button>'
       +'<button class="btn btn-secondary" style="padding:2px 8px;font-size:12px" data-run="'+r+'" data-kind="xlsx" type="button">Excel</button>';
   }
+  function keyOf(e){return [e.hash||'',e.ts||'',e.file||''].join('|')}
+  function delCell(e){
+    var k=esc(keyOf(e));
+    return '<button class="btn btn-secondary" style="padding:2px 8px;font-size:12px;color:#b42318;border-color:#f3c9c4" data-del="'+k+'" type="button" title="从台账移除这条记录（需管理令牌）">删除</button>';
+  }
+  function deleteEntry(key,file,hasRun){
+    var msg='确定从台账移除这条审核记录吗？\\n\\n文件：'+(file||'（未知）')+'\\n标识：'+key+'\\n\\n';
+    msg+='台账是审核留痕：本次删除会写入 runs/.trash/ 留痕文件（含被删记录原文），可人工恢复。';
+    if(!window.confirm(msg))return;
+    var alsoArtifacts=false;
+    if(hasRun){
+      alsoArtifacts=window.confirm('同时移除该次的报告 / 问题清单产物吗？\\n\\n「确定」= 一并移除（移入 runs/.trash/，可恢复）\\n「取消」= 只移除台账记录，产物原地保留、直链仍可下载');
+    }
+    var tk=adminTokenValue();
+    fetch('/api/history/delete',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},tk?{Authorization:'Bearer '+tk}:{}),body:JSON.stringify({keys:[key],remove_artifacts:!!alsoArtifacts})})
+      .then(function(r){return r.json().catch(function(){return {}}).then(function(d){if(!r.ok){var e=new Error(d.error||('删除失败 HTTP '+r.status));e.code=d.code;throw e}return d})})
+      .then(function(d){alert(d.message||'已移除');loadHistory()})
+      .catch(function(err){alert(isAuthErr(err)?('删除需管理令牌：'+authHint(err)):('删除失败：'+(err&&err.message)))});
+  }
   jsonFetch('/api/history').then(function(d){
     var entries=(d&&d.entries)||[];
     var dlS=document.getElementById('dlSummary'),dlL=document.getElementById('dlLedger');
@@ -415,11 +588,11 @@ function loadHistory(){
       +'<div class="biz-kpi '+(tp0?'bad':'ok')+'"><b>'+ti.toLocaleString()+'</b><span>累计问题（P0 '+tp0+'）</span></div>'
       +'<div class="biz-kpi"><b>'+(tr?(ti/tr*100).toFixed(1)+'%':'—')+'</b><span>平均问题率</span></div>'
       +'<div class="biz-kpi"><b>'+ta.toLocaleString()+'</b><span>累计 AI 复核</span></div></div>';
-    var h='<div class="biz-table-wrap"><table class="biz-table"><thead><tr><th>时间</th><th>文件</th><th>数据行</th><th>问题</th><th>问题率</th><th>P0</th><th>P1</th><th>P2</th><th>AI复核</th><th>口径</th><th>报告</th></tr></thead><tbody>';
+    var h='<div class="biz-table-wrap"><table class="biz-table"><thead><tr><th>时间</th><th>文件</th><th>数据行</th><th>问题</th><th>问题率</th><th>P0</th><th>P1</th><th>P2</th><th>AI复核</th><th>口径</th><th>报告</th><th>台账</th></tr></thead><tbody>';
     entries.slice().reverse().forEach(function(e,idx){
       var ai=e.ai_reviewed?(e.ai_reviewed+'/'+e.ai_candidate):(e.ai_status==='completed'?e.ai_reviewed:'未启用');
       var dup=(+e.repeats||1)>1?(' <span style="display:inline-block;margin-left:6px;padding:0 6px;border-radius:9px;background:#e8f0fe;color:#1a56b8;font-size:11px;font-weight:500" title="重复审核 '+(+e.repeats)+' 次，首次 '+esc(e.first_ts||'')+'">×'+(+e.repeats)+'</span>'):'';
-      h+='<tr'+(idx===0?' style="background:#fffbe6"':'')+'><td>'+esc(e.ts)+'</td><td>'+esc(e.file)+dup+'</td><td>'+(+e.rows||0).toLocaleString()+'</td><td>'+(+e.issues||0).toLocaleString()+'</td><td>'+rate(+e.issues||0,+e.rows||0)+'</td><td>'+((e.priority&&e.priority.P0)||0)+'</td><td>'+((e.priority&&e.priority.P1)||0)+'</td><td>'+((e.priority&&e.priority.P2)||0)+'</td><td>'+esc(ai)+'</td><td>'+(e.incremental?'增量':'全量')+'</td><td>'+artCell(e)+'</td></tr>';
+      h+='<tr'+(idx===0?' style="background:#fffbe6"':'')+'><td>'+esc(e.ts)+'</td><td>'+esc(e.file)+dup+'</td><td>'+(+e.rows||0).toLocaleString()+'</td><td>'+(+e.issues||0).toLocaleString()+'</td><td>'+rate(+e.issues||0,+e.rows||0)+'</td><td>'+((e.priority&&e.priority.P0)||0)+'</td><td>'+((e.priority&&e.priority.P1)||0)+'</td><td>'+((e.priority&&e.priority.P2)||0)+'</td><td>'+esc(ai)+'</td><td>'+(e.incremental?'增量':'全量')+'</td><td>'+artCell(e)+'</td><td>'+delCell(e)+'</td></tr>';
     });
     h+='</tbody></table></div>';
     var trend='',t=d&&d.trend;
@@ -427,7 +600,7 @@ function loadHistory(){
       var tpts=(t.points||[]).map(function(p){return '<li>'+esc(p)+'</li>'}).join('');
       trend='<div class="biz-aisum" style="margin:12px 0"><div class="biz-aisum-h">AI 跨文件趋势总结<span class="biz-aisum-m">'+esc(t.model||'')+' ｜ 基于 '+(t.file_count||entries.length)+' 次审核 ｜ '+esc(t.ts||'')+'</span></div><p>'+esc(t.overall)+'</p>'+(tpts?'<ul>'+tpts+'</ul>':'')+'</div>';
     }
-    host.innerHTML=kpis+trend+h+'<div class="muted" style="margin-top:8px;font-size:12px">「报告」列可直接下载该次审核生成的 HTML 报告与问题清单 Excel；产物按保留策略清理，超期后显示「已归档」。点右上角「下载汇总报告」可导出完整汇总页（含 AI 趋势总结与本次 vs 历史平均对比）；服务端路径 runs/KKS审核台账汇总.html，台账原始数据 runs/audit_ledger.json。</div>';
+    host.innerHTML=kpis+trend+h+'<div class="muted" style="margin-top:8px;font-size:12px">「报告」列可直接下载该次审核生成的 HTML 报告与问题清单 Excel；产物按保留策略清理，超期后显示「已归档」。「台账」列的「删除」可从台账移除该条记录（需管理令牌）：默认只移除记录、产物原地保留，也可选择连同产物一起移入 runs/.trash/（可人工恢复），每次删除都会在 .trash 留痕并在汇总报告中列出。点右上角「下载汇总报告」可导出完整汇总页（含 AI 趋势总结与本次 vs 历史平均对比）；服务端路径 runs/KKS审核台账汇总.html，台账原始数据 runs/audit_ledger.json。</div>';
   }).catch(function(err){host.innerHTML='<div class="muted">'+esc(isAuthErr(err)?('台账需管理令牌：'+authHint(err)):('读取台账失败：'+(err&&err.message)))+'</div>'});
 }
 function downloadLedger(kind){
@@ -456,9 +629,96 @@ function downloadArtifact(runId,kind){
   }).catch(function(err){alert(isAuthErr(err)?('下载需管理令牌：'+authHint(err)):('下载失败：'+(err&&err.message)))});
 }
 (function(){var s=document.getElementById('dlSummary'),l=document.getElementById('dlLedger');if(s)s.onclick=function(){downloadLedger('summary')};if(l)l.onclick=function(){downloadLedger('ledger')}})();
-(function(){var host=document.getElementById('historyHost');if(!host||!host.addEventListener)return;host.addEventListener('click',function(ev){var t=ev.target;while(t&&t!==host){if(t.getAttribute&&t.getAttribute('data-run')){downloadArtifact(t.getAttribute('data-run'),t.getAttribute('data-kind'));return}t=t.parentNode}})})();
+(function(){var host=document.getElementById('historyHost');if(!host||!host.addEventListener)return;host.addEventListener('click',function(ev){var t=ev.target;while(t&&t!==host){if(t.getAttribute&&t.getAttribute('data-run')){downloadArtifact(t.getAttribute('data-run'),t.getAttribute('data-kind'));return}if(t.getAttribute&&t.getAttribute('data-del')){var row=t.closest?t.closest('tr'):null;var file=(row&&row.cells&&row.cells[1])?String(row.cells[1].textContent||'').replace(/×\\d+$/,'').trim():'';var hasRun=!!(row&&row.querySelector&&row.querySelector('[data-run]'));deleteEntry(t.getAttribute('data-del'),file,hasRun);return}t=t.parentNode}})})();
 document.getElementById('refreshHistory').onclick=loadHistory;
 loadHistory();
+/* ---------------- 编码生成（第一步） ---------------- */
+window.__initGeneratePage=function(){const box=document.getElementById('genRecent');if(box&&box.dataset.loaded!=='1'){box.dataset.loaded='1';genLoadRecent()}};
+function genSelected(){const f=document.getElementById('genFile');return f&&f.files&&f.files[0]}
+function genShowFile(){const f=genSelected();const el=document.getElementById('genFileName');if(el){el.textContent=f?(f.name+'（'+(f.size/1024).toFixed(0)+' KB）'):'尚未选择文件';el.classList.toggle('muted',!f)}}
+(function(){const pick=document.getElementById('genPick'),input=document.getElementById('genFile'),zone=document.getElementById('genDrop');
+  if(!pick||!input||!zone)return;
+  pick.onclick=function(){input.click()};
+  input.onchange=genShowFile;
+  ['dragenter','dragover'].forEach(function(ev){zone.addEventListener(ev,function(e){e.preventDefault();zone.classList.add('dragging')})});
+  ['dragleave','drop'].forEach(function(ev){zone.addEventListener(ev,function(e){e.preventDefault();zone.classList.remove('dragging')})});
+  zone.addEventListener('drop',function(e){const dt=e.dataTransfer;if(dt&&dt.files&&dt.files.length){input.files=dt.files;genShowFile()}});
+  document.getElementById('genStart').onclick=genStart;
+})();
+function genSetProgress(percent,text,hint){const p=document.getElementById('genProgress');if(p)p.hidden=false;
+  setText('genProgressText',text||'正在生成');setText('genProgressPercent',(percent||0)+'%');setText('genProgressHint',hint||'');
+  const bar=document.getElementById('genProgressBar');if(bar)bar.style.width=Math.max(2,Math.min(100,percent||0))+'%'}
+function genStart(){const f=genSelected();if(!f){alert('请先选择要生成的 Excel 文件');return}
+  document.getElementById('genResult').hidden=true;genSetProgress(1,'正在上传文件','');
+  setText('genHint','已提交，正在后台生成……（含 AI 补名称，耗时较长）');
+  // 生成固定走「AI 补名称」：不再提供勾选项，也**不再与竣工版逐列比对**。
+  // 管理令牌从「AI 配置」页读取后随请求带上（服务端用 KKS_ADMIN_TOKEN 校验）；
+  // 缺令牌时服务端返回 401/403，这里给出可直接照做的提示，避免"看不懂的失败"。
+  var genHeaders={'Content-Type':'application/octet-stream','X-Filename':encodeURIComponent(f.name)};
+  var genToken=adminTokenValue();if(genToken){genHeaders['Authorization']='Bearer '+genToken}
+  fetch('/api/generate?use_ai=1',{method:'POST',headers:genHeaders,body:f})
+    .then(function(r){return r.json().catch(function(){return {}}).then(function(d){if(!r.ok){var e=new Error(d.error||('提交失败 HTTP '+r.status));e.status=r.status;throw e}return d})})
+    .then(function(d){genPoll(d.run_id,0)})
+    .catch(function(err){
+      if(err.status===401||err.status===403){genSetProgress(0,'未授权','缺少管理令牌');
+        setText('genHint','需要管理令牌：请到「AI 配置」页填入 KKS_ADMIN_TOKEN 后重试');return}
+      setText('genHint','提交失败：'+err.message);genSetProgress(0,'提交失败',err.message)});
+}
+function genPoll(runId,tries){if(tries>2400){genSetProgress(100,'生成超时','请到运行日志查看详情');return}
+  fetch('/api/generate/'+encodeURIComponent(runId)+'/status').then(function(r){return r.json()}).then(function(d){
+    // ⚠️ 任务已不在服务端（服务重启会杀掉在跑的任务、内存状态随之丢失）：
+    //    必须**停下来并说清楚**，不能继续轮询——否则界面永远停在最后那个百分比（实测卡在 30%）。
+    if(d.error||d.status===undefined){
+      genSetProgress(0,'任务已丢失',d.error||'该任务已不在服务端');
+      setText('genHint','任务已丢失（服务重启会中断在跑的任务）：'+(d.error||'状态不再保留')+'——请重新点「开始生成」');
+      return}
+    genSetProgress(d.percent||0,d.message||'正在生成',d.hint||'');
+    if(d.status==='completed'){genDone(d);return}
+    if(d.status==='error'){setText('genHint','生成失败：'+(d.hint||d.error||'未知错误'));return}
+    if(d.status==='interrupted'){genSetProgress(0,'任务中断',d.hint||'');setText('genHint','任务中断：'+(d.hint||'请重新提交'));return}
+    setTimeout(function(){genPoll(runId,tries+1)},1500);
+  }).catch(function(){setTimeout(function(){genPoll(runId,tries+1)},2500)});
+}
+function genDone(d){setText('genHint',d.compliance&&d.compliance.status==='blocked'?'生成完成，存在合规问题，请查看修编说明':'生成完成，工程约定及全厂唯一性仍待确认');
+  const kpis=[['数据行',(d.data_rows||0).toLocaleString()],['生成节点',(d.nodes||0).toLocaleString()],['父级节点',(d.parent_nodes||0).toLocaleString()],['需人核',(d.need_human||0).toLocaleString()]];
+  const delivery=(d.compliance||{}).delivery_policy||{}, blankReasons=(d.compliance||{}).blank_reasons||{};
+  if(delivery.final_codes!=null){kpis.push(['已写编码',Number(delivery.final_codes).toLocaleString()])}
+  if(Object.keys(blankReasons).length){
+    kpis.push(['指令/测点留空',Number(blankReasons['指令/测点按要求留空']||0).toLocaleString()]);
+    const pendingBlanks=Object.entries(blankReasons).reduce(function(total,item){return total+(item[0]==='指令/测点按要求留空'?0:Number(item[1]||0))},0);
+    kpis.push(['设备编码待核留空',pendingBlanks.toLocaleString()]);
+  }
+  if(d.ai_applied!=null){kpis.push(['AI 补名',(d.ai_applied||0).toLocaleString()])}
+  const host=document.getElementById('genKpis');
+  if(host)host.innerHTML=kpis.map(function(k){return '<div class="biz-kpi"><b>'+_bizEsc(k[1])+'</b><span>'+_bizEsc(k[0])+'</span></div>'}).join('');
+  const links=document.getElementById('genLinks');if(links){links.innerHTML='';
+    for(const key in (d.files||{})){const url=d.files[key];const a=document.createElement('a');a.className='download-card';a.href=url;a.download='';
+      const icon=document.createElement('span');icon.className='download-icon';icon.textContent=key.indexOf('清单')>=0?'XLSX':'XLSX';
+      const copy=document.createElement('span');copy.className='download-copy';
+      const title=document.createElement('strong');title.textContent=key;
+      const desc=document.createElement('span');desc.textContent=key.indexOf('待核清单')>=0?'设备编码留空的原因、源表行号和输出行号；指令/测点不计入待核设备':'你的原表 + 已生成的设备名称 / KKS编码 / 父级信息（另附修编说明）';
+      copy.append(title,desc);const action=document.createElement('span');action.className='download-action';action.textContent='下载';
+      a.append(icon,copy,action);links.appendChild(a)}}
+  document.getElementById('genResult').hidden=false;
+  genLoadRecent();
+}
+function genLoadRecent(){const host=document.getElementById('genRecent');if(!host)return;
+  // 🔴 记录的唯一来源是**服务端**（实时扫 runs/ 目录），不再读浏览器 localStorage。
+  //    旧实现把记录存在 localStorage 里，后果实测三条：
+  //      ① 服务端把记录清空后，页面**仍然显示**那几条（点开 404）——用户以为没清掉；
+  //      ② 换个浏览器 / VSCode 预览窗口就"记录没了"（各浏览器 localStorage 独立）；
+  //      ③ 与服务的真实状态永远可能不一致，且没有对账机制。
+  try{localStorage.removeItem('kksGenRecent')}catch(e){}
+  fetch('/api/generate/recent').then(function(r){return r.json()}).then(function(d){
+    const arr=(d&&d.items)||[];
+    if(!arr.length){host.textContent='暂无记录（生成完成后会显示最近 10 次）';return}
+    host.innerHTML=arr.map(function(r){
+      const links=Object.keys(r.files||{}).map(function(k){return '<a href="'+_bizEsc(r.files[k])+'" download style="margin-right:10px">'+_bizEsc(k)+'</a>'}).join('');
+      const bad=(r.status&&r.status!=='completed')?' <span style="color:#c0392b;font-weight:700">'+(r.status==='interrupted'?'已中断':'未完成')+'</span>':'';
+      const meta=[_bizEsc(r.ts||r.run_id||''),r.rows?((r.rows||0).toLocaleString()+' 行'):'',r.nodes?((r.nodes||0).toLocaleString()+' 节点'):''].filter(Boolean).join(' ｜ ');
+      return '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>'+_bizEsc(r.file||r.run_id||'')+'</b>'+bad+' <span class="muted">'+meta+'</span><div style="margin-top:4px">'+(links||'<span class="muted">无产物</span>')+'</div>'+(r.hint?'<div class="muted" style="margin-top:2px;font-size:12px">'+_bizEsc(r.hint)+'</div>':'')+'</div>'}).join('');
+  }).catch(function(){host.textContent='读取记录失败（服务端无响应）'});
+}
 </script></body></html>"""
 UPLOAD_PAGE = UPLOAD_PAGE.replace("</head>", RESULT_UI_STYLE + AUDIT_REDESIGN_STYLE + DASHBOARD_UI_STYLE + "</head>")
 
@@ -786,6 +1046,18 @@ class AuditHandler(BaseHTTPRequestHandler):
             self.send_json({"ok": True, "lines": tail_log(limit)})
             return
 
+        # ---- 第一步：生成任务的查询与产物下载（公开，不需要令牌）----
+        if path == "/api/generate/recent":
+            self.handle_generate_recent()
+            return
+        parts = path.split("/")
+        if len(parts) == 5 and parts[1:3] == ["api", "generate"] and parts[4] == "status":
+            self.handle_generate_status(parts[3])
+            return
+        if len(parts) == 5 and parts[1:3] == ["api", "generate"]:
+            self.handle_generate_artifact(parts[3], unquote(parts[4]))
+            return
+
         parts = path.split("/")
         if len(parts) == 4 and parts[1:3] == ["api", "audits"]:
             run_id, artifact = parts[3], None
@@ -827,6 +1099,218 @@ class AuditHandler(BaseHTTPRequestHandler):
         content_type, download_name = allowed[artifact]
         self.send_bytes(target.read_bytes(), content_type, download_name=download_name)
 
+    def handle_history_delete(self) -> None:
+        """从台账移除一条（或多条）审核记录。
+
+        审计台账是质量审核的留痕，删除属于敏感操作，因此：
+        - 走管理令牌保护（PROTECTED_POST），未授权直接 401/403；
+        - 记录标识用「哈希+时间+文件名」而不是数组下标（台账会因去重重排）；
+        - 服务端只做软删除：被删记录原文写入 runs/.trash/，产物是**移动**而不是删除；
+        - 删除后重渲染汇总页（用趋势缓存，不再触发模型调用）。
+        """
+        from audit_history import (
+            HISTORY_NAME,
+            LEDGER_NAME,
+            load_ledger,
+            load_trend,
+            load_trash_records,
+            remove_ledger_entries,
+            render_history_html,
+        )
+
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0 or length > 64 * 1024:
+            self.send_json({"error": "请求体为空或过大"}, 400)
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8", errors="strict"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self.send_json({"error": "请求体不是合法 JSON"}, 400)
+            return
+        if not isinstance(payload, dict):
+            self.send_json({"error": "请求体应为 JSON 对象"}, 400)
+            return
+
+        raw_keys = payload.get("keys")
+        if isinstance(raw_keys, str):
+            raw_keys = [raw_keys]
+        keys = {str(item).strip() for item in (raw_keys or []) if str(item).strip()}
+        if not keys:
+            self.send_json({"error": "缺少记录标识 keys（格式：内容哈希|时间|文件名）"}, 400)
+            return
+        remove_artifacts = bool(payload.get("remove_artifacts"))
+
+        result = remove_ledger_entries(
+            self.runs_dir, keys, remove_artifacts=remove_artifacts, operator="admin-token",
+        )
+        if not result.get("ok"):
+            self.send_json(result, 404)
+            return
+        ledger = load_ledger(self.runs_dir / LEDGER_NAME)
+        render_history_html(
+            self.runs_dir / HISTORY_NAME,
+            ledger,
+            ai_trend=load_trend(self.runs_dir),
+            removed=load_trash_records(self.runs_dir),
+        )
+        failed = result.get("artifact_failures") or []
+        message = f"已移除 {len(result['removed'])} 条台账记录"
+        if remove_artifacts:
+            message += "，产物已移入 runs/.trash/ 可恢复" if not failed else f"，但 {len(failed)} 个产物目录被占用未能移动（仍在 runs/ 下）"
+        else:
+            message += "，产物原地保留"
+        self.send_json({
+            **result,
+            "entries": ledger,
+            "message": message,
+        })
+
+    def _drain_body(self, length: int, chunk: int = 1 << 16) -> int:
+        """把请求体读掉并丢弃，返回实际读到的字节数。
+
+        ⚠️ 为什么必须这么做：如果服务端在客户端还没上传完时就回响应并关连接，
+        浏览器只会报 `Failed to fetch`，看不到真正的 401/413——用户以为"服务坏了"。
+        实测踩过：勾选"用 AI 补名称"但没配令牌时，1.9MB 的表格上传被 401 打断，
+        页面只显示"提交失败：Failed to fetch"。
+        """
+        remaining = max(0, length)
+        while remaining > 0:
+            block = self.rfile.read(min(chunk, remaining))
+            if not block:
+                break
+            remaining -= len(block)
+        return length - remaining
+
+    def handle_generate(self) -> None:
+        """接第一步生成任务：上传含设计编码的 Excel，后台生成设备树。
+
+        与审核一致的口径：上传/下载公开，但**启用 AI 需要管理令牌**
+        （AI 全量跑约 20 分钟且消耗模型额度，不能让人误触发）。
+        """
+        try:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+        except ValueError:
+            length = 0
+        if length <= 0:
+            self.send_json({"error": "请求体为空"}, 400)
+            return
+        # ⚠️ 顺序很重要：**先把请求体读完，再做任何校验/早退**。
+        # 否则客户端还在上传时服务端就断开，浏览器只会报 "Failed to fetch"，
+        # 用户看不到真正的 401/413（实测：勾了 AI 但没配令牌 + 1.9MB 表格 = 提交失败）
+        if length > self.max_upload_bytes:
+            self._drain_body(length)
+            self.send_json({"error": f"文件超过 {self.max_upload_bytes // 1024 // 1024} MB 限制"}, 413)
+            self.close_connection = True
+            return
+        body = self.rfile.read(length)
+        if not body:
+            self.send_json({"error": "上传文件为空"}, 400)
+            return
+
+        query = parse_qs(urlparse(self.path).query)
+        use_ai = (query.get("use_ai", ["1"])[0] or "1") in ("1", "true", "yes")
+        if use_ai and not self.require_admin():
+            return
+
+        raw_name = decode_filename_header(self.headers.get("X-Filename", "input.xlsx")) or "input.xlsx"
+        # 防目录穿越：只取文件名部分
+        filename = Path(raw_name).name
+        if not filename.lower().endswith(".xlsx"):
+            self.send_json({"error": "目前只支持 .xlsx 文件"}, 400)
+            return
+
+        run_id = f"{__import__('datetime').datetime.now():%Y%m%dT%H%M%S}_{uuid4().hex[:8]}"
+        run_dir = self.runs_dir / run_id
+        input_dir = run_dir / "input"
+        input_dir.mkdir(parents=True, exist_ok=False)
+        input_path = input_dir / filename
+        input_path.write_bytes(body)
+        LOGGER.info("generate_upload run_id=%s file=%s bytes=%s ai=%s",
+                    run_id, filename, len(body), use_ai)
+
+        _update_job_state(self.server, run_id, status="queued", phase="queued", percent=2,
+                          message="生成任务已创建", hint="等待后台线程启动",
+                          source_file=filename, use_ai=use_ai)
+        worker = threading.Thread(
+            target=_run_generate_job,
+            args=(self.server, run_id, input_path, run_dir),
+            kwargs={"use_ai": use_ai},
+            name=f"kks-gen-{run_id}",
+            daemon=True,
+        )
+        worker.start()
+        self.send_json({"run_id": run_id, "status": "queued",
+                        "status_url": f"/api/generate/{run_id}/status"}, 202)
+
+    def handle_generate_status(self, run_id: str) -> None:
+        state = _get_job_state(self.server, run_id)
+        if state is None:
+            self.send_json({"error": "未找到该生成任务"}, 404)
+            return
+        self.send_json(state)
+
+    def handle_generate_recent(self) -> None:
+        """最近生成记录（合并内存任务与磁盘目录），供前端展示。"""
+        items = []
+        if self.runs_dir.is_dir():
+            for child in sorted(self.runs_dir.iterdir(), reverse=True):
+                if not child.is_dir() or not RUN_ID_RE.fullmatch(child.name):
+                    continue
+                gen_dir = child / "generated"
+                if not gen_dir.is_dir():
+                    continue
+                state = _get_job_state(self.server, child.name) or {}
+                inputs = sorted((child / "input").glob("*.xlsx"))
+                # ⚠️ 磁盘兜底时不能一律当 "completed"：**服务重启会杀掉在跑的任务**，
+                #    其 run 目录留下空的 generated/ —— 若报成"完成"，用户会找不到产物（实测踩过）。
+                produced = [p for p in gen_dir.iterdir()
+                            if p.suffix.lower() in (".xlsx", ".json")]
+                status = state.get("status") or ("completed" if produced else "interrupted")
+                # 重启后内存状态没了 → `files` 会是空的，下载链接全丢。
+                # 从磁盘把产物补出来（与 _run_generate_job 的标签口径一致）。
+                files = dict(state.get("files") or {})
+                for p in produced:
+                    if p.suffix.lower() != ".xlsx":
+                        continue
+                    label = "已填写原表（交付）" if "已填写" in p.name else "设备编码待核清单" if p.name == "设备编码待核清单.xlsx" else p.name
+                    files[label] = f"/api/generate/{child.name}/{quote(p.name)}"
+                items.append({
+                    "run_id": child.name,
+                    "file": state.get("source_file") or (inputs[0].name if inputs else ""),
+                    "ts": _run_ts(child.name),
+                    "status": status,
+                    "rows": state.get("data_rows", 0),
+                    "nodes": state.get("nodes", 0),
+                    "files": files,
+                    "hint": ("任务未完成——服务重启会中断在跑的任务，请重新提交"
+                             if status == "interrupted" else ""),
+                })
+                if len(items) >= 10:
+                    break
+        self.send_json({"items": items})
+
+    def handle_generate_artifact(self, run_id: str, name: str) -> None:
+        """下载生成产物。只允许 runs/<run_id>/generated/ 下的文件，防目录穿越。"""
+        if not RUN_ID_RE.fullmatch(run_id):
+            self.send_json({"error": "无效的生成编号"}, 400)
+            return
+        root = self.runs_dir.resolve()
+        gen_dir = (root / run_id / "generated").resolve()
+        if root not in gen_dir.parents or not gen_dir.is_dir():
+            self.send_json({"error": "生成产物不存在"}, 404)
+            return
+        target = (gen_dir / Path(name).name).resolve()
+        if gen_dir not in target.parents or not target.is_file():
+            self.send_json({"error": "产物不存在"}, 404)
+            return
+        suffix = target.suffix.lower()
+        content_type = ("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        if suffix == ".xlsx" else "application/json; charset=utf-8")
+        self.send_bytes(target.read_bytes(), content_type, download_name=target.name)
+
     def do_POST(self) -> None:
         path = urlparse(self.path).path.rstrip("/")
         if path in PROTECTED_POST and not self.require_admin():
@@ -859,6 +1343,20 @@ class AuditHandler(BaseHTTPRequestHandler):
                 LOGGER.exception("ai_connection_test_failed")
                 self.send_json({"error": str(exc)}, 400)
             return
+        if path == "/api/history/delete":
+            try:
+                self.handle_history_delete()
+            except Exception as exc:
+                LOGGER.exception("history_delete_failed")
+                self.send_json({"error": str(exc)}, 400)
+            return
+        if path == "/api/generate":
+            try:
+                self.handle_generate()
+            except Exception as exc:
+                LOGGER.exception("generate_submit_failed")
+                self.send_json({"error": str(exc)}, 400)
+            return
         if path != "/api/audits":
             self.send_json({"error": "Not Found"}, 404)
             return
@@ -875,7 +1373,9 @@ class AuditHandler(BaseHTTPRequestHandler):
             return
         body = self.rfile.read(length)
         try:
-            filename, data, comparison_upload = parse_upload(self.headers.get("Content-Type", ""), body, self.headers.get("X-Filename", "upload.xlsx"))
+            filename, data, comparison_upload = parse_upload(
+                self.headers.get("Content-Type", ""), body,
+                decode_filename_header(self.headers.get("X-Filename", "upload.xlsx")) or "upload.xlsx")
             if not data:
                 raise ValueError("上传文件为空")
             if not filename.lower().endswith(".xlsx"):
@@ -925,6 +1425,7 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--runs-dir", type=Path, default=None)
     parser.add_argument("--max-upload-mb", type=int, default=None)
+    parser.add_argument("--resume-audit", help="重新执行已上传任务，保留原审核编号")
     args = parser.parse_args()
     app_config = load_app_config()
     audit_config = app_config.get("audit", {}) if isinstance(app_config.get("audit"), dict) else {}
@@ -947,6 +1448,21 @@ def main() -> int:
     server.max_upload_bytes = max_upload_mb * 1024 * 1024  # type: ignore[attr-defined]
     server.jobs = {}  # type: ignore[attr-defined]
     server.jobs_lock = threading.Lock()  # type: ignore[attr-defined]
+    if args.resume_audit:
+        if not RUN_ID_RE.fullmatch(args.resume_audit):
+            raise ValueError("无效的审核编号")
+        task_dir = (server.runs_dir / args.resume_audit).resolve()
+        if task_dir.parent != server.runs_dir:
+            raise ValueError("审核目录超出运行目录")
+        task_inputs = sorted(p for p in (task_dir / "input").glob("*.xlsx") if not p.name.startswith("compare_"))
+        if len(task_inputs) != 1:
+            raise ValueError("恢复任务需要唯一的原始上传文件")
+        task_comparisons = sorted((task_dir / "input").glob("compare_*.xlsx"))
+        _update_job_state(server, args.resume_audit, status="queued", phase="queued", percent=2,
+                          message="已保留原文件，正在使用优化后的规则重新审核", hint="无需重新上传")
+        threading.Thread(target=_run_audit_job,
+                         args=(server, args.resume_audit, task_inputs[0], task_dir,
+                               task_comparisons[0] if task_comparisons else None), daemon=True).start()
     print(f"KKS audit service: http://{args.host}:{args.port}/")
     print(f"runs directory: {server.runs_dir}")
     LOGGER.info("service_started host=%s port=%s runs_dir=%s", args.host, args.port, server.runs_dir)
